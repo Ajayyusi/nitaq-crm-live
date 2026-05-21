@@ -1,56 +1,80 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
+
+import { leadSources, leadStatuses, type LeadSource, type LeadStatus } from "@/constants/leads";
 
 export interface ILead extends Document {
-  studentName: string;
-  studentPhone: string;
-  parentPhone?: string;
+  fullName: string;
+  phone: string;
   email?: string;
-  courseId?: mongoose.Types.ObjectId;
-  subjectId?: mongoose.Types.ObjectId;
-  mode?: string;
-  preferredTime?: string;
-  preferredBranch?: string;
-  leadSource: string;
-  status: string;
+  interestedCourse: string;
+  source: LeadSource;
+  status: LeadStatus;
   notes?: string;
-  assignedSalesUser?: mongoose.Types.ObjectId;
-  followUpDate?: Date;
-  convertedToStudentId?: mongoose.Types.ObjectId;
+  nextFollowUpDate?: Date;
+  assignedTo?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const LeadSchema = new Schema<ILead>(
   {
-    studentName: { type: String, required: true, trim: true },
-    studentPhone: { type: String, required: true },
-    parentPhone: String,
-    email: { type: String, lowercase: true },
-    courseId: { type: Schema.Types.ObjectId, ref: "Course" },
-    subjectId: { type: Schema.Types.ObjectId, ref: "Subject" },
-    mode: { type: String, enum: ["online", "offline", "hybrid"] },
-    preferredTime: String,
-    preferredBranch: String,
-    leadSource: {
+    fullName: {
       type: String,
-      enum: ["walk_in", "referral", "instagram", "facebook", "google", "website", "whatsapp", "other"],
-      default: "other",
+      required: [true, "Full name is required"],
+      trim: true,
+      maxlength: [120, "Full name cannot exceed 120 characters"],
+    },
+    phone: {
+      type: String,
+      required: [true, "Phone is required"],
+      trim: true,
+      maxlength: [30, "Phone cannot exceed 30 characters"],
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      match: [/^$|^\S+@\S+\.\S+$/, "Please enter a valid email address"],
+    },
+    interestedCourse: {
+      type: String,
+      required: [true, "Interested course is required"],
+      trim: true,
+      maxlength: [160, "Interested course cannot exceed 160 characters"],
+    },
+    source: {
+      type: String,
+      enum: [...leadSources],
+      required: [true, "Lead source is required"],
+      default: "Other",
     },
     status: {
       type: String,
-      enum: ["new", "contacted", "trial_booked", "trial_done", "enrolled", "lost", "on_hold"],
-      default: "new",
+      enum: [...leadStatuses],
+      required: [true, "Lead status is required"],
+      default: "New",
     },
-    notes: String,
-    assignedSalesUser: { type: Schema.Types.ObjectId, ref: "User" },
-    followUpDate: Date,
-    convertedToStudentId: { type: Schema.Types.ObjectId, ref: "Student" },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [3000, "Notes cannot exceed 3000 characters"],
+    },
+    nextFollowUpDate: {
+      type: Date,
+    },
+    assignedTo: {
+      type: String,
+      trim: true,
+      maxlength: [120, "Assigned to cannot exceed 120 characters"],
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 LeadSchema.index({ status: 1, createdAt: -1 });
-LeadSchema.index({ assignedSalesUser: 1 });
-LeadSchema.index({ studentPhone: 1 });
+LeadSchema.index({ source: 1, createdAt: -1 });
+LeadSchema.index({ fullName: "text", phone: "text", interestedCourse: "text", status: "text" });
 
-export default mongoose.models.Lead || mongoose.model<ILead>("Lead", LeadSchema);
+const Lead = (mongoose.models.Lead as mongoose.Model<ILead>) || mongoose.model<ILead>("Lead", LeadSchema);
+
+export default Lead;

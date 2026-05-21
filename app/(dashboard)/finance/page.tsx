@@ -1,13 +1,13 @@
-﻿export default function EnrollmentsPage() {
+﻿export default function FinancePage() {
   return (
     <div className="space-y-6 p-6">
       <div>
         <p className="text-sm font-medium text-teal-700">Nitaq Academy</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">Enrollments</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-500">Review student registrations, course assignments, payments, and enrollment status.</p>
+        <h1 className="mt-2 text-3xl font-semibold text-slate-900">Finance</h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-500">Monitor revenue, outstanding payments, expenses, and financial performance.</p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="font-semibold text-slate-900">Enrollments Workspace</h2>
+        <h2 className="font-semibold text-slate-900">Finance Workspace</h2>
         <p className="mt-1 text-sm text-slate-500">This module is ready for the next implementation phase.</p>
         <div className="mt-5 grid min-h-64 place-items-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
           <div>

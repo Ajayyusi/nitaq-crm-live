@@ -1,78 +1,116 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
-import { auth } from "@/lib/auth";
+import { leadSources, leadStatuses } from "@/constants/leads";
 
-export async function GET(req: NextRequest) {
+type LeadPayload = {
+  fullName?: string;
+  phone?: string;
+  email?: string;
+  interestedCourse?: string;
+  source?: string;
+  status?: string;
+  notes?: string;
+  nextFollowUpDate?: string;
+  assignedTo?: string;
+};
+
+const allowedStatuses = new Set<string>(leadStatuses);
+const allowedSources = new Set<string>(leadSources);
+
+function cleanText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildLeadPayload(body: LeadPayload) {
+  const fullName = cleanText(body.fullName);
+  const phone = cleanText(body.phone);
+  const interestedCourse = cleanText(body.interestedCourse);
+  const source = cleanText(body.source) || "Other";
+  const status = cleanText(body.status) || "New";
+
+  if (!fullName) throw new Error("Full name is required.");
+  if (!phone) throw new Error("Phone is required.");
+  if (!interestedCourse) throw new Error("Interested course is required.");
+  if (!allowedSources.has(source)) throw new Error("Invalid lead source.");
+  if (!allowedStatuses.has(status)) throw new Error("Invalid lead status.");
+
+  const email = cleanText(body.email);
+  const notes = cleanText(body.notes);
+  const assignedTo = cleanText(body.assignedTo);
+  const nextFollowUpDate = cleanText(body.nextFollowUpDate);
+
+  return {
+    fullName,
+    phone,
+    email: email || undefined,
+    interestedCourse,
+    source,
+    status,
+    notes: notes || undefined,
+    assignedTo: assignedTo || undefined,
+    nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : undefined,
+  };
+}
+
+function serializeLead(lead: any) {
+  return {
+    id: lead._id.toString(),
+    fullName: lead.fullName ?? "",
+    phone: lead.phone ?? "",
+    email: lead.email ?? "",
+    interestedCourse: lead.interestedCourse ?? "",
+    source: lead.source ?? "Other",
+    status: lead.status ?? "New",
+    notes: lead.notes ?? "",
+    nextFollowUpDate: lead.nextFollowUpDate ? lead.nextFollowUpDate.toISOString().slice(0, 10) : "",
+    assignedTo: lead.assignedTo ?? "",
+    createdAt: lead.createdAt?.toISOString() ?? "",
+    updatedAt: lead.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     await connectDB();
 
-    const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
-    const status = searchParams.get("status");
-    const search = searchParams.get("search");
-    const courseId = searchParams.get("courseId");
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search")?.trim();
+    const status = searchParams.get("status")?.trim();
+    const source = searchParams.get("source")?.trim();
+    const sort = searchParams.get("sort") === "oldest" ? 1 : -1;
 
-    const query: any = {};
-    if (status) query.status = status;
-    if (courseId) query.courseId = courseId;
+    const query: Record<string, unknown> = {};
+
+    if (status && allowedStatuses.has(status)) query.status = status;
+    if (source && allowedSources.has(source)) query.source = source;
     if (search) {
+      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       query.$or = [
-        { studentName: { $regex: search, $options: "i" } },
-        { studentPhone: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
+        { fullName: regex },
+        { phone: regex },
+        { interestedCourse: regex },
+        { status: regex },
       ];
     }
 
-    // Sales users only see their own leads
-    const userRole = (session.user as any).role;
-    if (userRole === "sales") {
-      query.assignedSalesUser = (session.user as any).id;
-    }
+    const leads = await Lead.find(query).sort({ createdAt: sort }).lean();
 
-    const skip = (page - 1) * limit;
-    const [leads, total] = await Promise.all([
-      Lead.find(query)
-        .populate("courseId", "name category")
-        .populate("subjectId", "name")
-        .populate("assignedSalesUser", "name email")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Lead.countDocuments(query),
-    ]);
-
-    return NextResponse.json({
-      leads,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    return NextResponse.json({ leads: leads.map(serializeLead) });
   } catch (error) {
-    console.error("GET /api/leads error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to load leads.";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     await connectDB();
-    const body = await req.json();
-
-    const lead = await Lead.create({
-      ...body,
-      assignedSalesUser: body.assignedSalesUser || (session.user as any).id,
-    });
-
-    return NextResponse.json({ lead }, { status: 201 });
-  } catch (error: any) {
-    console.error("POST /api/leads error:", error);
-    return NextResponse.json({ error: error.message || "Server error" }, { status: 500 });
+    const body = (await request.json()) as LeadPayload;
+    const lead = await Lead.create(buildLeadPayload(body));
+    return NextResponse.json({ lead: serializeLead(lead) }, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create lead.";
+    return NextResponse.json({ message }, { status: 400 });
   }
 }
