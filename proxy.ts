@@ -1,9 +1,10 @@
-﻿import { NextResponse } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
 
-export default function proxy() {
-  return NextResponse.next();
-}
+export const proxy = NextAuth(authConfig).auth;
 
 export const config = {
-  matcher: ["/__nitaq_phase1_proxy_disabled__/:path*"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };
