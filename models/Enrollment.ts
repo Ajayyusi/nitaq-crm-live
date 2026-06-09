@@ -1,62 +1,73 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
+
+export const enrollmentStatuses = ["Active", "Completed", "Dropped", "On Hold"] as const;
+export const paymentStatuses = [
+  "Paid Full",
+  "Instalment 1 Paid",
+  "Instalment 2 Pending",
+  "Overdue",
+  "Free",
+] as const;
+export const scheduleFormats = ["In-Person", "Online", "Hybrid"] as const;
+
+export type EnrollmentStatus = (typeof enrollmentStatuses)[number];
+export type PaymentStatus = (typeof paymentStatuses)[number];
+export type ScheduleFormat = (typeof scheduleFormats)[number];
 
 export interface IEnrollment extends Document {
+  enrollmentId: string;
   leadId?: mongoose.Types.ObjectId;
-  studentId: mongoose.Types.ObjectId;
-  teacherId: mongoose.Types.ObjectId;
-  courseId: mongoose.Types.ObjectId;
-  subjectId?: mongoose.Types.ObjectId;
-  packageName?: string;
-  sessionsCount: number;
-  sessionDuration: number; // minutes
-  totalPrice: number;
-  discount: number;
-  finalPrice: number;
-  teacherCost: number;
-  paymentPlan: string;
+  fullName: string;
+  phone: string;
+  email?: string;
+  emiratesId?: string;
+  nationality?: string;
+  course: string;
+  batchName?: string;
   startDate?: Date;
   endDate?: Date;
-  status: string;
+  schedule?: string;
+  format: ScheduleFormat;
+  status: EnrollmentStatus;
+  paymentStatus: PaymentStatus;
+  totalFee: number;
+  amountPaid: number;
   notes?: string;
-  createdBy?: mongoose.Types.ObjectId;
+  registrationDate: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const EnrollmentSchema = new Schema<IEnrollment>(
   {
+    enrollmentId: { type: String, unique: true, index: true },
     leadId: { type: Schema.Types.ObjectId, ref: "Lead" },
-    studentId: { type: Schema.Types.ObjectId, ref: "Student", required: true },
-    teacherId: { type: Schema.Types.ObjectId, ref: "Teacher", required: true },
-    courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
-    subjectId: { type: Schema.Types.ObjectId, ref: "Subject" },
-    packageName: String,
-    sessionsCount: { type: Number, required: true },
-    sessionDuration: { type: Number, default: 60 },
-    totalPrice: { type: Number, required: true },
-    discount: { type: Number, default: 0 },
-    finalPrice: { type: Number, required: true },
-    teacherCost: { type: Number, default: 0 },
-    paymentPlan: {
-      type: String,
-      enum: ["full", "installments", "monthly"],
-      default: "full",
-    },
+    fullName: { type: String, required: true, trim: true, maxlength: 120 },
+    phone: { type: String, required: true, trim: true, maxlength: 30 },
+    email: { type: String, lowercase: true, trim: true },
+    emiratesId: { type: String, trim: true },
+    nationality: { type: String, trim: true, maxlength: 80 },
+    course: { type: String, required: true, trim: true },
+    batchName: { type: String, trim: true },
     startDate: Date,
     endDate: Date,
-    status: {
-      type: String,
-      enum: ["active", "completed", "paused", "cancelled"],
-      default: "active",
-    },
-    notes: String,
-    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+    schedule: { type: String, trim: true },
+    format: { type: String, enum: [...scheduleFormats], default: "In-Person" },
+    status: { type: String, enum: [...enrollmentStatuses], required: true, default: "Active" },
+    paymentStatus: { type: String, enum: [...paymentStatuses], required: true, default: "Instalment 1 Paid" },
+    totalFee: { type: Number, required: true, min: 0, default: 0 },
+    amountPaid: { type: Number, required: true, min: 0, default: 0 },
+    notes: { type: String, trim: true, maxlength: 2000 },
+    registrationDate: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-EnrollmentSchema.index({ studentId: 1, status: 1 });
-EnrollmentSchema.index({ teacherId: 1 });
+EnrollmentSchema.index({ status: 1, createdAt: -1 });
+EnrollmentSchema.index({ course: 1, status: 1 });
 
-export default mongoose.models.Enrollment ||
+const Enrollment =
+  (mongoose.models.Enrollment as mongoose.Model<IEnrollment>) ||
   mongoose.model<IEnrollment>("Enrollment", EnrollmentSchema);
+
+export default Enrollment;

@@ -1,186 +1,574 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, CreditCard, DollarSign } from "lucide-react";
+import {
+  Plus, CreditCard, DollarSign, Clock, AlertCircle,
+  TrendingUp, X, ChevronDown, Trash2,
+} from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { courseList } from "@/constants/leads";
+import {
+  paymentMethods, paymentTypes, txStatuses,
+} from "@/constants/modelConstants";
 
-const METHODS = ["cash", "bank_transfer", "card", "cheque", "online"];
+type Payment = {
+  id: string; paymentId: string; studentName: string; studentPhone: string;
+  course: string; amount: number; paymentType: string; paymentMethod: string;
+  status: string; datePaid: string; dueDate: string; receiptRef: string;
+  notes: string; recordedBy: string; createdAt: string;
+};
+
+type Enrollment = {
+  id: string; enrollmentId: string; fullName: string; phone: string;
+  course: string; totalFee: number; amountPaid: number; balanceDue: number;
+};
+
+const today = new Date().toISOString().slice(0, 10);
+
+const fmt = (n: number) =>
+  "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const methodConfig: Record<string, string> = {
+  "Bank Transfer": "bg-blue-100 text-blue-700",
+  "Cash": "bg-emerald-100 text-emerald-700",
+  "Card": "bg-purple-100 text-purple-700",
+  "Cheque": "bg-amber-100 text-amber-700",
+  "Online": "bg-teal-100 text-teal-700",
+};
+
+const statusConfig: Record<string, string> = {
+  "Received": "bg-[#E8F5E9] text-[#1B5E20]",
+  "Pending": "bg-amber-50 text-amber-700",
+  "Overdue": "bg-red-50 text-red-700",
+  "Refunded": "bg-slate-100 text-slate-500",
+};
+
+const typeConfig: Record<string, string> = {
+  "Full Payment": "bg-[#E8F5E9] text-[#2E7D32]",
+  "Instalment 1 of 2": "bg-teal-50 text-teal-700",
+  "Instalment 2 of 2": "bg-cyan-50 text-cyan-700",
+  "Deposit": "bg-indigo-50 text-indigo-700",
+  "Refund": "bg-red-50 text-red-700",
+};
+
+const cls =
+  "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E7D32] bg-white";
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const BLANK = {
+  studentName: "", studentPhone: "", course: "", amount: "",
+  paymentType: "Full Payment", paymentMethod: "Cash", status: "Received",
+  datePaid: today, dueDate: "", receiptRef: "", notes: "", recordedBy: "",
+  enrollmentId: "",
+};
 
 export default function PaymentsPage() {
-  const [payments, setPayments] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [methodFilter, setMethodFilter] = useState("All");
+  const [search, setSearch] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Payment | null>(null);
+  const [form, setForm] = useState({ ...BLANK });
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    studentId: "", enrollmentId: "", amount: "", paymentMethod: "cash",
-    paymentDate: new Date().toISOString().split("T")[0], notes: "",
-  });
+  const [error, setError] = useState("");
   const [totalRevenue, setTotalRevenue] = useState(0);
+  const [totalPending, setTotalPending] = useState(0);
+  const [expandEnrolment, setExpandEnrolment] = useState(false);
 
-  const fetchAll = useCallback(async () => {
+  const fetchPayments = useCallback(async () => {
     setLoading(true);
-    const [pr, sr, er] = await Promise.all([
-      fetch("/api/payments").then((r) => r.json()),
-      fetch("/api/students").then((r) => r.json()),
-      fetch("/api/enrollments").then((r) => r.json()),
-    ]);
-    const pmts = pr.payments || [];
-    setPayments(pmts);
-    setStudents(sr.students || []);
-    setEnrollments(er.enrollments || []);
-    setTotalRevenue(pmts.reduce((s: number, p: any) => s + (p.amount || 0), 0));
-    setLoading(false);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== "All") params.set("status", statusFilter);
+      if (methodFilter !== "All") params.set("method", methodFilter);
+      if (search) params.set("search", search);
+      const res = await fetch(`/api/payments?${params}`);
+      const data = await res.json();
+      setPayments(data.payments ?? []);
+      setTotalRevenue(data.totalRevenue ?? 0);
+      setTotalPending(data.totalPending ?? 0);
+    } catch {
+      setError("Could not load payments. Please check your connection.");
+      setPayments([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, methodFilter, search]);
+
+  const fetchEnrollments = useCallback(async () => {
+    try {
+      const res = await fetch("/api/enrollments");
+      const data = await res.json();
+      setEnrollments(data.enrollments ?? []);
+    } catch {
+      setEnrollments([]);
+    }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { fetchPayments(); }, [fetchPayments]);
+  useEffect(() => { fetchEnrollments(); }, [fetchEnrollments]);
 
-  async function save() {
-    setSaving(true);
-    await fetch("/api/payments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
-    });
-    setShowForm(false);
-    setForm({ studentId: "", enrollmentId: "", amount: "", paymentMethod: "cash", paymentDate: new Date().toISOString().split("T")[0], notes: "" });
-    fetchAll();
-    setSaving(false);
+  function openNew() {
+    setEditTarget(null);
+    setForm({ ...BLANK });
+    setError("");
+    setDrawerOpen(true);
   }
 
-  const filteredEnrollments = enrollments.filter(
-    (e: any) => !form.studentId || e.studentId?._id === form.studentId
-  );
+  function openEdit(p: Payment) {
+    setEditTarget(p);
+    setForm({
+      studentName: p.studentName, studentPhone: p.studentPhone,
+      course: p.course, amount: String(p.amount),
+      paymentType: p.paymentType, paymentMethod: p.paymentMethod,
+      status: p.status, datePaid: p.datePaid, dueDate: p.dueDate,
+      receiptRef: p.receiptRef, notes: p.notes, recordedBy: p.recordedBy,
+      enrollmentId: "",
+    });
+    setError("");
+    setDrawerOpen(true);
+  }
 
-  const cls = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+  function fillFromEnrollment(eid: string) {
+    const e = enrollments.find((en) => en.id === eid);
+    if (!e) return;
+    setForm((f) => ({
+      ...f,
+      enrollmentId: eid,
+      studentName: e.fullName,
+      studentPhone: e.phone,
+      course: e.course,
+      amount: String(e.balanceDue > 0 ? e.balanceDue : e.totalFee),
+    }));
+  }
 
-  const methodBadge = (m: string) => {
-    const colors: Record<string, string> = {
-      cash: "bg-green-100 text-green-700", bank_transfer: "bg-blue-100 text-blue-700",
-      card: "bg-purple-100 text-purple-700", cheque: "bg-amber-100 text-amber-700",
-      online: "bg-teal-100 text-teal-700",
+  async function save() {
+    if (!form.studentName.trim()) { setError("Student name is required."); return; }
+    if (!form.amount || Number(form.amount) <= 0) { setError("Amount must be greater than 0."); return; }
+    setSaving(true);
+    setError("");
+    const payload = {
+      studentName: form.studentName,
+      studentPhone: form.studentPhone,
+      course: form.course,
+      amount: Number(form.amount),
+      paymentType: form.paymentType,
+      paymentMethod: form.paymentMethod,
+      status: form.status,
+      datePaid: form.datePaid || undefined,
+      dueDate: form.dueDate || undefined,
+      receiptRef: form.receiptRef,
+      notes: form.notes,
+      recordedBy: form.recordedBy,
+      enrollmentId: form.enrollmentId || undefined,
     };
-    return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${colors[m] || "bg-slate-100 text-slate-600"}`}>{m.replace("_", " ")}</span>;
-  };
+    try {
+      const url = editTarget ? `/api/payments/${editTarget.id}` : "/api/payments";
+      const method = editTarget ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).then((r) => r.json());
+      if (res.message && !res.payment) throw new Error(res.message);
+      setDrawerOpen(false);
+      fetchPayments();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save payment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deletePayment(p: Payment) {
+    if (!confirm(`Delete payment ${p.paymentId}? This cannot be undone.`)) return;
+    try {
+      await fetch(`/api/payments/${p.id}`, { method: "DELETE" });
+      void fetchPayments();
+    } catch {
+      setError("Failed to delete payment.");
+    }
+  }
+
+  const overdue = payments.filter((p) => p.status === "Overdue");
+  const thisMonthRevenue = payments
+    .filter((p) => p.status === "Received" && p.paymentType !== "Refund" && p.datePaid?.startsWith(today.slice(0, 7)))
+    .reduce((s, p) => s + p.amount, 0);
 
   return (
     <div className="flex flex-col min-h-screen">
       <PageHeader
         title="Payments"
-        subtitle="Track all student payments and revenue"
+        subtitle="Track income, instalments and overdue balances"
         actions={
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
+          <button
+            onClick={openNew}
+            className="flex items-center gap-2 px-4 py-2 bg-[#2E7D32] text-white text-sm font-medium rounded-lg hover:bg-[#1B5E20] transition"
+          >
             <Plus className="w-4 h-4" /> Record Payment
           </button>
         }
       />
 
-      {/* Summary */}
-      <div className="px-6 py-4 border-b border-slate-200 bg-white">
-        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl inline-flex">
-          <div className="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center">
-            <DollarSign className="w-4 h-4 text-green-700" />
-          </div>
-          <div>
-            <p className="text-xs text-green-600 font-medium">Total Revenue</p>
-            <p className="text-xl font-bold text-green-800">{formatCurrency(totalRevenue)}</p>
+      {/* Overdue alert */}
+      {overdue.length > 0 && (
+        <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-red-700">
+            <span className="font-semibold">{overdue.length} overdue payment{overdue.length > 1 ? "s" : ""}:</span>{" "}
+            {overdue.slice(0, 3).map((p) => p.studentName).join(", ")}
+            {overdue.length > 3 && ` +${overdue.length - 3} more`}
           </div>
         </div>
+      )}
+
+      {/* KPI cards */}
+      <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon: DollarSign, label: "Total Received", value: fmt(totalRevenue), cls: "text-[#2E7D32]" },
+          { icon: TrendingUp, label: "This Month", value: fmt(thisMonthRevenue), cls: "text-teal-600" },
+          { icon: Clock, label: "Pending / Overdue", value: fmt(totalPending), cls: "text-amber-600" },
+          { icon: CreditCard, label: "Total Records", value: String(payments.length), cls: "text-slate-700" },
+        ].map((k) => (
+          <div key={k.label} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-[#E8F5E9] flex items-center justify-center">
+              <k.icon className={`w-4 h-4 ${k.cls}`} />
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 font-medium">{k.label}</p>
+              <p className={`text-sm font-bold ${k.cls}`}>{k.value}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="flex-1 overflow-auto">
+      {/* Filters */}
+      <div className="px-6 pb-3 flex flex-wrap gap-3 items-center">
+        <input
+          type="search"
+          placeholder="Search name, ID, receipt…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
+        >
+          <option value="All">All Statuses</option>
+          {txStatuses.map((s) => <option key={s}>{s}</option>)}
+        </select>
+        <select
+          value={methodFilter}
+          onChange={(e) => setMethodFilter(e.target.value)}
+          className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
+        >
+          <option value="All">All Methods</option>
+          {paymentMethods.map((m) => <option key={m}>{m}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
+      <div className="flex-1 px-6 pb-8 overflow-auto">
         {loading ? (
-          <div className="p-6 space-y-2">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />)}
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
+            ))}
           </div>
         ) : payments.length === 0 ? (
           <EmptyState
             icon={CreditCard}
-            title="No payments recorded"
+            title="No payments found"
             description="Record your first payment to start tracking revenue."
-            action={<button onClick={() => setShowForm(true)} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg">Record Payment</button>}
+            action={
+              <button onClick={openNew} className="px-4 py-2 bg-[#2E7D32] text-white text-sm rounded-lg">
+                Record Payment
+              </button>
+            }
           />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Student</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Amount</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Method</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Date</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {payments.map((p) => (
-                <tr key={p._id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-800">{p.studentId?.fullName || "—"}</td>
-                  <td className="px-4 py-4 font-semibold text-green-700">{formatCurrency(p.amount)}</td>
-                  <td className="px-4 py-4">{methodBadge(p.paymentMethod)}</td>
-                  <td className="px-4 py-4 text-slate-500 hidden md:table-cell">{formatDate(p.paymentDate)}</td>
-                  <td className="px-4 py-4 text-slate-400 text-xs hidden lg:table-cell">{p.notes || "—"}</td>
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  {["ID", "Student", "Course", "Amount", "Type", "Method", "Status", "Date", ""].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {payments.map((p) => {
+                  const isOverdue = p.status === "Overdue";
+                  const isPending = p.status === "Pending";
+                  return (
+                    <tr
+                      key={p.id}
+                      className={`hover:bg-[#E8F5E9]/30 transition-colors cursor-pointer ${isOverdue ? "bg-red-50/50" : isPending ? "bg-amber-50/30" : ""}`}
+                      onClick={() => openEdit(p)}
+                    >
+                      <td className="px-4 py-3 text-xs font-mono text-slate-400">{p.paymentId}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-[#0D1F0E]">{p.studentName}</div>
+                        {p.studentPhone && (
+                          <div className="text-xs text-slate-400">{p.studentPhone}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 max-w-[160px] truncate">{p.course || "—"}</td>
+                      <td className="px-4 py-3 font-semibold text-[#1B5E20] whitespace-nowrap">
+                        {fmt(p.amount)}
+                        {p.paymentType === "Refund" && <span className="text-red-500 text-xs ml-1">(refund)</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig[p.paymentType] ?? "bg-slate-100 text-slate-600"}`}>
+                          {p.paymentType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${methodConfig[p.paymentMethod] ?? "bg-slate-100 text-slate-600"}`}>
+                          {p.paymentMethod}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig[p.status] ?? "bg-slate-100 text-slate-600"}`}>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                        {p.datePaid || (p.dueDate ? `Due ${p.dueDate}` : "—")}
+                      </td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => deletePayment(p)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h2 className="text-lg font-semibold">Record Payment</h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
-            </div>
-            <div className="p-6 space-y-4">
-              <F label="Student *">
-                <select required value={form.studentId} onChange={(e) => setForm((f) => ({ ...f, studentId: e.target.value, enrollmentId: "" }))} className={cls}>
-                  <option value="">Select student...</option>
-                  {students.map((s) => <option key={s._id} value={s._id}>{s.fullName} · {s.phone}</option>)}
-                </select>
-              </F>
-              <F label="Enrollment *">
-                <select required value={form.enrollmentId} onChange={(e) => setForm((f) => ({ ...f, enrollmentId: e.target.value }))} disabled={!form.studentId} className={cls}>
-                  <option value="">Select enrollment...</option>
-                  {filteredEnrollments.map((e: any) => (
-                    <option key={e._id} value={e._id}>{e.courseId?.name} · {formatCurrency(e.finalPrice)}</option>
-                  ))}
-                </select>
-              </F>
-              <div className="grid grid-cols-2 gap-4">
-                <F label="Amount (AED) *">
-                  <input required type="number" min="0" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="0" className={cls} />
-                </F>
-                <F label="Method *">
-                  <select value={form.paymentMethod} onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))} className={cls}>
-                    {METHODS.map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
-                  </select>
-                </F>
+      {/* Drawer */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+          <div className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#0D1F0E]">
+              <div>
+                <h2 className="text-base font-semibold text-white">
+                  {editTarget ? `Edit ${editTarget.paymentId}` : "Record Payment"}
+                </h2>
+                <p className="text-xs text-white/60">
+                  {editTarget ? "Update payment details" : "Add a new payment record"}
+                </p>
               </div>
-              <F label="Payment Date">
-                <input type="date" value={form.paymentDate} onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))} className={cls} />
-              </F>
-              <F label="Notes">
-                <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className={cls} />
-              </F>
-            </div>
-            <div className="flex gap-3 p-6 pt-0">
-              <button onClick={save} disabled={saving || !form.studentId || !form.enrollmentId || !form.amount} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition disabled:opacity-50">
-                {saving ? "Saving..." : "Record Payment"}
+              <button onClick={() => setDrawerOpen(false)} className="text-white/60 hover:text-white">
+                <X className="w-5 h-5" />
               </button>
-              <button onClick={() => setShowForm(false)} className="px-4 py-2.5 border border-slate-200 text-sm rounded-lg hover:bg-slate-50 transition">Cancel</button>
+            </div>
+
+            <div className="p-6 space-y-4 flex-1">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                  {error}
+                </div>
+              )}
+
+              {/* Quick-fill from enrolment */}
+              {!editTarget && (
+                <div className="border border-[#2E7D32]/30 rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setExpandEnrolment((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-[#E8F5E9] text-sm font-medium text-[#1B5E20]"
+                  >
+                    <span>Quick-fill from enrollment</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${expandEnrolment ? "rotate-180" : ""}`} />
+                  </button>
+                  {expandEnrolment && (
+                    <div className="px-4 py-3">
+                      <select
+                        className={cls}
+                        value={form.enrollmentId}
+                        onChange={(e) => fillFromEnrollment(e.target.value)}
+                      >
+                        <option value="">Select enrollment…</option>
+                        {enrollments.map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.fullName} — {e.course} (bal: {fmt(e.balanceDue)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Field label="Student Name *">
+                    <input
+                      className={cls}
+                      value={form.studentName}
+                      onChange={(e) => setForm((f) => ({ ...f, studentName: e.target.value }))}
+                      placeholder="Full name"
+                    />
+                  </Field>
+                </div>
+                <Field label="Phone">
+                  <input
+                    className={cls}
+                    value={form.studentPhone}
+                    onChange={(e) => setForm((f) => ({ ...f, studentPhone: e.target.value }))}
+                    placeholder="+971…"
+                  />
+                </Field>
+                <Field label="Amount (AED) *">
+                  <input
+                    className={cls}
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.amount}
+                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Course">
+                <select
+                  className={cls}
+                  value={form.course}
+                  onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))}
+                >
+                  <option value="">— Select course —</option>
+                  {courseList.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </Field>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Payment Type">
+                  <select
+                    className={cls}
+                    value={form.paymentType}
+                    onChange={(e) => setForm((f) => ({ ...f, paymentType: e.target.value }))}
+                  >
+                    {paymentTypes.map((t) => <option key={t}>{t}</option>)}
+                  </select>
+                </Field>
+                <Field label="Method">
+                  <select
+                    className={cls}
+                    value={form.paymentMethod}
+                    onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}
+                  >
+                    {paymentMethods.map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Status">
+                  <select
+                    className={cls}
+                    value={form.status}
+                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                  >
+                    {txStatuses.map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                </Field>
+                <Field label="Date Paid">
+                  <input
+                    className={cls}
+                    type="date"
+                    value={form.datePaid}
+                    onChange={(e) => setForm((f) => ({ ...f, datePaid: e.target.value }))}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Due Date">
+                  <input
+                    className={cls}
+                    type="date"
+                    value={form.dueDate}
+                    onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  />
+                </Field>
+                <Field label="Receipt Ref">
+                  <input
+                    className={cls}
+                    value={form.receiptRef}
+                    onChange={(e) => setForm((f) => ({ ...f, receiptRef: e.target.value }))}
+                    placeholder="e.g. RCT-001"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Recorded By">
+                <input
+                  className={cls}
+                  value={form.recordedBy}
+                  onChange={(e) => setForm((f) => ({ ...f, recordedBy: e.target.value }))}
+                  placeholder="Staff name"
+                />
+              </Field>
+
+              <Field label="Notes">
+                <textarea
+                  className={cls}
+                  rows={3}
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder="Any additional notes…"
+                />
+              </Field>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={save}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-[#2E7D32] text-white text-sm font-semibold rounded-lg hover:bg-[#1B5E20] transition disabled:opacity-50"
+              >
+                {saving ? "Saving…" : editTarget ? "Update Payment" : "Record Payment"}
+              </button>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="px-5 py-2.5 border border-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
       )}
     </div>
   );
-}
-
-function F({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="block text-sm font-medium text-slate-700 mb-1.5">{label}</label>{children}</div>;
 }

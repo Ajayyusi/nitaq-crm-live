@@ -1,0 +1,193 @@
+// Serializers live here so route.ts files only export HTTP handlers (Next.js 15 requirement).
+
+export function serializeLead(l: any) {
+  return {
+    id: l._id.toString(),
+    leadId: l.leadId ?? "",
+    fullName: l.fullName ?? "",
+    phone: l.phone ?? "",
+    email: l.email ?? "",
+    source: l.source ?? "",
+    course: l.course ?? "",
+    stage: l.stage ?? "Lead",
+    notes: l.notes ?? "",
+    nextFollowUpDate: l.nextFollowUpDate ? l.nextFollowUpDate.toISOString().slice(0, 10) : "",
+    assignedTo: l.assignedTo ?? "",
+    createdAt: l.createdAt?.toISOString() ?? "",
+    updatedAt: l.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeFollowUp(f: any) {
+  return {
+    id: f._id.toString(),
+    contactName: f.contactName ?? "",
+    phone: f.phone ?? "",
+    course: f.course ?? "",
+    followUpDate: f.followUpDate ? f.followUpDate.toISOString().slice(0, 10) : "",
+    type: f.type ?? "WhatsApp Message",
+    notes: f.notes ?? "",
+    status: f.status ?? "Pending",
+    assignedTo: f.assignedTo ?? "",
+    createdBy: f.createdBy ?? "",
+    leadId: f.leadId?.toString() ?? null,
+    createdAt: f.createdAt?.toISOString() ?? "",
+    updatedAt: f.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeCourse(c: any) {
+  return {
+    id: c._id.toString(),
+    courseCode: c.courseCode ?? "",
+    courseName: c.courseName ?? "",
+    category: c.category ?? "",
+    description: c.description ?? "",
+    durationWeeks: c.durationWeeks ?? null,
+    totalSessions: c.totalSessions ?? null,
+    sessionsPerWeek: c.sessionsPerWeek ?? null,
+    hoursPerSession: c.hoursPerSession ?? null,
+    totalHours: c.totalHours ?? null,
+    priceExVat: c.priceExVat ?? 0,
+    vatRate: c.vatRate ?? 5,
+    priceInclVat: Math.round((c.priceExVat ?? 0) * (1 + (c.vatRate ?? 5) / 100)),
+    maxStudentsPerBatch: c.maxStudentsPerBatch ?? null,
+    status: c.status ?? "Active",
+    speaActivity: c.speaActivity ?? "",
+    batches: (c.batches ?? []).map((b: any) => ({
+      id: b._id?.toString() ?? "",
+      batchId: b.batchId ?? "",
+      batchName: b.batchName ?? "",
+      startDate: b.startDate ? b.startDate.toISOString().slice(0, 10) : "",
+      endDate: b.endDate ? b.endDate.toISOString().slice(0, 10) : "",
+      schedule: b.schedule ?? "",
+      format: b.format ?? "In-Person",
+      trainerName: b.trainerName ?? "",
+      maxStudents: b.maxStudents ?? null,
+      status: b.status ?? "Open",
+    })),
+    createdAt: c.createdAt?.toISOString() ?? "",
+    updatedAt: c.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeTrainer(t: any) {
+  const contractEndDate = t.contractEndDate ? new Date(t.contractEndDate) : null;
+  const contractExpiring =
+    contractEndDate &&
+    t.contractStatus === "Active" &&
+    (contractEndDate.getTime() - Date.now()) / 86400000 <= 30;
+  return {
+    id: t._id.toString(),
+    fullName: t.fullName ?? "",
+    fullNameAr: t.fullNameAr ?? "",
+    phone: t.phone ?? "",
+    email: t.email ?? "",
+    emiratesId: t.emiratesId ?? "",
+    nationality: t.nationality ?? "",
+    specialisation: t.specialisation ?? "",
+    qualifications: t.qualifications ?? "",
+    status: t.status ?? "Active",
+    tamamStatus: t.tamamStatus ?? "Not Registered",
+    tamamNumber: t.tamamNumber ?? "",
+    contractStatus: t.contractStatus ?? "No Contract",
+    contractStartDate: t.contractStartDate ? t.contractStartDate.toISOString().slice(0, 10) : "",
+    contractEndDate: contractEndDate ? contractEndDate.toISOString().slice(0, 10) : "",
+    paymentRate: t.paymentRate ?? null,
+    paymentType: t.paymentType ?? "Per Session",
+    notes: t.notes ?? "",
+    contractExpiring: contractExpiring ?? false,
+    tamamAlert: t.tamamStatus === "Pending",
+    contractAlert: t.contractStatus === "Expired",
+    createdAt: t.createdAt?.toISOString() ?? "",
+    updatedAt: t.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeEnrollment(e: any) {
+  const balance = Math.max(0, (e.totalFee ?? 0) - (e.amountPaid ?? 0));
+  return {
+    id: e._id.toString(),
+    enrollmentId: e.enrollmentId ?? "",
+    leadId: e.leadId?.toString() ?? null,
+    fullName: e.fullName ?? "",
+    phone: e.phone ?? "",
+    email: e.email ?? "",
+    emiratesId: e.emiratesId ?? "",
+    nationality: e.nationality ?? "",
+    course: e.course ?? "",
+    batchName: e.batchName ?? "",
+    startDate: e.startDate ? e.startDate.toISOString().slice(0, 10) : "",
+    endDate: e.endDate ? e.endDate.toISOString().slice(0, 10) : "",
+    schedule: e.schedule ?? "",
+    format: e.format ?? "In-Person",
+    status: e.status ?? "Active",
+    paymentStatus: e.paymentStatus ?? "Instalment 1 Paid",
+    totalFee: e.totalFee ?? 0,
+    amountPaid: e.amountPaid ?? 0,
+    balanceDue: balance,
+    notes: e.notes ?? "",
+    registrationDate: e.registrationDate ? e.registrationDate.toISOString().slice(0, 10) : "",
+    createdAt: e.createdAt?.toISOString() ?? "",
+    updatedAt: e.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializePayment(p: any) {
+  return {
+    id: p._id.toString(),
+    paymentId: p.paymentId ?? "",
+    enrollmentId: p.enrollmentId?.toString() ?? null,
+    studentName: p.studentName ?? "",
+    studentPhone: p.studentPhone ?? "",
+    course: p.course ?? "",
+    amount: p.amount ?? 0,
+    paymentType: p.paymentType ?? "Full Payment",
+    paymentMethod: p.paymentMethod ?? "Cash",
+    status: p.status ?? "Received",
+    datePaid: p.datePaid ? p.datePaid.toISOString().slice(0, 10) : "",
+    dueDate: p.dueDate ? p.dueDate.toISOString().slice(0, 10) : "",
+    receiptRef: p.receiptRef ?? "",
+    notes: p.notes ?? "",
+    recordedBy: p.recordedBy ?? "",
+    createdAt: p.createdAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeExpense(e: any) {
+  return {
+    id: e._id.toString(),
+    expenseId: e.expenseId ?? "",
+    category: e.category ?? "",
+    amount: e.amount ?? 0,
+    expenseDate: e.expenseDate ? e.expenseDate.toISOString().slice(0, 10) : "",
+    payee: e.payee ?? "",
+    description: e.description ?? "",
+    notes: e.notes ?? "",
+    createdAt: e.createdAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeSession(s: any) {
+  const records = (s.records ?? []).map((r: any) => ({
+    enrollmentId: r.enrollmentId?.toString() ?? "",
+    studentName: r.studentName ?? "",
+    status: r.status ?? "Present",
+    notes: r.notes ?? "",
+  }));
+  const presentCount = records.filter((r: any) => r.status === "Present" || r.status === "Late").length;
+  return {
+    id: s._id.toString(),
+    course: s.course ?? "",
+    batchName: s.batchName ?? "",
+    sessionDate: s.sessionDate ? s.sessionDate.toISOString().slice(0, 10) : "",
+    sessionNumber: s.sessionNumber ?? null,
+    topic: s.topic ?? "",
+    trainerName: s.trainerName ?? "",
+    records,
+    presentCount,
+    totalCount: records.length,
+    attendancePct: records.length > 0 ? Math.round((presentCount / records.length) * 100) : 0,
+    createdAt: s.createdAt?.toISOString() ?? "",
+  };
+}

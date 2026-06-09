@@ -31,6 +31,8 @@ export function formatDateTime(date: Date | string) {
   });
 }
 
+export type Role = "super_admin" | "admin" | "sales" | "teacher" | "finance" | "academic";
+
 export function getInitials(name: string) {
   return name
     .split(" ")
@@ -46,64 +48,3 @@ export function slugify(text: string) {
     .replace(/[^\w ]+/g, "")
     .replace(/ +/g, "-");
 }
-
-export const LEAD_STATUSES = [
-  "new",
-  "contacted",
-  "trial_booked",
-  "trial_done",
-  "enrolled",
-  "lost",
-  "on_hold",
-] as const;
-
-export const ENROLLMENT_STATUSES = [
-  "active",
-  "completed",
-  "paused",
-  "cancelled",
-] as const;
-
-export const TEACHER_STATUSES = ["active", "inactive", "on_leave"] as const;
-
-export const PAYMENT_METHODS = [
-  "cash",
-  "bank_transfer",
-  "card",
-  "cheque",
-  "online",
-] as const;
-
-export const MODES = ["online", "offline", "hybrid"] as const;
-
-export const LEAD_SOURCES = [
-  "walk_in",
-  "referral",
-  "instagram",
-  "facebook",
-  "google",
-  "website",
-  "whatsapp",
-  "other",
-] as const;
-
-export const DAYS_OF_WEEK = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
-
-export const ROLES = [
-  "super_admin",
-  "admin",
-  "sales",
-  "teacher",
-  "finance",
-  "academic",
-] as const;
-
-export type Role = (typeof ROLES)[number];

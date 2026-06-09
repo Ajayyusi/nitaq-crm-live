@@ -15,12 +15,21 @@ export default function AllocationsPage() {
 
   const fetchAllocations = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (status) params.set("status", status);
-    const res = await fetch(`/api/allocations?${params}`);
-    const d = await res.json();
-    setAllocations(d.allocations || []);
-    setLoading(false);
+    try {
+      const params = new URLSearchParams();
+      if (status) params.set("status", status);
+      const res = await fetch(`/api/allocations?${params}`);
+      const d = await res.json();
+      if (res.status === 501) {
+        setAllocations([]);
+      } else {
+        setAllocations(d.allocations || []);
+      }
+    } catch {
+      setAllocations([]);
+    } finally {
+      setLoading(false);
+    }
   }, [status]);
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
@@ -36,6 +45,11 @@ export default function AllocationsPage() {
           </Link>
         }
       />
+
+      <div className="mx-6 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+        <p className="text-sm font-semibold text-amber-800">This module is not implemented yet.</p>
+        <p className="text-xs text-amber-600 mt-0.5">Teacher allocation management will be available in a future update.</p>
+      </div>
 
       <div className="bg-white border-b border-slate-200 px-6 py-3 flex gap-3">
         <select

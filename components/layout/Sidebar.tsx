@@ -1,70 +1,176 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   BookOpen,
-  Calendar,
+  CalendarDays,
   ClipboardList,
-  DollarSign,
   GraduationCap,
   LayoutDashboard,
+  LogOut,
+  ReceiptText,
   Settings,
   TrendingUp,
   UserCheck,
-  Users,
+  WalletCards,
+  BellRing,
 } from "lucide-react";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Leads", href: "/leads", icon: TrendingUp },
-  { label: "Students", href: "/students", icon: GraduationCap },
-  { label: "Courses", href: "/courses", icon: BookOpen },
-  { label: "Teachers", href: "/teachers", icon: UserCheck },
-  { label: "Enrollments", href: "/enrollments", icon: ClipboardList },
-  { label: "Classes", href: "/classes", icon: Calendar },
-  { label: "Finance", href: "/finance", icon: DollarSign },
-  { label: "Expenses", href: "/expenses", icon: DollarSign },
-  { label: "Reports", href: "/reports", icon: BarChart3 },
-  { label: "Settings", href: "/settings", icon: Settings },
+const navGroups = [
+  {
+    label: "Workspace",
+    items: [
+      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Leads", href: "/leads", icon: TrendingUp },
+      { label: "Follow-Ups", href: "/follow-ups", icon: BellRing, badge: true },
+      { label: "Students", href: "/students", icon: GraduationCap },
+    ],
+  },
+  {
+    label: "Academy Ops",
+    items: [
+      { label: "Courses", href: "/courses", icon: BookOpen },
+      { label: "Trainers", href: "/teachers", icon: UserCheck },
+      { label: "Enrollments", href: "/enrollments", icon: ClipboardList },
+      { label: "Classes", href: "/classes", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      { label: "Finance", href: "/finance", icon: WalletCards },
+      { label: "Expenses", href: "/expenses", icon: ReceiptText },
+      { label: "Reports", href: "/reports", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "System",
+    items: [{ label: "Settings", href: "/settings", icon: Settings }],
+  },
 ];
+
+const roleLabel: Record<string, string> = {
+  admin: "Administrator",
+  manager: "Manager",
+  staff: "Staff",
+};
+
+function FollowUpBadge() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/follow-ups?view=today&status=Pending")
+      .then((r) => r.json())
+      .then((d) => setCount(d.followUps?.length ?? 0))
+      .catch(() => {});
+  }, []);
+
+  if (count === 0) return null;
+  return (
+    <span className="ml-auto rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold leading-none text-[#0D1F0E]">
+      {count}
+    </span>
+  );
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const user = session?.user;
+  const fullName = user?.name ?? "Staff";
+  const role = (user as { role?: string })?.role ?? "staff";
+  const initials = fullName
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-full w-64 flex-col border-r border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-5 py-5">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-[#1B5E20] text-white shadow-2xl shadow-green-950/20">
+      {/* Logo */}
+      <div className="border-b border-white/10 px-5 py-5">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-teal-700 text-sm font-bold text-white">NA</div>
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg">
+            NA
+          </div>
           <div>
-            <p className="text-sm font-bold text-slate-900">Nitaq Academy</p>
-            <p className="text-xs text-slate-500">Sharjah Training Center</p>
+            <p className="text-sm font-bold tracking-tight text-white">Nitaq Academy</p>
+            <p className="mt-0.5 text-xs font-medium text-green-200">Internal CRM</p>
           </div>
         </div>
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.08] px-3 py-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-green-300">Sharjah</p>
+          <p className="mt-0.5 text-xs text-green-100">Training center operations</p>
+        </div>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = pathname === item.href || (pathname === "/" && item.href === "/dashboard");
-          return (
-            <Link
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                active ? "bg-teal-50 text-teal-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
-              href={item.href}
-              key={item.href}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          );
-        })}
+
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {navGroups.map((group) => (
+          <div key={group.label} className="mb-5 last:mb-0">
+            <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-widest text-green-400">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href || pathname.startsWith(item.href + "/");
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`group flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "bg-[#2E7D32] text-white shadow-md shadow-green-950/20"
+                        : "text-green-100 hover:bg-white/[0.09] hover:text-white"
+                    }`}
+                  >
+                    <Icon
+                      className={`h-4 w-4 flex-shrink-0 ${
+                        active ? "text-white" : "text-green-300 group-hover:text-green-200"
+                      }`}
+                    />
+                    <span>{item.label}</span>
+                    {item.badge && <FollowUpBadge />}
+                    {active && !item.badge && (
+                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white/60" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
-      <div className="border-t border-slate-200 px-5 py-4">
-        <p className="text-xs font-medium text-slate-500">Functional CRM</p>
-        <p className="mt-1 text-xs text-slate-400">Leads module active</p>
+
+      {/* User footer */}
+      <div className="border-t border-white/10 p-4">
+        <div className="rounded-xl bg-white/[0.08] p-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full bg-white text-xs font-bold text-[#1B5E20]">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-white">{fullName}</p>
+              <p className="text-xs text-green-300">{roleLabel[role] ?? role}</p>
+            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              title="Sign out"
+              className="flex-shrink-0 rounded-lg p-1.5 text-green-300 transition hover:bg-white/10 hover:text-white"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </div>
     </aside>
   );

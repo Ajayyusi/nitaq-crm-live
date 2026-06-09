@@ -1,8 +1,19 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 
-const columns = ["fullName", "phone", "email", "interestedCourse", "source", "status", "nextFollowUpDate", "assignedTo", "notes"];
+const columns = [
+  "leadId",
+  "fullName",
+  "phone",
+  "email",
+  "course",
+  "source",
+  "stage",
+  "nextFollowUpDate",
+  "assignedTo",
+  "notes",
+];
 
 function csvEscape(value: unknown) {
   const text = value == null ? "" : String(value);
@@ -18,11 +29,15 @@ export async function GET() {
       columns.join(","),
       ...leads.map((lead) =>
         columns
-          .map((column) => {
-            if (column === "nextFollowUpDate") {
-              return csvEscape(lead.nextFollowUpDate ? lead.nextFollowUpDate.toISOString().slice(0, 10) : "");
+          .map((col) => {
+            if (col === "nextFollowUpDate") {
+              return csvEscape(
+                lead.nextFollowUpDate
+                  ? (lead.nextFollowUpDate as Date).toISOString().slice(0, 10)
+                  : "",
+              );
             }
-            return csvEscape(lead[column as keyof typeof lead]);
+            return csvEscape((lead as any)[col]);
           })
           .join(","),
       ),

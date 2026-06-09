@@ -1,46 +1,51 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
-import { leadSources, leadStatuses } from "@/constants/leads";
+import { leadSources, leadStages, courseList } from "@/constants/leads";
+import { serializeLead } from "@/lib/serializers";
 
 type RouteContext = { params: Promise<{ id: string }> };
-type LeadUpdatePayload = Partial<Record<"fullName" | "phone" | "email" | "interestedCourse" | "source" | "status" | "notes" | "nextFollowUpDate" | "assignedTo", string>>;
+type LeadUpdatePayload = Partial<
+  Record<
+    | "fullName"
+    | "phone"
+    | "email"
+    | "course"
+    | "source"
+    | "stage"
+    | "notes"
+    | "nextFollowUpDate"
+    | "assignedTo",
+    string
+  >
+>;
 
-const allowedStatuses = new Set<string>(leadStatuses);
+const allowedStages = new Set<string>(leadStages);
 const allowedSources = new Set<string>(leadSources);
+const allowedCourses = new Set<string>(courseList);
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function serializeLead(lead: any) {
-  return {
-    id: lead._id.toString(),
-    fullName: lead.fullName ?? "",
-    phone: lead.phone ?? "",
-    email: lead.email ?? "",
-    interestedCourse: lead.interestedCourse ?? "",
-    source: lead.source ?? "Other",
-    status: lead.status ?? "New",
-    notes: lead.notes ?? "",
-    nextFollowUpDate: lead.nextFollowUpDate ? lead.nextFollowUpDate.toISOString().slice(0, 10) : "",
-    assignedTo: lead.assignedTo ?? "",
-    createdAt: lead.createdAt?.toISOString() ?? "",
-    updatedAt: lead.updatedAt?.toISOString() ?? "",
-  };
-}
-
 function buildUpdate(body: LeadUpdatePayload) {
   const update: Record<string, unknown> = {};
 
-  for (const field of ["fullName", "phone", "email", "interestedCourse", "notes", "assignedTo"] as const) {
+  for (const field of [
+    "fullName",
+    "phone",
+    "email",
+    "notes",
+    "assignedTo",
+  ] as const) {
     if (field in body) update[field] = cleanText(body[field]) || undefined;
   }
 
-  if ("nextFollowUpDate" in body) {
-    const value = cleanText(body.nextFollowUpDate);
-    update.nextFollowUpDate = value ? new Date(value) : undefined;
+  if ("course" in body) {
+    const course = cleanText(body.course) || "Other";
+    if (!allowedCourses.has(course)) throw new Error("Invalid course selection.");
+    update.course = course;
   }
 
   if ("source" in body) {
@@ -49,15 +54,21 @@ function buildUpdate(body: LeadUpdatePayload) {
     update.source = source;
   }
 
-  if ("status" in body) {
-    const status = cleanText(body.status) || "New";
-    if (!allowedStatuses.has(status)) throw new Error("Invalid lead status.");
-    update.status = status;
+  if ("stage" in body) {
+    const stage = cleanText(body.stage) || "Lead";
+    if (!allowedStages.has(stage)) throw new Error("Invalid lead stage.");
+    update.stage = stage;
   }
 
-  if ("fullName" in update && !update.fullName) throw new Error("Full name is required.");
-  if ("phone" in update && !update.phone) throw new Error("Phone is required.");
-  if ("interestedCourse" in update && !update.interestedCourse) throw new Error("Interested course is required.");
+  if ("nextFollowUpDate" in body) {
+    const value = cleanText(body.nextFollowUpDate);
+    update.nextFollowUpDate = value ? new Date(value) : undefined;
+  }
+
+  if ("fullName" in update && !update.fullName)
+    throw new Error("Full name is required.");
+  if ("phone" in update && !update.phone)
+    throw new Error("Phone number is required.");
 
   return update;
 }
@@ -71,11 +82,7 @@ async function getLeadById(id: string) {
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const lead = await getLeadById(id);
-
-  if (!lead) {
-    return NextResponse.json({ message: "Lead not found." }, { status: 404 });
-  }
-
+  if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
   return NextResponse.json({ lead: serializeLead(lead) });
 }
 
@@ -85,15 +92,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ message: "Invalid lead ID." }, { status: 400 });
     }
-
     await connectDB();
     const body = (await request.json()) as LeadUpdatePayload;
-    const lead = await Lead.findByIdAndUpdate(id, buildUpdate(body), { new: true, runValidators: true });
-
-    if (!lead) {
-      return NextResponse.json({ message: "Lead not found." }, { status: 404 });
-    }
-
+    const lead = await Lead.findByIdAndUpdate(id, buildUpdate(body), {
+      new: true,
+      runValidators: true,
+    });
+    if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
     return NextResponse.json({ lead: serializeLead(lead) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update lead.";
@@ -103,17 +108,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return NextResponse.json({ message: "Invalid lead ID." }, { status: 400 });
   }
-
   await connectDB();
   const lead = await Lead.findByIdAndDelete(id);
-
-  if (!lead) {
-    return NextResponse.json({ message: "Lead not found." }, { status: 404 });
-  }
-
+  if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
   return NextResponse.json({ message: "Lead deleted." });
 }

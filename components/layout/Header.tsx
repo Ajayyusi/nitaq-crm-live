@@ -1,24 +1,31 @@
-﻿import { Search } from "lucide-react";
+import { Bell } from "lucide-react";
 
-interface HeaderProps {
-  title?: string;
-  subtitle?: string;
-}
-
-export default function Header({ title = "Internal CRM / ERP", subtitle = "Operations dashboard" }: HeaderProps) {
+export default function Header() {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-6 backdrop-blur">
-      <div>
-        <h1 className="text-sm font-semibold text-slate-900">{title}</h1>
-        <p className="text-xs text-slate-500">{subtitle}</p>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="hidden h-10 w-72 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500 lg:flex">
-          <Search className="h-4 w-4" />
-          <span>Search students, leads, invoices...</span>
+    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur">
+      <div className="flex h-16 items-center justify-between px-8 2xl:px-10">
+        <div>
+          <p className="text-sm font-bold text-[#0D1F0E]">Nitaq Academy</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            CRM &amp; Operations
+          </p>
         </div>
-        <span className="hidden rounded-md bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 sm:inline-flex">Sharjah</span>
-        <div className="grid h-9 w-9 place-items-center rounded-lg bg-teal-700 text-xs font-bold text-white">NA</div>
+        <div className="flex items-center gap-3">
+          <span className="hidden rounded-full border border-green-200 bg-[#E8F5E9] px-3 py-1 text-xs font-semibold text-[#2E7D32] lg:inline-flex">
+            Sharjah
+          </span>
+          <button
+            type="button"
+            className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" />
+            <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#2E7D32] ring-2 ring-white" />
+          </button>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1B5E20] text-xs font-bold text-white shadow-sm">
+            NA
+          </div>
+        </div>
       </div>
     </header>
   );

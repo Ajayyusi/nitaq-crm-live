@@ -1,14 +1,22 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-import { leadSources, leadStatuses, type LeadSource, type LeadStatus } from "@/constants/leads";
+import {
+  leadSources,
+  leadStages,
+  courseList,
+  type LeadSource,
+  type LeadStage,
+  type CourseOption,
+} from "@/constants/leads";
 
 export interface ILead extends Document {
+  leadId: string;
   fullName: string;
   phone: string;
   email?: string;
-  interestedCourse: string;
+  course: CourseOption;
   source: LeadSource;
-  status: LeadStatus;
+  stage: LeadStage;
   notes?: string;
   nextFollowUpDate?: Date;
   assignedTo?: string;
@@ -18,6 +26,11 @@ export interface ILead extends Document {
 
 const LeadSchema = new Schema<ILead>(
   {
+    leadId: {
+      type: String,
+      unique: true,
+      index: true,
+    },
     fullName: {
       type: String,
       required: [true, "Full name is required"],
@@ -26,7 +39,7 @@ const LeadSchema = new Schema<ILead>(
     },
     phone: {
       type: String,
-      required: [true, "Phone is required"],
+      required: [true, "Phone number is required"],
       trim: true,
       maxlength: [30, "Phone cannot exceed 30 characters"],
     },
@@ -36,11 +49,11 @@ const LeadSchema = new Schema<ILead>(
       lowercase: true,
       match: [/^$|^\S+@\S+\.\S+$/, "Please enter a valid email address"],
     },
-    interestedCourse: {
+    course: {
       type: String,
-      required: [true, "Interested course is required"],
-      trim: true,
-      maxlength: [160, "Interested course cannot exceed 160 characters"],
+      enum: [...courseList],
+      required: [true, "Course interest is required"],
+      default: "Other",
     },
     source: {
       type: String,
@@ -48,11 +61,11 @@ const LeadSchema = new Schema<ILead>(
       required: [true, "Lead source is required"],
       default: "Other",
     },
-    status: {
+    stage: {
       type: String,
-      enum: [...leadStatuses],
-      required: [true, "Lead status is required"],
-      default: "New",
+      enum: [...leadStages],
+      required: [true, "Lead stage is required"],
+      default: "Lead",
     },
     notes: {
       type: String,
@@ -71,10 +84,12 @@ const LeadSchema = new Schema<ILead>(
   { timestamps: true },
 );
 
-LeadSchema.index({ status: 1, createdAt: -1 });
+LeadSchema.index({ stage: 1, createdAt: -1 });
 LeadSchema.index({ source: 1, createdAt: -1 });
-LeadSchema.index({ fullName: "text", phone: "text", interestedCourse: "text", status: "text" });
+LeadSchema.index({ fullName: "text", phone: "text", course: "text" });
 
-const Lead = (mongoose.models.Lead as mongoose.Model<ILead>) || mongoose.model<ILead>("Lead", LeadSchema);
+const Lead =
+  (mongoose.models.Lead as mongoose.Model<ILead>) ||
+  mongoose.model<ILead>("Lead", LeadSchema);
 
 export default Lead;

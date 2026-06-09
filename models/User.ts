@@ -1,14 +1,14 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export const userRoles = ["admin", "manager", "staff"] as const;
+export type UserRole = (typeof userRoles)[number];
+
 export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
-  role: string;
+  role: UserRole;
   active: boolean;
-  phone?: string;
-  avatar?: string;
-  teacherId?: mongoose.Types.ObjectId;
   lastLogin?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -17,20 +17,17 @@ export interface IUser extends Document {
 const UserSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
-    role: {
-      type: String,
-      enum: ["super_admin", "admin", "sales", "teacher", "finance", "academic"],
-      default: "sales",
-    },
+    role: { type: String, enum: [...userRoles], default: "staff" },
     active: { type: Boolean, default: true },
-    phone: String,
-    avatar: String,
-    teacherId: { type: Schema.Types.ObjectId, ref: "Teacher" },
     lastLogin: Date,
   },
   { timestamps: true }
 );
 
-export default mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
+const User =
+  (mongoose.models.User as mongoose.Model<IUser>) ||
+  mongoose.model<IUser>("User", UserSchema);
+
+export default User;

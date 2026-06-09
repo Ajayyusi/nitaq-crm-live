@@ -1,21 +1,330 @@
-﻿export default function FinancePage() {
-  return (
-    <div className="space-y-6 p-6">
-      <div>
-        <p className="text-sm font-medium text-teal-700">Nitaq Academy</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">Finance</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-500">Monitor revenue, outstanding payments, expenses, and financial performance.</p>
+import Link from "next/link";
+import connectDB from "@/lib/db";
+import { Payment, Expense } from "@/models/Financial";
+import { CreditCard, Receipt, TrendingDown, TrendingUp, ArrowRight, BarChart3 } from "lucide-react";
+import { RevenueExpensesChart, CourseRevenuePieChart } from "@/components/finance/FinanceCharts";
+
+const fmt = (n: number) =>
+  "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+async function getFinanceData() {
+  try {
+    await connectDB();
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    const [
+      totalRevenue,
+      monthlyRevenue,
+      totalPending,
+      totalExpenses,
+      monthlyExpenses,
+      monthlyRevenueByMonth,
+      monthlyExpensesByMonth,
+      courseRevenue,
+      expensesByCategory,
+    ] = await Promise.all([
+      Payment.aggregate([
+        { $match: { status: "Received" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]).then((r) => r[0]?.total ?? 0),
+
+      Payment.aggregate([
+        { $match: { status: "Received", datePaid: { $gte: monthStart } } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]).then((r) => r[0]?.total ?? 0),
+
+      Payment.aggregate([
+        { $match: { status: { $in: ["Pending", "Overdue"] } } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]).then((r) => r[0]?.total ?? 0),
+
+      Expense.aggregate([
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]).then((r) => r[0]?.total ?? 0),
+
+      Expense.aggregate([
+        { $match: { expenseDate: { $gte: monthStart } } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]).then((r) => r[0]?.total ?? 0),
+
+      Payment.aggregate([
+        { $match: { status: "Received", datePaid: { $gte: sixMonthsAgo } } },
+        {
+          $group: {
+            _id: { year: { $year: "$datePaid" }, month: { $month: "$datePaid" } },
+            total: { $sum: "$amount" },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ]),
+
+      Expense.aggregate([
+        { $match: { expenseDate: { $gte: sixMonthsAgo } } },
+        {
+          $group: {
+            _id: { year: { $year: "$expenseDate" }, month: { $month: "$expenseDate" } },
+            total: { $sum: "$amount" },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ]),
+
+      Payment.aggregate([
+        { $match: { status: "Received", course: { $exists: true, $ne: "" } } },
+        { $group: { _id: "$course", total: { $sum: "$amount" } } },
+        { $sort: { total: -1 } },
+        { $limit: 6 },
+      ]),
+
+      Expense.aggregate([
+        { $group: { _id: "$category", total: { $sum: "$amount" } } },
+        { $sort: { total: -1 } },
+      ]),
+    ]);
+
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      return { year: d.getFullYear(), month: d.getMonth() + 1 };
+    });
+
+    const monthlyChart = months.map(({ year, month }) => {
+      const rev = monthlyRevenueByMonth.find(
+        (r: { _id: { year: number; month: number }; total: number }) => r._id.year === year && r._id.month === month
+      )?.total ?? 0;
+      const exp = monthlyExpensesByMonth.find(
+        (r: { _id: { year: number; month: number }; total: number }) => r._id.year === year && r._id.month === month
+      )?.total ?? 0;
+      return { month: MONTH_NAMES[month - 1], revenue: rev, expenses: exp, net: rev - exp };
+    });
+
+    return {
+      totalRevenue,
+      monthlyRevenue,
+      totalPending,
+      totalExpenses,
+      monthlyExpenses,
+      net: totalRevenue - totalExpenses,
+      monthlyNet: monthlyRevenue - monthlyExpenses,
+      monthlyChart,
+      courseRevenue: courseRevenue.map((c: { _id: string; total: number }) => ({ name: c._id ?? "Other", value: c.total })),
+      expensesByCategory: expensesByCategory.map((e: { _id: string; total: number }) => ({ category: e._id ?? "Other", total: e.total })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export default async function FinancePage() {
+  const data = await getFinanceData();
+
+  if (!data) {
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold text-[#0D1F0E]">Finance</h1>
+        <p className="mt-2 text-sm text-rose-600">Could not connect to database.</p>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="font-semibold text-slate-900">Finance Workspace</h2>
-        <p className="mt-1 text-sm text-slate-500">This module is ready for the next implementation phase.</p>
-        <div className="mt-5 grid min-h-64 place-items-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-          <div>
-            <p className="text-sm font-medium text-slate-900">Placeholder module</p>
-            <p className="mt-2 max-w-md text-sm text-slate-500">Static Phase 1 foundation only. Data models, authentication, and workflows will be added later.</p>
+    );
+  }
+
+  const kpis = [
+    { icon: TrendingUp, label: "Total Revenue", value: fmt(data.totalRevenue), sub: "All received payments", color: "#2E7D32" },
+    { icon: CreditCard, label: "This Month", value: fmt(data.monthlyRevenue), sub: "Received this month", color: "#2196F3" },
+    { icon: Receipt, label: "Pending / Overdue", value: fmt(data.totalPending), sub: "Not yet collected", color: "#F59E0B" },
+    { icon: TrendingDown, label: "Total Expenses", value: fmt(data.totalExpenses), sub: "All time", color: "#EF5350" },
+    { icon: BarChart3, label: "Net Income", value: fmt(data.net), sub: "Revenue minus expenses", color: data.net >= 0 ? "#2E7D32" : "#EF5350" },
+  ];
+
+  const maxExpense = Math.max(...data.expensesByCategory.map((e) => e.total), 1);
+
+  return (
+    <div className="space-y-7">
+      {/* Header */}
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">Business</p>
+        <h1 className="mt-1 text-3xl font-bold text-[#0D1F0E]">Finance</h1>
+        <p className="mt-1 text-sm text-slate-500">Revenue, expenses, and financial performance</p>
+      </div>
+
+      {/* KPI cards */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {kpis.map((kpi) => {
+          const Icon = kpi.icon;
+          return (
+            <div
+              key={kpi.label}
+              className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div
+                className="absolute inset-x-0 top-0 h-[3px] rounded-t-2xl"
+                style={{ background: kpi.color }}
+              />
+              <div
+                className="mb-3 grid h-10 w-10 place-items-center rounded-xl"
+                style={{ background: kpi.color + "15", color: kpi.color }}
+              >
+                <Icon className="h-5 w-5" />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{kpi.label}</p>
+              <p className="mt-1.5 text-2xl font-bold" style={{ color: kpi.color }}>
+                {kpi.value}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{kpi.sub}</p>
+            </div>
+          );
+        })}
+      </section>
+
+      {/* Charts row */}
+      <section className="grid gap-5 xl:grid-cols-[1.4fr_0.6fr]">
+        {/* Revenue vs Expenses bar chart */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-start justify-between">
+            <div>
+              <h2 className="text-base font-bold text-[#0D1F0E]">Revenue vs Expenses</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Last 6 months</p>
+            </div>
+            <div className="flex gap-4 text-xs">
+              <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded-sm bg-[#2E7D32]" /><span className="text-slate-600">Revenue</span></div>
+              <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded-sm bg-rose-400" /><span className="text-slate-600">Expenses</span></div>
+            </div>
+          </div>
+          {data.monthlyChart.every((m) => m.revenue === 0 && m.expenses === 0) ? (
+            <div className="flex h-52 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+              No financial data yet. Run the seed or add payments/expenses.
+            </div>
+          ) : (
+            <RevenueExpensesChart data={data.monthlyChart} />
+          )}
+          {/* Monthly net row */}
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+            <span className="text-sm font-semibold text-slate-600">Net this month</span>
+            <span className={`text-lg font-bold ${data.monthlyNet >= 0 ? "text-[#2E7D32]" : "text-rose-600"}`}>
+              {data.monthlyNet >= 0 ? "+" : ""}{fmt(data.monthlyNet)}
+            </span>
           </div>
         </div>
-      </div>
+
+        {/* Course revenue pie chart */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-base font-bold text-[#0D1F0E]">Revenue by Course</h2>
+            <p className="mt-0.5 text-xs text-slate-500">All received payments</p>
+          </div>
+          {data.courseRevenue.length === 0 ? (
+            <div className="flex h-48 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
+              No data yet
+            </div>
+          ) : (
+            <>
+              <CourseRevenuePieChart data={data.courseRevenue} />
+              <div className="mt-3 space-y-1.5">
+                {data.courseRevenue.slice(0, 4).map((c, i) => (
+                  <div key={c.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="h-2 w-2 flex-shrink-0 rounded-full"
+                        style={{ background: ["#2E7D32", "#00897B", "#2196F3", "#7B1FA2"][i] }}
+                      />
+                      <span className="truncate text-slate-600">{c.name}</span>
+                    </div>
+                    <span className="ml-2 flex-shrink-0 font-semibold text-[#0D1F0E]">{fmt(c.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Expenses breakdown + Quick links */}
+      <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        {/* Expenses by category */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-[#0D1F0E]">Expenses by Category</h2>
+              <p className="mt-0.5 text-xs text-slate-500">All time breakdown</p>
+            </div>
+            <Link
+              href="/expenses"
+              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]"
+            >
+              All Expenses
+            </Link>
+          </div>
+          {data.expensesByCategory.length === 0 ? (
+            <p className="text-sm text-slate-400">No expenses yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {data.expensesByCategory.map((e) => {
+                const pct = Math.max(4, Math.round((e.total / maxExpense) * 100));
+                return (
+                  <div key={e.category}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-semibold text-slate-700">{e.category}</span>
+                      <span className="font-bold text-[#0D1F0E]">{fmt(e.total)}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-rose-400" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Quick navigation */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-5 text-base font-bold text-[#0D1F0E]">Finance Modules</h2>
+          <div className="space-y-3">
+            <Link
+              href="/payments"
+              className="group flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-5 transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]"
+            >
+              <div className="grid h-12 w-12 place-items-center rounded-xl bg-green-100">
+                <CreditCard className="h-6 w-6 text-[#2E7D32]" />
+              </div>
+              <div>
+                <p className="font-bold text-[#0D1F0E]">Payments</p>
+                <p className="text-sm text-slate-500">Tuition, instalments, receipts</p>
+              </div>
+              <ArrowRight className="ml-auto h-5 w-5 text-slate-300 transition group-hover:text-[#2E7D32]" />
+            </Link>
+            <Link
+              href="/expenses"
+              className="group flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-5 transition hover:border-rose-300 hover:bg-rose-50"
+            >
+              <div className="grid h-12 w-12 place-items-center rounded-xl bg-rose-100">
+                <Receipt className="h-6 w-6 text-rose-600" />
+              </div>
+              <div>
+                <p className="font-bold text-[#0D1F0E]">Expenses</p>
+                <p className="text-sm text-slate-500">Rent, salaries, marketing, utilities</p>
+              </div>
+              <ArrowRight className="ml-auto h-5 w-5 text-slate-300 transition group-hover:text-rose-500" />
+            </Link>
+            <Link
+              href="/reports"
+              className="group flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-300 hover:bg-blue-50"
+            >
+              <div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-100">
+                <BarChart3 className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="font-bold text-[#0D1F0E]">Full Reports</p>
+                <p className="text-sm text-slate-500">Leads, enrollments, revenue analytics</p>
+              </div>
+              <ArrowRight className="ml-auto h-5 w-5 text-slate-300 transition group-hover:text-blue-500" />
+            </Link>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
