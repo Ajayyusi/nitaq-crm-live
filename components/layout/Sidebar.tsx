@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
+  ArrowUpDown,
   BarChart3,
   BookOpen,
   CalendarDays,
@@ -50,7 +51,10 @@ const navGroups = [
   },
   {
     label: "System",
-    items: [{ label: "Settings", href: "/settings", icon: Settings }],
+    items: [
+      { label: "Import / Export", href: "/import-export", icon: ArrowUpDown },
+      { label: "Settings", href: "/settings", icon: Settings },
+    ],
   },
 ];
 

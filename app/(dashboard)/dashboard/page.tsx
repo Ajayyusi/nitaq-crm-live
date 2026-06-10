@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  ArrowUpDown,
   Award,
   BarChart3,
   BellRing,
@@ -608,6 +609,10 @@ export default async function DashboardPage() {
           <Link href="/reports" className="flex flex-col items-center gap-2.5 rounded-xl border border-teal-100 bg-teal-50 px-4 py-4 text-center text-sm font-bold text-teal-800 transition hover:border-teal-300 hover:bg-teal-100">
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-teal-100 text-teal-600"><TrendingUp className="h-5 w-5" /></div>
             Reports
+          </Link>
+          <Link href="/import-export" className="flex flex-col items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-200 text-slate-600"><ArrowUpDown className="h-5 w-5" /></div>
+            Import / Export
           </Link>
         </div>
       </section>
