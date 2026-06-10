@@ -301,8 +301,8 @@ export default function ClassesPage() {
 
                   {/* Expanded records */}
                   {expanded && s.records.length > 0 && (
-                    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
-                      <table className="w-full text-xs">
+                    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 overflow-x-auto">
+                      <table className="w-full min-w-[300px] text-xs">
                         <thead>
                           <tr className="text-slate-400 uppercase tracking-wide">
                             <th className="text-left py-1 pr-4 font-semibold">Student</th>

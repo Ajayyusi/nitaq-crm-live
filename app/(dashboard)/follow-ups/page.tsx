@@ -320,8 +320,8 @@ export default function FollowUpsPage() {
         )}
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex gap-1">
+        <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap gap-1">
             {(["all", "Pending", "Done", "No Response", "Rescheduled"] as const).map((s) => (
               <button
                 key={s}
@@ -332,7 +332,7 @@ export default function FollowUpsPage() {
               </button>
             ))}
           </div>
-          <div className="flex gap-1 ml-auto">
+          <div className="flex flex-wrap gap-1 sm:ml-auto">
             {(["all", "today", "overdue", "upcoming"] as const).map((v) => (
               <button
                 key={v}
