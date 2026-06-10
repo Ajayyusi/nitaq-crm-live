@@ -25,10 +25,23 @@ function str(v: unknown): string {
 export async function POST(req: NextRequest, context: RouteContext) {
   const { entity } = await context.params;
   const body = await req.json();
-  const rows: Record<string, string>[] = body.rows ?? [];
+
+  if (!Array.isArray(body.rows)) {
+    return NextResponse.json({ message: "Request body must include a 'rows' array." }, { status: 400 });
+  }
+
+  const rows: Record<string, string>[] = body.rows;
+  const MAX_ROWS = 500;
 
   if (!rows.length) {
     return NextResponse.json({ total: 0, success: 0, failed: 0, errors: [] });
+  }
+
+  if (rows.length > MAX_ROWS) {
+    return NextResponse.json(
+      { message: `Too many rows. Maximum allowed per import is ${MAX_ROWS}. Split your file and import in batches.` },
+      { status: 400 }
+    );
   }
 
   await connectDB();
@@ -153,7 +166,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
         });
         success++;
       } catch (e: unknown) {
-        errors.push({ row: rowNum, error: e instanceof Error ? e.message : "Failed to save" });
+        const msg = e instanceof Error ? e.message : "Failed to save";
+        const clean = msg.includes("duplicate key") ? `courseCode "${str(r.courseCode).toUpperCase()}" already exists` : msg;
+        errors.push({ row: rowNum, error: clean });
       }
     }
   } else if (entity === "teachers") {

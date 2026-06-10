@@ -246,7 +246,7 @@ export default function ImportExportPage() {
             {/* Step 1: Templates */}
             <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
               <h3 className="font-semibold text-slate-800 mb-1">Step 1 — Download Template</h3>
-              <p className="text-sm text-slate-500 mb-4">Download the CSV template for the section you want to import, fill in your data, then upload below.</p>
+              <p className="text-sm text-slate-500 mb-4">Download the CSV template for the section you want to import, fill in your data, then upload below. Maximum 500 rows per import.</p>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
                 {IMPORT_ENTITIES.map((key) => {
                   const ent = ALL_ENTITIES.find((e) => e.key === key)!;
@@ -279,6 +279,13 @@ export default function ImportExportPage() {
                   ))}
                 </select>
               </div>
+
+              {["teachers", "followups", "classes"].includes(importEntity) && (
+                <div className="mb-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                  <span><strong>{entityLabel(importEntity)}</strong> has no unique identifier — importing the same file twice will create duplicate records. Make sure you only import each file once.</span>
+                </div>
+              )}
 
               <input
                 ref={fileInputRef}
