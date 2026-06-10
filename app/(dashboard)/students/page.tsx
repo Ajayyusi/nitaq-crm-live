@@ -128,8 +128,8 @@ export default function StudentsPage() {
             description="Students appear here once they are enrolled in a course."
           />
         ) : (
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   {["ID", "Name", "Course", "Status", "Payment", "Balance", "Contact", ""].map((h) => (

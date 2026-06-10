@@ -18,6 +18,7 @@ import {
   UserCheck,
   WalletCards,
   BellRing,
+  X,
 } from "lucide-react";
 
 const navGroups = [
@@ -77,7 +78,13 @@ function FollowUpBadge() {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const pathname = usePathname();
   const { data: session } = useSession();
 
@@ -93,17 +100,29 @@ export default function Sidebar() {
     .toUpperCase();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-[#1B5E20] text-white shadow-2xl shadow-green-950/20">
+    <aside
+      className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-[#1B5E20] text-white shadow-2xl shadow-green-950/20 transition-transform duration-300 ${
+        isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      }`}
+    >
       {/* Logo */}
       <div className="border-b border-white/10 px-5 py-5">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg">
+          <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg">
             NA
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-bold tracking-tight text-white">Nitaq Academy</p>
             <p className="mt-0.5 text-xs font-medium text-green-200">Internal CRM</p>
           </div>
+          {/* Close button — mobile only */}
+          <button
+            onClick={onClose}
+            aria-label="Close navigation"
+            className="lg:hidden grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-white/10 text-white transition hover:bg-white/20"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
         <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.08] px-3 py-2.5">
           <p className="text-[10px] font-bold uppercase tracking-widest text-green-300">Sharjah</p>
@@ -127,6 +146,7 @@ export default function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={onClose}
                     className={`group flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition ${
                       active
                         ? "bg-[#2E7D32] text-white shadow-md shadow-green-950/20"
