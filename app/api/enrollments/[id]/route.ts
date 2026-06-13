@@ -3,8 +3,22 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Enrollment from "@/models/Enrollment";
 import { enrollmentStatuses, paymentStatuses, scheduleFormats } from "@/models/Enrollment";
+import { Payment, paymentMethods } from "@/models/Financial";
+import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+
+const allowedPaymentMethods = new Set<string>(paymentMethods);
+
+function derivePaymentType(paymentStatus: string, isFirstPayment: boolean): string {
+  if (paymentStatus === "Instalment 1 Paid" || paymentStatus === "Instalment 2 Pending") {
+    return "Instalment 1 of 2";
+  }
+  if (paymentStatus === "Paid Full" && !isFirstPayment) {
+    return "Instalment 2 of 2";
+  }
+  return "Full Payment";
+}
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -43,6 +57,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     await connectDB();
     const body = await request.json();
+
+    const existing = await Enrollment.findById(id).lean();
+    if (!existing) return NextResponse.json({ message: "Enrollment not found." }, { status: 404 });
+    const oldAmountPaid: number = existing.amountPaid ?? 0;
+
     const update: Record<string, unknown> = {};
 
     for (const f of ["fullName", "phone", "email", "emiratesId", "nationality", "course", "batchName", "schedule", "notes"] as const) {
@@ -76,6 +95,31 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const enrollment = await Enrollment.findByIdAndUpdate(id, update, { new: true, runValidators: true });
     if (!enrollment) return NextResponse.json({ message: "Enrollment not found." }, { status: 404 });
+
+    const newAmountPaid: number = enrollment.amountPaid ?? 0;
+    const delta = newAmountPaid - oldAmountPaid;
+    if (delta > 0) {
+      const currentStatus = (update.paymentStatus as string | undefined) ?? enrollment.paymentStatus;
+      const paymentType = derivePaymentType(currentStatus, oldAmountPaid === 0);
+      const rawMethod = typeof body.paymentMethod === "string" ? body.paymentMethod.trim() : "";
+      const paymentMethod = allowedPaymentMethods.has(rawMethod) ? rawMethod : "Cash";
+      const seq = await getNextSequence("payment");
+      const paymentId = `P-${String(seq).padStart(3, "0")}`;
+      await Payment.create({
+        paymentId,
+        enrollmentId: enrollment._id,
+        studentName: enrollment.fullName,
+        studentPhone: enrollment.phone || undefined,
+        course: enrollment.course || undefined,
+        amount: delta,
+        paymentType,
+        paymentMethod,
+        status: "Received",
+        datePaid: new Date(),
+        notes: `Auto-recorded from enrollment ${enrollment.enrollmentId}`,
+      });
+    }
+
     return NextResponse.json({ enrollment: serializeEnrollment(enrollment) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update enrollment.";
