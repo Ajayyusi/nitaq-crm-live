@@ -25,13 +25,28 @@ export const expenseCategories = [
   "Marketing",
   "Supplies",
   "Maintenance",
+  "Insurance",
+  "Training Materials",
+  "Software & Subscriptions",
+  "Equipment",
+  "Transport",
+  "Government Fees",
   "Other",
+] as const;
+
+export const expensePaymentMethods = [
+  "Cash",
+  "Bank Transfer",
+  "Card",
+  "Cheque",
+  "Online",
 ] as const;
 
 export type PaymentMethod = (typeof paymentMethods)[number];
 export type TxPaymentType = (typeof paymentTypes)[number];
 export type TxStatus = (typeof txStatuses)[number];
 export type ExpenseCategory = (typeof expenseCategories)[number];
+export type ExpensePaymentMethod = (typeof expensePaymentMethods)[number];
 
 // Payment
 export interface IPayment extends Document {
@@ -106,6 +121,7 @@ export interface IExpense extends Document {
   amount: number;
   expenseDate: Date;
   payee?: string;
+  paymentMethod?: ExpensePaymentMethod;
   description?: string;
   notes?: string;
   createdAt: Date;
@@ -119,6 +135,7 @@ const ExpenseSchema = new Schema<IExpense>(
     amount: { type: Number, required: true, min: 0 },
     expenseDate: { type: Date, default: Date.now },
     payee: { type: String, trim: true },
+    paymentMethod: { type: String, enum: [...expensePaymentMethods], trim: true },
     description: { type: String, trim: true, maxlength: 500 },
     notes: { type: String, trim: true, maxlength: 1000 },
   },

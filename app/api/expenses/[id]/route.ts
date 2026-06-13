@@ -1,13 +1,14 @@
 import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
-import { Expense, expenseCategories } from "@/models/Financial";
+import { Expense, expenseCategories, expensePaymentMethods } from "@/models/Financial";
 import { serializeExpense } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 const allowedCategories = new Set<string>(expenseCategories);
+const allowedExpenseMethods = new Set<string>(expensePaymentMethods);
 
 function clean(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
@@ -53,6 +54,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       update.amount = amt;
     }
     if ("expenseDate" in body) update.expenseDate = body.expenseDate ? new Date(body.expenseDate) : undefined;
+    if ("paymentMethod" in body) {
+      const v = clean(body.paymentMethod);
+      update.paymentMethod = allowedExpenseMethods.has(v) ? v : undefined;
+    }
     for (const f of ["payee", "description", "notes"] as const) {
       if (f in body) update[f] = clean(body[f]) || undefined;
     }

@@ -68,7 +68,21 @@ export const expenseCategories = [
   "Marketing",
   "Supplies",
   "Maintenance",
+  "Insurance",
+  "Training Materials",
+  "Software & Subscriptions",
+  "Equipment",
+  "Transport",
+  "Government Fees",
   "Other",
+] as const;
+
+export const expensePaymentMethods = [
+  "Cash",
+  "Bank Transfer",
+  "Card",
+  "Cheque",
+  "Online",
 ] as const;
 
 // ── Attendance ────────────────────────────────────────────────────────────────
