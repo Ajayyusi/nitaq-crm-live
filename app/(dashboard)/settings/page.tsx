@@ -581,6 +581,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ logoBase64: base64 }),
       });
       if (!res.ok) throw new Error();
+      window.dispatchEvent(new CustomEvent("logo-updated", { detail: { logoBase64: base64 } }));
       toast.success(base64 ? "Logo saved." : "Logo removed.");
     } catch {
       toast.error("Failed to save logo.");

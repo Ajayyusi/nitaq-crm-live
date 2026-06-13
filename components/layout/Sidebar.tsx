@@ -94,6 +94,12 @@ export default function Sidebar({
       .then((r) => r.json())
       .then((d) => setLogoBase64(d.logoBase64 ?? ""))
       .catch(() => {});
+
+    function onLogoUpdated(e: Event) {
+      setLogoBase64((e as CustomEvent<{ logoBase64: string }>).detail.logoBase64 ?? "");
+    }
+    window.addEventListener("logo-updated", onLogoUpdated);
+    return () => window.removeEventListener("logo-updated", onLogoUpdated);
   }, []);
 
   const user = session?.user;
