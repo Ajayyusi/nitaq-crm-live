@@ -49,6 +49,8 @@ export interface IPayment extends Document {
   receiptRef?: string;
   notes?: string;
   recordedBy?: string;
+  installmentNumber?: number;
+  totalInstallments?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -84,6 +86,8 @@ const PaymentSchema = new Schema<IPayment>(
     receiptRef: { type: String, trim: true },
     notes: { type: String, trim: true, maxlength: 1000 },
     recordedBy: { type: String, trim: true },
+    installmentNumber: { type: Number, min: 1 },
+    totalInstallments: { type: Number, min: 1 },
   },
   { timestamps: true },
 );
