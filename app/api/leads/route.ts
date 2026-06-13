@@ -71,11 +71,19 @@ export async function GET(request: NextRequest) {
     const stage = searchParams.get("stage")?.trim();
     const source = searchParams.get("source")?.trim();
     const sort = searchParams.get("sort") === "oldest" ? 1 : -1;
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
     const query: Record<string, unknown> = {};
 
     if (stage && allowedStages.has(stage)) query.stage = stage;
     if (source && allowedSources.has(source)) query.source = source;
+    if (from || to) {
+      const dateQ: Record<string, Date> = {};
+      if (from) dateQ.$gte = new Date(from);
+      if (to) { const t = new Date(to); t.setDate(t.getDate() + 1); dateQ.$lt = t; }
+      query.createdAt = dateQ;
+    }
     if (search) {
       const regex = new RegExp(
         search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),

@@ -32,6 +32,8 @@ import {
   type LeadSource,
   type LeadStage,
 } from "@/constants/leads";
+import DateRangePicker from "@/components/shared/DateRangePicker";
+import { thisMonthRange } from "@/lib/dateRange";
 
 type SortOrder = "newest" | "oldest";
 
@@ -151,6 +153,8 @@ export default function LeadsClient() {
   const [stage, setStage] = useState("all");
   const [source, setSource] = useState("all");
   const [sort, setSort] = useState<SortOrder>("newest");
+  const [dateFrom, setDateFrom] = useState(() => thisMonthRange().from);
+  const [dateTo, setDateTo] = useState(() => thisMonthRange().to);
   const [loading, setLoading] = useState(true);
   const [converting, setConverting] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -169,10 +173,16 @@ export default function LeadsClient() {
     if (stage !== "all") params.set("stage", stage);
     if (source !== "all") params.set("source", source);
     params.set("sort", sort);
+    if (dateFrom) params.set("from", dateFrom);
+    if (dateTo) params.set("to", dateTo);
     return params.toString();
-  }, [search, stage, source, sort]);
+  }, [search, stage, source, sort, dateFrom, dateTo]);
 
-  const hasFilters = Boolean(search.trim() || stage !== "all" || source !== "all");
+  const defaultRange = thisMonthRange();
+  const hasFilters = Boolean(
+    search.trim() || stage !== "all" || source !== "all" ||
+    dateFrom !== defaultRange.from || dateTo !== defaultRange.to
+  );
 
   async function loadLeads() {
     setLoading(true);
@@ -461,6 +471,13 @@ export default function LeadsClient() {
 
         {/* Filters */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <DateRangePicker
+              from={dateFrom}
+              to={dateTo}
+              onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+            />
+          </div>
           <div className="grid gap-3 xl:grid-cols-[1fr_180px_180px_160px_auto]">
             <label className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
               <Search className="h-4 w-4 text-slate-400" />
@@ -488,6 +505,9 @@ export default function LeadsClient() {
                   setSearch("");
                   setStage("all");
                   setSource("all");
+                  const r = thisMonthRange();
+                  setDateFrom(r.from);
+                  setDateTo(r.to);
                 }}
                 type="button"
               >

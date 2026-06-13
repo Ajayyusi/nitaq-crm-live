@@ -19,6 +19,7 @@ import {
   UserPlus,
   UsersRound,
 } from "lucide-react";
+import { Suspense } from "react";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import Enrollment from "@/models/Enrollment";
@@ -26,6 +27,8 @@ import FollowUp from "@/models/FollowUp";
 import { Payment } from "@/models/Financial";
 import AttendanceSession from "@/models/Attendance";
 import { auth } from "@/auth";
+import UrlDateFilter from "@/components/shared/UrlDateFilter";
+import { buildDateFilter, describeRange, thisMonthRange } from "@/lib/dateRange";
 
 // ── Role helpers ─────────────────────────────────────────────────────────────
 const FINANCE_ROLES = new Set(["admin", "manager", "finance"]);
@@ -49,18 +52,19 @@ function formatDate(d: Date) {
 }
 
 // ── Data fetcher — only runs queries the role needs ──────────────────────────
-async function getDashboardData(role: string) {
+async function getDashboardData(role: string, from: string, to: string) {
   try {
     await connectDB();
 
     const now = new Date();
     const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
     const todayEnd   = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const showFinance = can(role, FINANCE_ROLES);
     const showSales   = can(role, SALES_ROLES);
     const showClasses = can(role, CLASS_ROLES);
+
+    const dateFilter = buildDateFilter(from || undefined, to || undefined);
 
     // Always fetched (all roles)
     const activeStudents = await Enrollment.countDocuments({ status: "Active" });
@@ -106,7 +110,12 @@ async function getDashboardData(role: string) {
     if (showFinance) {
       [monthlyRevenue, pendingPayments] = await Promise.all([
         Payment.aggregate([
-          { $match: { status: "Received", datePaid: { $gte: monthStart } } },
+          {
+            $match: {
+              status: "Received",
+              ...(dateFilter ? { datePaid: dateFilter } : {}),
+            },
+          },
           { $group: { _id: null, total: { $sum: "$amount" } } },
         ]).then((r) => r[0]?.total ?? 0),
         Payment.aggregate([
@@ -170,13 +179,22 @@ const statusColor: Record<string, string> = {
   "On Hold": "bg-amber-100 text-amber-700",
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
   const session = await auth();
   const rawRole = (session?.user as { role?: string })?.role ?? "sales";
-  // Normalize legacy role
   const role = rawRole === "staff" ? "sales" : rawRole;
 
-  const data = await getDashboardData(role);
+  const { from: rawFrom, to: rawTo } = await searchParams;
+  const defaultRange = thisMonthRange();
+  // If URL has no params, default to this month; if params present (even empty), use them
+  const from = rawFrom !== undefined ? rawFrom : defaultRange.from;
+  const to   = rawTo   !== undefined ? rawTo   : defaultRange.to;
+
+  const data = await getDashboardData(role, from, to);
 
   if (!data) {
     return (
@@ -194,6 +212,7 @@ export default async function DashboardPage() {
   const greet     = greeting(hour);
   const firstName = (session?.user?.name ?? "").split(" ")[0] || "there";
   const dateStr   = formatDate(now);
+  const periodLabel = describeRange(from, to);
 
   // ── KPIs — assembled per role ─────────────────────────────────────────────
   const kpis = [
@@ -209,8 +228,8 @@ export default async function DashboardPage() {
     },
     // Finance KPI
     data.showFinance && {
-      label: "Monthly Revenue", value: fmt(data.monthlyRevenue),
-      sub: "Received this month", icon: CircleDollarSign, topColor: "#7B1FA2", href: "/finance",
+      label: `Revenue (${periodLabel})`, value: fmt(data.monthlyRevenue),
+      sub: "Received payments", icon: CircleDollarSign, topColor: "#7B1FA2", href: "/finance",
     },
     // Sales KPI
     data.showSales && {
@@ -324,7 +343,7 @@ export default async function DashboardPage() {
                     <span className="font-bold text-white">{data.activeStudents}</span>
                   </div>
                   <div className="flex items-center justify-between gap-8 text-sm">
-                    <span className="text-green-200">This month</span>
+                    <span className="text-green-200">{periodLabel}</span>
                     <span className="font-bold text-white">{fmt(data.monthlyRevenue)}</span>
                   </div>
                   <div className="h-px bg-white/10" />
@@ -362,6 +381,16 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Period filter (finance-relevant roles) ──────────────────────── */}
+      {data.showFinance && (
+        <div className="flex items-center gap-3 text-sm text-slate-500">
+          <span className="font-medium">Period:</span>
+          <Suspense fallback={null}>
+            <UrlDateFilter defaultFrom={defaultRange.from} defaultTo={defaultRange.to} />
+          </Suspense>
+        </div>
+      )}
 
       {/* ── KPI cards ─────────────────────────────────────────────────────── */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
