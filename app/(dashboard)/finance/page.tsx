@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import connectDB from "@/lib/db";
 import { Payment, Expense } from "@/models/Financial";
-import { CreditCard, Receipt, TrendingDown, TrendingUp, ArrowRight, BarChart3 } from "lucide-react";
+import Enrollment from "@/models/Enrollment";
+import { CreditCard, Receipt, TrendingDown, TrendingUp, ArrowRight, BarChart3, AlertTriangle, Users } from "lucide-react";
 import { RevenueExpensesChart, CourseRevenuePieChart } from "@/components/finance/FinanceCharts";
 import UrlDateFilter from "@/components/shared/UrlDateFilter";
 import { buildDateFilter, describeRange } from "@/lib/dateRange";
@@ -30,6 +31,8 @@ async function getFinanceData(from: string, to: string) {
       monthlyExpensesByMonth,
       courseRevenue,
       expensesByCategory,
+      studentsWithBalance,
+      overduePayments,
     ] = await Promise.all([
       Payment.aggregate([
         {
@@ -97,6 +100,19 @@ async function getFinanceData(from: string, to: string) {
         { $group: { _id: "$category", total: { $sum: "$amount" } } },
         { $sort: { total: -1 } },
       ]),
+
+      Enrollment.aggregate([
+        { $match: { status: "Active", $expr: { $gt: ["$totalFee", "$amountPaid"] } } },
+        { $addFields: { balanceDue: { $subtract: ["$totalFee", "$amountPaid"] } } },
+        { $sort: { balanceDue: -1 } },
+        { $limit: 10 },
+        { $project: { enrollmentId: 1, fullName: 1, course: 1, balanceDue: 1 } },
+      ]),
+
+      Payment.find({ status: "Overdue" })
+        .sort({ dueDate: 1, createdAt: -1 })
+        .limit(10)
+        .lean(),
     ]);
 
     const months = Array.from({ length: 6 }, (_, i) => {
@@ -123,6 +139,21 @@ async function getFinanceData(from: string, to: string) {
       monthlyChart,
       courseRevenue: courseRevenue.map((c: { _id: string; total: number }) => ({ name: c._id ?? "Other", value: c.total })),
       expensesByCategory: expensesByCategory.map((e: { _id: string; total: number }) => ({ category: e._id ?? "Other", total: e.total })),
+      studentsWithBalance: studentsWithBalance.map((e: { _id: { toString(): string }; enrollmentId: string; fullName: string; course: string; balanceDue: number }) => ({
+        id: e._id.toString(),
+        enrollmentId: e.enrollmentId ?? "",
+        fullName: e.fullName ?? "",
+        course: e.course ?? "",
+        balanceDue: e.balanceDue ?? 0,
+      })),
+      overduePayments: overduePayments.map((p: { _id: { toString(): string }; studentName: string; course?: string; amount: number; dueDate?: Date; paymentType: string }) => ({
+        id: p._id.toString(),
+        studentName: p.studentName ?? "",
+        course: p.course ?? "",
+        amount: p.amount ?? 0,
+        dueDate: p.dueDate ? p.dueDate.toISOString().slice(0, 10) : "",
+        paymentType: p.paymentType ?? "",
+      })),
     };
   } catch {
     return null;
@@ -295,6 +326,87 @@ export default async function FinancePage({
                 ))}
               </div>
             </>
+          )}
+        </div>
+      </section>
+
+      {/* Outstanding balances + Overdue alerts */}
+      <section className="grid gap-5 xl:grid-cols-2">
+        {/* Students with outstanding balance */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-base font-bold text-[#0D1F0E]">
+                <Users className="h-4 w-4 text-amber-500" />
+                Outstanding Balances
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">Active enrollments with unpaid balance</p>
+            </div>
+            <Link
+              href="/enrollments"
+              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]"
+            >
+              All Enrollments
+            </Link>
+          </div>
+          {data.studentsWithBalance.length === 0 ? (
+            <p className="text-sm text-slate-400">No outstanding balances — all fees collected.</p>
+          ) : (
+            <div className="space-y-2">
+              {data.studentsWithBalance.map((e) => (
+                <div key={e.id} className="flex items-center justify-between rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[#0D1F0E]">{e.fullName}</p>
+                    <p className="truncate text-xs text-slate-500">{e.course || "—"}</p>
+                  </div>
+                  <span className="ml-3 flex-shrink-0 text-sm font-bold text-amber-600">{fmt(e.balanceDue)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Overdue payments */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-base font-bold text-[#0D1F0E]">
+                <AlertTriangle className="h-4 w-4 text-rose-500" />
+                Overdue Payments
+                {data.overduePayments.length > 0 && (
+                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-600">
+                    {data.overduePayments.length}
+                  </span>
+                )}
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">Payments past their due date</p>
+            </div>
+            <Link
+              href="/payments?status=Overdue"
+              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-rose-300 hover:bg-rose-50"
+            >
+              View All
+            </Link>
+          </div>
+          {data.overduePayments.length === 0 ? (
+            <p className="text-sm text-slate-400">No overdue payments.</p>
+          ) : (
+            <div className="space-y-2">
+              {data.overduePayments.map((p) => (
+                <div key={p.id} className="flex items-center justify-between rounded-xl bg-rose-50 border border-rose-100 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[#0D1F0E]">{p.studentName}</p>
+                    <p className="truncate text-xs text-slate-500">{p.course || p.paymentType}</p>
+                  </div>
+                  <div className="ml-3 flex-shrink-0 text-right">
+                    <p className="text-sm font-bold text-rose-600">{fmt(p.amount)}</p>
+                    {p.dueDate && (
+                      <p className="text-xs text-slate-400">Due {p.dueDate}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </section>
