@@ -96,8 +96,8 @@ export default function FollowUpsPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("Pending");
   const [viewFilter, setViewFilter] = useState("all");
-  const [dateFrom, setDateFrom] = useState(() => getPresetRange("this-week").from);
-  const [dateTo, setDateTo] = useState(() => getPresetRange("this-week").to);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
