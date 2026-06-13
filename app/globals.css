@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -31,8 +34,65 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+.dark ::-webkit-scrollbar-thumb { background: #2d4a2e; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #3d5e3e; }
 
 /* Animations */
+/* ================================================================
+   DARK MODE OVERRIDES
+   Global CSS overrides keyed off the .dark class on <html>.
+   Higher specificity than Tailwind utilities so no !important needed
+   on most rules — selector specificity wins.
+   ================================================================ */
+
+/* Base */
+.dark body { background-color: #0a1a0b; color: #e8f5e9; }
+
+/* Backgrounds */
+.dark .bg-white { background-color: #112013; }
+.dark .bg-slate-50 { background-color: #0c1a0d; }
+.dark .bg-slate-100 { background-color: #162818; }
+.dark .bg-slate-200 { background-color: #1e3520; }
+
+/* Borders */
+.dark .border-slate-200 { border-color: #1e3520; }
+.dark .border-slate-100 { border-color: #152716; }
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #152716; }
+
+/* Text — slate scale */
+.dark .text-slate-950 { color: #e8f5e9; }
+.dark .text-slate-900 { color: #e8f5e9; }
+.dark .text-slate-800 { color: #c7dfc8; }
+.dark .text-slate-700 { color: #a3bda4; }
+.dark .text-slate-600 { color: #7a9c7b; }
+.dark .text-slate-500 { color: #5e7d5f; }
+.dark .text-slate-400 { color: #4a6b4b; }
+
+/* Brand dark text used as page headings */
+.dark .text-\[#0D1F0E\] { color: #e8f5e9; }
+
+/* Form inputs */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea {
+  background-color: #0c1a0d;
+  border-color: #1e3520;
+  color: #e8f5e9;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: #4a6b4b; }
+.dark select option { background-color: #112013; color: #e8f5e9; }
+
+/* Table backgrounds */
+.dark .bg-slate-50.rounded-xl,
+.dark thead .bg-slate-50 { background-color: #0c1a0d; }
+
+/* Hover rows */
+.dark .hover\:bg-\[#E8F5E9\]\/30:hover { background-color: rgba(46, 125, 50, 0.15); }
+
+/* Shadows — tone down in dark */
+.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

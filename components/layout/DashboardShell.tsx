@@ -8,7 +8,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#E8F5E9] text-slate-950">
+    <div className="min-h-screen bg-[#E8F5E9] text-slate-950 dark:bg-[#0a1a0b] dark:text-[#e8f5e9]">
       {/* Mobile backdrop overlay */}
       {sidebarOpen && (
         <div
