@@ -67,6 +67,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       const rowNum = i + 2;
       if (!str(r.fullName)) { errors.push({ row: rowNum, error: "fullName is required" }); continue; }
       if (!str(r.phone)) { errors.push({ row: rowNum, error: "phone is required" }); continue; }
+      const phone = str(r.phone);
+      const duplicate = await Lead.findOne({ phone });
+      if (duplicate) { errors.push({ row: rowNum, error: `Duplicate: a lead with phone ${phone} already exists` }); continue; }
       const source = (leadSources as readonly string[]).includes(r.source) ? r.source : "Other";
       const stage = (leadStages as readonly string[]).includes(r.stage) ? r.stage : "Lead";
       const course = (courseList as readonly string[]).includes(r.course) ? r.course : "Other";
@@ -75,7 +78,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
         await Lead.create({
           leadId: `L-${String(seq).padStart(3, "0")}`,
           fullName: str(r.fullName),
-          phone: str(r.phone),
+          phone,
           email: str(r.email) || undefined,
           course,
           source,
@@ -121,6 +124,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
       if (!str(r.fullName)) { errors.push({ row: rowNum, error: "fullName is required" }); continue; }
       if (!str(r.phone)) { errors.push({ row: rowNum, error: "phone is required" }); continue; }
       if (!str(r.course)) { errors.push({ row: rowNum, error: "course is required" }); continue; }
+      const phone = str(r.phone);
+      const course = str(r.course);
+      const duplicate = await Enrollment.findOne({ phone, course });
+      if (duplicate) { errors.push({ row: rowNum, error: `Duplicate: an enrollment for phone ${phone} in "${course}" already exists` }); continue; }
       const status = (enrollmentStatuses as readonly string[]).includes(r.status) ? r.status : "Active";
       const paymentStatus = (paymentStatuses as readonly string[]).includes(r.paymentStatus) ? r.paymentStatus : "Instalment 1 Paid";
       const format = (scheduleFormats as readonly string[]).includes(r.format) ? r.format : "In-Person";
@@ -129,11 +136,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
         await Enrollment.create({
           enrollmentId: `E-${String(seq).padStart(3, "0")}`,
           fullName: str(r.fullName),
-          phone: str(r.phone),
+          phone,
           email: str(r.email) || undefined,
           emiratesId: str(r.emiratesId) || undefined,
           nationality: str(r.nationality) || undefined,
-          course: str(r.course),
+          course,
           batchName: str(r.batchName) || undefined,
           startDate: r.startDate ? new Date(r.startDate) : undefined,
           endDate: r.endDate ? new Date(r.endDate) : undefined,
@@ -189,6 +196,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       const rowNum = i + 2;
       if (!str(r.fullName)) { errors.push({ row: rowNum, error: "fullName is required" }); continue; }
       if (!str(r.phone)) { errors.push({ row: rowNum, error: "phone is required" }); continue; }
+      const phone = str(r.phone);
+      const duplicate = await Teacher.findOne({ phone });
+      if (duplicate) { errors.push({ row: rowNum, error: `Duplicate: a teacher with phone ${phone} already exists` }); continue; }
       const tamamStatus = (tamamStatuses as readonly string[]).includes(r.tamamStatus) ? r.tamamStatus : "Not Registered";
       const contractStatus = (contractStatuses as readonly string[]).includes(r.contractStatus) ? r.contractStatus : "No Contract";
       const paymentType = (trainerPaymentTypes as readonly string[]).includes(r.paymentType) ? r.paymentType : "Per Session";
@@ -196,7 +206,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       try {
         await Teacher.create({
           fullName: str(r.fullName),
-          phone: str(r.phone),
+          phone,
           email: str(r.email) || undefined,
           emiratesId: str(r.emiratesId) || undefined,
           nationality: str(r.nationality) || undefined,
