@@ -164,6 +164,7 @@ export function serializeExpense(e: any) {
     amount: e.amount ?? 0,
     expenseDate: e.expenseDate ? e.expenseDate.toISOString().slice(0, 10) : "",
     payee: e.payee ?? "",
+    paymentMethod: e.paymentMethod ?? "",
     description: e.description ?? "",
     notes: e.notes ?? "",
     createdAt: e.createdAt?.toISOString() ?? "",

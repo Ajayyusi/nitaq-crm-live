@@ -5,12 +5,12 @@ import { Plus, Receipt, TrendingDown, X, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import DateRangePicker from "@/components/shared/DateRangePicker";
-import { expenseCategories } from "@/constants/modelConstants";
+import { expenseCategories, expensePaymentMethods } from "@/constants/modelConstants";
 import { thisMonthRange, describeRange } from "@/lib/dateRange";
 
 type Expense = {
   id: string; expenseId: string; category: string; amount: number;
-  expenseDate: string; payee: string; description: string; notes: string;
+  expenseDate: string; payee: string; paymentMethod: string; description: string; notes: string;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -24,6 +24,12 @@ const catColors: Record<string, string> = {
   "Marketing": "bg-pink-100 text-pink-700",
   "Supplies": "bg-amber-100 text-amber-700",
   "Maintenance": "bg-orange-100 text-orange-700",
+  "Insurance": "bg-cyan-100 text-cyan-700",
+  "Training Materials": "bg-teal-100 text-teal-700",
+  "Software & Subscriptions": "bg-violet-100 text-violet-700",
+  "Equipment": "bg-lime-100 text-lime-700",
+  "Transport": "bg-sky-100 text-sky-700",
+  "Government Fees": "bg-red-100 text-red-700",
   "Other": "bg-slate-100 text-slate-600",
 };
 
@@ -41,7 +47,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const BLANK = {
   category: "Other", amount: "", expenseDate: today,
-  payee: "", description: "", notes: "",
+  payee: "", paymentMethod: "", description: "", notes: "",
 };
 
 export default function ExpensesPage() {
@@ -90,6 +96,7 @@ export default function ExpensesPage() {
     setForm({
       category: e.category, amount: String(e.amount),
       expenseDate: e.expenseDate, payee: e.payee,
+      paymentMethod: e.paymentMethod,
       description: e.description, notes: e.notes,
     });
     setError("");
@@ -226,7 +233,7 @@ export default function ExpensesPage() {
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  {["ID", "Category", "Description / Payee", "Amount", "Date", ""].map((h) => (
+                  {["ID", "Category", "Description / Payee", "Amount", "Method", "Date", ""].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       {h}
                     </th>
@@ -251,6 +258,7 @@ export default function ExpensesPage() {
                       {e.payee && <div className="text-xs text-slate-400">{e.payee}</div>}
                     </td>
                     <td className="px-4 py-3 font-semibold text-red-700 whitespace-nowrap">{fmt(e.amount)}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{e.paymentMethod || "—"}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{e.expenseDate}</td>
                     <td className="px-4 py-3" onClick={(ev) => ev.stopPropagation()}>
                       <button
@@ -327,15 +335,26 @@ export default function ExpensesPage() {
                     onChange={(e) => setForm((f) => ({ ...f, expenseDate: e.target.value }))}
                   />
                 </Field>
-                <Field label="Payee / Supplier">
-                  <input
+                <Field label="Payment Method">
+                  <select
                     className={cls}
-                    value={form.payee}
-                    onChange={(e) => setForm((f) => ({ ...f, payee: e.target.value }))}
-                    placeholder="Company or person"
-                  />
+                    value={form.paymentMethod}
+                    onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}
+                  >
+                    <option value="">— None —</option>
+                    {expensePaymentMethods.map((m) => <option key={m}>{m}</option>)}
+                  </select>
                 </Field>
               </div>
+
+              <Field label="Payee / Supplier">
+                <input
+                  className={cls}
+                  value={form.payee}
+                  onChange={(e) => setForm((f) => ({ ...f, payee: e.target.value }))}
+                  placeholder="Company or person"
+                />
+              </Field>
 
               <Field label="Description">
                 <input

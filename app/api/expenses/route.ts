@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
-import { Expense, expenseCategories } from "@/models/Financial";
+import { Expense, expenseCategories, expensePaymentMethods } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
 import { serializeExpense } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 
 const allowedCategories = new Set<string>(expenseCategories);
+const allowedExpenseMethods = new Set<string>(expensePaymentMethods);
 
 function clean(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
@@ -64,12 +65,14 @@ export async function POST(request: NextRequest) {
     const seq = await getNextSequence("expense");
     const expenseId = `EXP-${String(seq).padStart(3, "0")}`;
 
+    const paymentMethod = clean(body.paymentMethod);
     const expense = await Expense.create({
       expenseId,
       category,
       amount: Number(body.amount),
       expenseDate: body.expenseDate ? new Date(body.expenseDate) : new Date(),
       payee: clean(body.payee) || undefined,
+      paymentMethod: allowedExpenseMethods.has(paymentMethod) ? paymentMethod : undefined,
       description: clean(body.description) || undefined,
       notes: clean(body.notes) || undefined,
     });
