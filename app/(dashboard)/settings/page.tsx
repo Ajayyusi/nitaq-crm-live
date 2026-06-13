@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Building2, Users, Database, Info, CheckCircle2, Plus, X,
   Loader2, ShieldCheck, UserCog, User, Power, DollarSign,
-  GraduationCap, Pencil, Phone,
+  GraduationCap, Pencil, Phone, ImageIcon, Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -470,6 +470,8 @@ export default function SettingsPage() {
   }, [status, session, router]);
 
   const [settingsLoading, setSettingsLoading] = useState(true);
+  const [logoBase64, setLogoBase64] = useState("");
+  const [logoSaving, setLogoSaving] = useState(false);
   const [academy, setAcademy] = useState({
     academyNameEn: "Nitaq Academy",
     academyNameAr: "أكاديمية نطاق",
@@ -496,6 +498,7 @@ export default function SettingsPage() {
         const res = await fetch("/api/settings");
         const data = await res.json();
         if (res.ok) {
+          setLogoBase64(data.logoBase64 ?? "");
           setAcademy({
             academyNameEn: data.academyNameEn ?? "Nitaq Academy",
             academyNameAr: data.academyNameAr ?? "أكاديمية نطاق",
@@ -557,6 +560,32 @@ export default function SettingsPage() {
       toast.error("Failed to save. Please try again.");
     } finally {
       setFinanceSaving(false);
+    }
+  }
+
+  function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) { toast.error("Logo must be under 500 KB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => setLogoBase64(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  async function saveLogo(base64: string) {
+    setLogoSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logoBase64: base64 }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(base64 ? "Logo saved." : "Logo removed.");
+    } catch {
+      toast.error("Failed to save logo.");
+    } finally {
+      setLogoSaving(false);
     }
   }
 
@@ -712,15 +741,62 @@ export default function SettingsPage() {
       </Section>
 
       {/* Logo */}
-      <Section icon={Info} title="Logo">
-        <div className="space-y-3">
+      <Section icon={ImageIcon} title="Academy Logo">
+        <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            The app logo is loaded from <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">/public/logo.png</code>.
-            To change it, replace that file and redeploy to Vercel.
+            Upload your academy logo. It will appear in the sidebar. PNG, JPG, or SVG — max 500 KB.
           </p>
-          <p className="text-xs text-slate-400">
-            File upload is not supported on Vercel&apos;s free tier. You can also use an external image URL by requesting a code change.
-          </p>
+
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            {/* Preview */}
+            <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 overflow-hidden">
+              {logoBase64 ? (
+                <img src={logoBase64} alt="Academy Logo" className="h-full w-full object-contain p-1" />
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-slate-400">
+                  <ImageIcon className="h-8 w-8" />
+                  <span className="text-[10px] font-medium">No logo</span>
+                </div>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="flex flex-col gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]">
+                <ImageIcon className="h-4 w-4" />
+                Choose Image
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                  className="hidden"
+                  onChange={handleLogoFile}
+                />
+              </label>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => void saveLogo(logoBase64)}
+                  disabled={logoSaving}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-xs font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60"
+                >
+                  {logoSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Save Logo
+                </button>
+                {logoBase64 && (
+                  <button
+                    onClick={() => { setLogoBase64(""); void saveLogo(""); }}
+                    disabled={logoSaving}
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-rose-200 px-4 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-400">Logo is stored securely in the database — no file upload to the server.</p>
+            </div>
+          </div>
         </div>
       </Section>
 

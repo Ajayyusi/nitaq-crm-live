@@ -87,6 +87,14 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [logoBase64, setLogoBase64] = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => setLogoBase64(d.logoBase64 ?? ""))
+      .catch(() => {});
+  }, []);
 
   const user = session?.user;
   const fullName = user?.name ?? "Staff";
@@ -118,8 +126,12 @@ export default function Sidebar({
       {/* Logo */}
       <div className="border-b border-white/10 px-5 py-5">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg dark:bg-green-200 dark:text-[#1B5E20]">
-            NA
+          <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg dark:bg-green-200 dark:text-[#1B5E20] overflow-hidden">
+            {logoBase64 ? (
+              <img src={logoBase64} alt="Logo" className="h-full w-full object-contain p-1" />
+            ) : (
+              "NA"
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold tracking-tight text-white">Nitaq Academy</p>

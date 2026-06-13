@@ -10,6 +10,7 @@ export interface ISettings extends Document {
   website: string;
   address: string;
   city: string;
+  logoBase64?: string;
   // Finance defaults
   currency: string;
   vatEnabled: boolean;
@@ -35,6 +36,7 @@ const SettingsSchema = new Schema<ISettings>(
     vatRate:        { type: Number, default: 5 },
     vatNumber:      { type: String, default: "" },
     receiptPrefix:  { type: String, default: "NITAQ-R" },
+    logoBase64:     { type: String, default: "" },
   },
   { timestamps: true }
 );
