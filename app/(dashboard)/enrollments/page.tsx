@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { enrollmentStatuses, paymentStatuses, scheduleFormats } from "@/constants/modelConstants";
 import { courseList } from "@/constants/leads";
+import DateRangePicker from "@/components/shared/DateRangePicker";
+import { thisMonthRange } from "@/lib/dateRange";
 
 type Enrollment = {
   id: string; enrollmentId: string; fullName: string; phone: string; email: string;
@@ -59,6 +61,8 @@ export default function EnrollmentsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [payFilter, setPayFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState(() => thisMonthRange().from);
+  const [dateTo, setDateTo] = useState(() => thisMonthRange().to);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingEnrollment, setEditingEnrollment] = useState<Enrollment | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -93,6 +97,8 @@ export default function EnrollmentsPage() {
       if (search.trim()) params.set("search", search.trim());
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (payFilter !== "all") params.set("paymentStatus", payFilter);
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
       const res = await fetch(`/api/enrollments?${params}`, { cache: "no-store" });
       const data = await res.json();
       setEnrollments(data.enrollments ?? []);
@@ -100,7 +106,7 @@ export default function EnrollmentsPage() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { void load(); }, [search, statusFilter, payFilter]);
+  useEffect(() => { void load(); }, [search, statusFilter, payFilter, dateFrom, dateTo]);
 
   function set(field: keyof FormState, value: string) { setForm((f) => ({ ...f, [field]: value })); }
 
@@ -242,7 +248,15 @@ export default function EnrollmentsPage() {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangePicker
+              from={dateFrom}
+              to={dateTo}
+              onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+            />
+          </div>
+          <div className="flex flex-wrap gap-3">
           <label className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
             <Search className="h-4 w-4 text-slate-400" />
             <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search enrollments..." />
@@ -255,6 +269,7 @@ export default function EnrollmentsPage() {
             <option value="all">All payment statuses</option>
             {paymentStatuses.map((s) => <option key={s}>{s}</option>)}
           </select>
+          </div>
         </div>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

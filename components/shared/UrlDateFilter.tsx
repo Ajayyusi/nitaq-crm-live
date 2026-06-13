@@ -4,18 +4,26 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useCallback } from "react";
 import DateRangePicker from "./DateRangePicker";
 
-export default function UrlDateFilter() {
+interface Props {
+  defaultFrom?: string;
+  defaultTo?: string;
+}
+
+export default function UrlDateFilter({ defaultFrom = "", defaultTo = "" }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const from = searchParams.get("from") ?? "";
-  const to = searchParams.get("to") ?? "";
+
+  // Use URL param if present (even empty = "all time"), fall back to default only when absent
+  const from = searchParams.has("from") ? (searchParams.get("from") ?? "") : defaultFrom;
+  const to = searchParams.has("to") ? (searchParams.get("to") ?? "") : defaultTo;
 
   const handleChange = useCallback(
     (newFrom: string, newTo: string) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (newFrom) params.set("from", newFrom); else params.delete("from");
-      if (newTo) params.set("to", newTo); else params.delete("to");
+      // Always set both so server can distinguish "explicitly all time" from "not set"
+      params.set("from", newFrom);
+      params.set("to", newTo);
       router.push(`${pathname}?${params.toString()}`);
     },
     [router, pathname, searchParams],

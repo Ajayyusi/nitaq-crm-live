@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status")?.trim();
     const view = searchParams.get("view")?.trim(); // "today" | "overdue" | "upcoming"
     const assignedTo = searchParams.get("assignedTo")?.trim();
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
     const query: Record<string, unknown> = {};
 
@@ -35,6 +37,16 @@ export async function GET(request: NextRequest) {
         assignedTo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
         "i",
       );
+    }
+
+    // Date range filter on followUpDate — only when no specific view is selected
+    if (!view || view === "all") {
+      if (from || to) {
+        const dateQ: Record<string, Date> = {};
+        if (from) dateQ.$gte = new Date(from);
+        if (to) { const t = new Date(to); t.setDate(t.getDate() + 1); dateQ.$lt = t; }
+        query.followUpDate = dateQ;
+      }
     }
 
     if (view === "today") {

@@ -27,11 +27,19 @@ export async function GET(request: NextRequest) {
     const payStatus = searchParams.get("paymentStatus")?.trim();
     const course = searchParams.get("course")?.trim();
     const search = searchParams.get("search")?.trim();
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
 
     const query: Record<string, unknown> = {};
     if (status && allowedStatuses.has(status)) query.status = status;
     if (payStatus && allowedPaymentStatuses.has(payStatus)) query.paymentStatus = payStatus;
     if (course) query.course = course;
+    if (from || to) {
+      const dateQ: Record<string, Date> = {};
+      if (from) dateQ.$gte = new Date(from);
+      if (to) { const t = new Date(to); t.setDate(t.getDate() + 1); dateQ.$lt = t; }
+      query.registrationDate = dateQ;
+    }
     if (search) {
       const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       query.$or = [{ fullName: regex }, { phone: regex }, { enrollmentId: regex }];

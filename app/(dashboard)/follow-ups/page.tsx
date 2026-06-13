@@ -18,6 +18,8 @@ import {
   type FollowUpType,
 } from "@/constants/modelConstants";
 import { courseList } from "@/constants/leads";
+import DateRangePicker from "@/components/shared/DateRangePicker";
+import { getPresetRange } from "@/lib/dateRange";
 
 type FollowUp = {
   id: string;
@@ -94,6 +96,8 @@ export default function FollowUpsPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("Pending");
   const [viewFilter, setViewFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState(() => getPresetRange("this-week").from);
+  const [dateTo, setDateTo] = useState(() => getPresetRange("this-week").to);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -107,6 +111,11 @@ export default function FollowUpsPage() {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (viewFilter !== "all") params.set("view", viewFilter);
+      // Date range applies only when no specific view is selected
+      if (viewFilter === "all") {
+        if (dateFrom) params.set("from", dateFrom);
+        if (dateTo) params.set("to", dateTo);
+      }
       const res = await fetch(`/api/follow-ups?${params}`, { cache: "no-store" });
       const data = await res.json();
       setFollowUps(data.followUps ?? []);
@@ -117,7 +126,7 @@ export default function FollowUpsPage() {
     }
   }
 
-  useEffect(() => { void loadFollowUps(); }, [statusFilter, viewFilter]);
+  useEffect(() => { void loadFollowUps(); }, [statusFilter, viewFilter, dateFrom, dateTo]);
 
   async function markDone(id: string) {
     try {
@@ -320,28 +329,37 @@ export default function FollowUpsPage() {
         )}
 
         {/* Filters */}
-        <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="flex flex-wrap gap-1">
-            {(["all", "Pending", "Done", "No Response", "Rescheduled"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`h-9 rounded-lg px-3 text-sm font-semibold transition ${statusFilter === s ? "bg-[#2E7D32] text-white" : "text-slate-600 hover:bg-slate-100"}`}
-              >
-                {s === "all" ? "All" : s}
-              </button>
-            ))}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangePicker
+              from={dateFrom}
+              to={dateTo}
+              onChange={(f, t) => { setDateFrom(f); setDateTo(t); setViewFilter("all"); }}
+            />
           </div>
-          <div className="flex flex-wrap gap-1 sm:ml-auto">
-            {(["all", "today", "overdue", "upcoming"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setViewFilter(v)}
-                className={`h-9 rounded-lg px-3 text-sm font-semibold capitalize transition ${viewFilter === v ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-              >
-                {v}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex flex-wrap gap-1">
+              {(["all", "Pending", "Done", "No Response", "Rescheduled"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`h-9 rounded-lg px-3 text-sm font-semibold transition ${statusFilter === s ? "bg-[#2E7D32] text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                >
+                  {s === "all" ? "All" : s}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1 sm:ml-auto">
+              {(["all", "today", "overdue", "upcoming"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setViewFilter(v)}
+                  className={`h-9 rounded-lg px-3 text-sm font-semibold capitalize transition ${viewFilter === v ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
