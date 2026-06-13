@@ -416,6 +416,47 @@ function StaffManagement({ currentUserId }: { currentUserId: string }) {
   );
 }
 
+// ── Backfill button ───────────────────────────────────────────────────────────
+function BackfillButton() {
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
+
+  async function run() {
+    if (!window.confirm("This will create Payment records for any enrollment that has an Amount Paid but no linked payment yet. Continue?")) return;
+    setState("loading");
+    try {
+      const res = await fetch("/api/admin/backfill-payments", { method: "POST" }).then((r) => r.json());
+      if (res.error) throw new Error(res.error);
+      setMsg(res.message ?? "Done.");
+      setState("done");
+      toast.success("Backfill complete!");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Backfill failed.");
+      setState("error");
+      toast.error("Backfill failed.");
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-600">
+        If enrollments were created before the payment auto-recording fix, run this once to create the missing Payment records so they appear in Finance and Dashboard revenue.
+      </p>
+      <div className="flex flex-wrap items-center gap-4">
+        <button
+          onClick={run}
+          disabled={state === "loading" || state === "done"}
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-amber-600 px-5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
+        >
+          {state === "loading" && <Loader2 className="h-4 w-4 animate-spin" />}
+          {state === "loading" ? "Running…" : state === "done" ? "Done ✓" : "Backfill Enrollment Payments"}
+        </button>
+        {msg && <p className={`text-sm font-medium ${state === "error" ? "text-rose-600" : "text-[#2E7D32]"}`}>{msg}</p>}
+      </div>
+    </div>
+  );
+}
+
 // ── Seed button ───────────────────────────────────────────────────────────────
 function SeedButton() {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -799,6 +840,11 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      </Section>
+
+      {/* Maintenance */}
+      <Section icon={Database} title="Maintenance">
+        <BackfillButton />
       </Section>
 
       {/* System info */}
