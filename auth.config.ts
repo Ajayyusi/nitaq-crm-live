@@ -26,8 +26,11 @@ export const authConfig = {
         return true;
       }
 
-      // Check role-based page access
-      const role = (auth?.user as { role?: string })?.role as AppRole | undefined;
+      // Check role-based page access.
+      // "staff" is the legacy role — treat it as "sales" for backward compatibility
+      // so existing users are not locked out before the migration runs.
+      const rawRole = (auth?.user as { role?: string })?.role;
+      const role = (rawRole === "staff" ? "sales" : rawRole) as AppRole | undefined;
       const rule = PAGE_PERMISSIONS.find((p) => pathname.startsWith(p.path));
 
       if (rule && (!role || !(rule.roles as string[]).includes(role))) {

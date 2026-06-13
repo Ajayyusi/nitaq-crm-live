@@ -22,7 +22,9 @@ export async function requireAuth(
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const role = (session.user as { role?: string }).role as AppRole | undefined;
+  // "staff" is the legacy role — normalize to "sales" for backward compatibility
+  const rawRole = (session.user as { role?: string }).role;
+  const role = (rawRole === "staff" ? "sales" : rawRole) as AppRole | undefined;
 
   if (allowedRoles && allowedRoles.length > 0) {
     if (!role || !(allowedRoles as string[]).includes(role)) {
@@ -35,7 +37,7 @@ export async function requireAuth(
 
   return {
     id: (session.user as { id?: string }).id ?? "",
-    role: role ?? ("staff" as AppRole),
+    role: role ?? ("sales" as AppRole),
     name: session.user.name ?? "",
     email: session.user.email ?? "",
   };
