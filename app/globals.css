@@ -46,52 +46,52 @@ body {
    ================================================================ */
 
 /* Base */
-.dark body { background-color: #0a1a0b; color: #e8f5e9; }
+.dark body { background-color: #0a1a0b; color: #e8f5e9 !important; }
 
 /* Backgrounds */
-.dark .bg-white { background-color: #112013; }
-.dark .bg-slate-50 { background-color: #0c1a0d; }
-.dark .bg-slate-100 { background-color: #162818; }
-.dark .bg-slate-200 { background-color: #1e3520; }
+.dark .bg-white { background-color: #112013 !important; }
+.dark .bg-slate-50 { background-color: #0c1a0d !important; }
+.dark .bg-slate-100 { background-color: #162818 !important; }
+.dark .bg-slate-200 { background-color: #1e3520 !important; }
 
 /* Borders */
-.dark .border-slate-200 { border-color: #1e3520; }
-.dark .border-slate-100 { border-color: #152716; }
-.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #152716; }
+.dark .border-slate-200 { border-color: #1e3520 !important; }
+.dark .border-slate-100 { border-color: #152716 !important; }
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #152716 !important; }
 
-/* Text — slate scale */
-.dark .text-slate-950 { color: #e8f5e9; }
-.dark .text-slate-900 { color: #e8f5e9; }
-.dark .text-slate-800 { color: #c7dfc8; }
-.dark .text-slate-700 { color: #a3bda4; }
-.dark .text-slate-600 { color: #7a9c7b; }
-.dark .text-slate-500 { color: #5e7d5f; }
-.dark .text-slate-400 { color: #4a6b4b; }
+/* Text — slate scale (with !important to beat Tailwind utilities) */
+.dark .text-slate-950 { color: #e8f5e9 !important; }
+.dark .text-slate-900 { color: #e8f5e9 !important; }
+.dark .text-slate-800 { color: #c7dfc8 !important; }
+.dark .text-slate-700 { color: #a3bda4 !important; }
+.dark .text-slate-600 { color: #7a9c7b !important; }
+.dark .text-slate-500 { color: #5e7d5f !important; }
+.dark .text-slate-400 { color: #4a6b4b !important; }
 
-/* Brand dark text used as page headings */
-.dark .text-\[#0D1F0E\] { color: #e8f5e9; }
+/* Brand text-[#0D1F0E] — attribute contains is reliable across all escape styles */
+.dark [class*="#0D1F0E"] { color: #e8f5e9 !important; }
 
 /* Form inputs */
 .dark input:not([type="checkbox"]):not([type="radio"]),
 .dark select,
 .dark textarea {
-  background-color: #0c1a0d;
-  border-color: #1e3520;
-  color: #e8f5e9;
+  background-color: #0c1a0d !important;
+  border-color: #1e3520 !important;
+  color: #e8f5e9 !important;
 }
 .dark input::placeholder,
-.dark textarea::placeholder { color: #4a6b4b; }
+.dark textarea::placeholder { color: #4a6b4b !important; }
 .dark select option { background-color: #112013; color: #e8f5e9; }
 
 /* Table backgrounds */
 .dark .bg-slate-50.rounded-xl,
-.dark thead .bg-slate-50 { background-color: #0c1a0d; }
+.dark thead .bg-slate-50 { background-color: #0c1a0d !important; }
 
 /* Hover rows */
-.dark .hover\:bg-\[#E8F5E9\]\/30:hover { background-color: rgba(46, 125, 50, 0.15); }
+.dark .hover\:bg-\[#E8F5E9\]\/30:hover { background-color: rgba(46, 125, 50, 0.15) !important; }
 
 /* Shadows — tone down in dark */
-.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important; }
 
 @keyframes spin {
   to { transform: rotate(360deg); }

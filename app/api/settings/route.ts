@@ -17,6 +17,7 @@ export async function GET() {
       website:        s.website,
       address:        s.address,
       city:           s.city,
+      logoBase64:     s.logoBase64 ?? "",
       currency:       s.currency,
       vatEnabled:     s.vatEnabled,
       vatRate:        s.vatRate,
@@ -39,7 +40,7 @@ export async function PATCH(request: NextRequest) {
 
     const allowed = [
       "academyNameEn", "academyNameAr", "phone", "whatsappNumber",
-      "email", "website", "address", "city",
+      "email", "website", "address", "city", "logoBase64",
       "currency", "vatEnabled", "vatRate", "vatNumber", "receiptPrefix",
     ];
 
@@ -48,6 +49,7 @@ export async function PATCH(request: NextRequest) {
       if (body[key] !== undefined) {
         if (key === "vatEnabled") updates[key] = Boolean(body[key]);
         else if (key === "vatRate") updates[key] = Number(body[key]) || 5;
+        else if (key === "logoBase64") updates[key] = String(body[key]); // don't trim base64
         else updates[key] = String(body[key]).trim();
       }
     }
