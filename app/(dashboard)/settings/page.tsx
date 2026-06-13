@@ -469,17 +469,95 @@ export default function SettingsPage() {
     }
   }, [status, session, router]);
 
+  const [settingsLoading, setSettingsLoading] = useState(true);
   const [academy, setAcademy] = useState({
-    name: "Nitaq Academy", nameAr: "أكاديمية نطاق",
-    city: "Sharjah", phone: "+971 6 XXX XXXX",
-    email: "info@nitaqacademy.com", vatNumber: "", vatRate: "5",
+    academyNameEn: "Nitaq Academy",
+    academyNameAr: "أكاديمية نطاق",
+    city: "Sharjah",
+    phone: "",
+    whatsappNumber: "",
+    email: "",
+    website: "",
+    address: "",
   });
-  const [saved, setSaved] = useState(false);
+  const [finance, setFinance] = useState({
+    vatEnabled: false,
+    vatRate: "5",
+    vatNumber: "",
+    currency: "AED",
+    receiptPrefix: "NITAQ-R",
+  });
+  const [academySaving, setAcademySaving] = useState(false);
+  const [financeSaving, setFinanceSaving] = useState(false);
 
-  function saveAcademy() {
-    setSaved(true);
-    toast.success("Academy settings saved.");
-    setTimeout(() => setSaved(false), 3000);
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch("/api/settings");
+        const data = await res.json();
+        if (res.ok) {
+          setAcademy({
+            academyNameEn: data.academyNameEn ?? "Nitaq Academy",
+            academyNameAr: data.academyNameAr ?? "أكاديمية نطاق",
+            city:          data.city ?? "Sharjah",
+            phone:         data.phone ?? "",
+            whatsappNumber:data.whatsappNumber ?? "",
+            email:         data.email ?? "",
+            website:       data.website ?? "",
+            address:       data.address ?? "",
+          });
+          setFinance({
+            vatEnabled:    data.vatEnabled ?? false,
+            vatRate:       String(data.vatRate ?? 5),
+            vatNumber:     data.vatNumber ?? "",
+            currency:      data.currency ?? "AED",
+            receiptPrefix: data.receiptPrefix ?? "NITAQ-R",
+          });
+        }
+      } catch {
+        toast.error("Could not load settings.");
+      } finally {
+        setSettingsLoading(false);
+      }
+    }
+    void load();
+  }, []);
+
+  async function saveAcademy() {
+    setAcademySaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(academy),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Academy information saved.");
+    } catch {
+      toast.error("Failed to save. Please try again.");
+    } finally {
+      setAcademySaving(false);
+    }
+  }
+
+  async function saveFinance() {
+    setFinanceSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...finance,
+          vatRate: Number(finance.vatRate) || 5,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Finance settings saved.");
+    } catch {
+      toast.error("Failed to save. Please try again.");
+    } finally {
+      setFinanceSaving(false);
+    }
   }
 
   const currentUserId = (session?.user as { id?: string })?.id ?? "";
@@ -494,46 +572,133 @@ export default function SettingsPage() {
 
       {/* Academy info */}
       <Section icon={Building2} title="Academy Information">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Academy Name (English)</label>
-            <input className={inp} value={academy.name} onChange={(e) => setAcademy((a) => ({ ...a, name: e.target.value }))} />
+        {settingsLoading ? (
+          <div className="flex items-center gap-2 py-4 text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading…</span>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Academy Name (Arabic)</label>
-            <input className={inp} dir="rtl" value={academy.nameAr} onChange={(e) => setAcademy((a) => ({ ...a, nameAr: e.target.value }))} />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Academy Name (English)</label>
+              <input className={inp} value={academy.academyNameEn}
+                onChange={(e) => setAcademy((a) => ({ ...a, academyNameEn: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Academy Name (Arabic)</label>
+              <input className={inp} dir="rtl" value={academy.academyNameAr}
+                onChange={(e) => setAcademy((a) => ({ ...a, academyNameAr: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">City</label>
+              <input className={inp} value={academy.city}
+                onChange={(e) => setAcademy((a) => ({ ...a, city: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Phone</label>
+              <input className={inp} value={academy.phone}
+                onChange={(e) => setAcademy((a) => ({ ...a, phone: e.target.value }))} placeholder="+971 6 XXX XXXX" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">WhatsApp Number</label>
+              <input className={inp} value={academy.whatsappNumber}
+                onChange={(e) => setAcademy((a) => ({ ...a, whatsappNumber: e.target.value }))} placeholder="+971 50 XXX XXXX" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Email</label>
+              <input className={inp} type="email" value={academy.email}
+                onChange={(e) => setAcademy((a) => ({ ...a, email: e.target.value }))} placeholder="info@nitaqacademy.com" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Website</label>
+              <input className={inp} value={academy.website}
+                onChange={(e) => setAcademy((a) => ({ ...a, website: e.target.value }))} placeholder="https://nitaqacademy.com" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Address</label>
+              <input className={inp} value={academy.address}
+                onChange={(e) => setAcademy((a) => ({ ...a, address: e.target.value }))} placeholder="Building, Street, City" />
+            </div>
+            <div className="sm:col-span-2 mt-1">
+              <button
+                onClick={() => void saveAcademy()}
+                disabled={academySaving}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60"
+              >
+                {academySaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save Academy Info
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">City</label>
-            <input className={inp} value={academy.city} onChange={(e) => setAcademy((a) => ({ ...a, city: e.target.value }))} />
+        )}
+      </Section>
+
+      {/* Finance defaults */}
+      <Section icon={DollarSign} title="Finance Defaults">
+        {settingsLoading ? (
+          <div className="flex items-center gap-2 py-4 text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading…</span>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">Phone</label>
-            <input className={inp} value={academy.phone} onChange={(e) => setAcademy((a) => ({ ...a, phone: e.target.value }))} />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div
+                  onClick={() => setFinance((f) => ({ ...f, vatEnabled: !f.vatEnabled }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${finance.vatEnabled ? "bg-[#2E7D32]" : "bg-slate-300"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${finance.vatEnabled ? "translate-x-6" : "translate-x-1"}`} />
+                </div>
+                <span className="text-sm font-semibold text-slate-700">
+                  VAT Enabled {finance.vatEnabled ? <span className="text-[#2E7D32]">(On)</span> : <span className="text-slate-400">(Off)</span>}
+                </span>
+              </label>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">VAT Rate (%)</label>
+              <input
+                className={inp} type="number" min="0" max="100" step="0.01"
+                value={finance.vatRate}
+                onChange={(e) => setFinance((f) => ({ ...f, vatRate: e.target.value }))}
+                disabled={!finance.vatEnabled}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">VAT / TRN Number</label>
+              <input className={inp} value={finance.vatNumber}
+                onChange={(e) => setFinance((f) => ({ ...f, vatNumber: e.target.value }))}
+                placeholder="TRN..." disabled={!finance.vatEnabled} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Currency</label>
+              <select className={inp} value={finance.currency}
+                onChange={(e) => setFinance((f) => ({ ...f, currency: e.target.value }))}>
+                <option value="AED">AED — UAE Dirham</option>
+                <option value="USD">USD — US Dollar</option>
+                <option value="SAR">SAR — Saudi Riyal</option>
+                <option value="GBP">GBP — British Pound</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-slate-700">Receipt Prefix</label>
+              <input className={inp} value={finance.receiptPrefix}
+                onChange={(e) => setFinance((f) => ({ ...f, receiptPrefix: e.target.value }))}
+                placeholder="NITAQ-R" />
+              <p className="mt-1 text-xs text-slate-400">Receipts will be numbered: {finance.receiptPrefix}-0001</p>
+            </div>
+            <div className="sm:col-span-2 mt-1">
+              <button
+                onClick={() => void saveFinance()}
+                disabled={financeSaving}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60"
+              >
+                {financeSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save Finance Settings
+              </button>
+            </div>
           </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-bold text-slate-700">Email</label>
-            <input className={inp} type="email" value={academy.email} onChange={(e) => setAcademy((a) => ({ ...a, email: e.target.value }))} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">VAT / TRN Number</label>
-            <input className={inp} value={academy.vatNumber} onChange={(e) => setAcademy((a) => ({ ...a, vatNumber: e.target.value }))} placeholder="TRN..." />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">VAT Rate (%)</label>
-            <input className={inp} type="number" min="0" max="100" value={academy.vatRate} onChange={(e) => setAcademy((a) => ({ ...a, vatRate: e.target.value }))} />
-          </div>
-        </div>
-        <div className="mt-5 flex items-center gap-3">
-          <button onClick={saveAcademy} className="h-10 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white hover:bg-[#1B5E20]">
-            Save Changes
-          </button>
-          {saved && (
-            <span className="flex items-center gap-1.5 text-sm font-medium text-[#2E7D32]">
-              <CheckCircle2 className="h-4 w-4" /> Saved
-            </span>
-          )}
-        </div>
+        )}
       </Section>
 
       {/* Staff accounts */}
@@ -546,12 +711,25 @@ export default function SettingsPage() {
         <SeedButton />
       </Section>
 
+      {/* Logo */}
+      <Section icon={Info} title="Logo">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            The app logo is loaded from <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">/public/logo.png</code>.
+            To change it, replace that file and redeploy to Vercel.
+          </p>
+          <p className="text-xs text-slate-400">
+            File upload is not supported on Vercel&apos;s free tier. You can also use an external image URL by requesting a code change.
+          </p>
+        </div>
+      </Section>
+
       {/* System info */}
       <Section icon={Info} title="System Information">
         <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           {[
             ["Platform", "Nitaq Academy CRM"],
-            ["Version", "1.1.0"],
+            ["Version", "1.2.0"],
             ["Framework", "Next.js 16 + MongoDB"],
             ["Auth", "NextAuth.js v5 (JWT)"],
           ].map(([k, v]) => (

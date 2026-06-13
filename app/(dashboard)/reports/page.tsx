@@ -4,6 +4,7 @@ import Lead from "@/models/Lead";
 import FollowUp from "@/models/FollowUp";
 import Enrollment from "@/models/Enrollment";
 import { Payment, Expense } from "@/models/Financial";
+import { getSettings } from "@/models/Settings";
 import {
   BarChart3, TrendingUp, Users, CreditCard, TrendingDown,
   GraduationCap, BookOpen, PhoneCall, Target,
@@ -194,7 +195,11 @@ export default async function ReportsPage({
   const showSales   = role === "admin" || role === "manager";
 
   const { from, to } = await searchParams;
-  const data = await getReportData(from, to);
+  const [data, settings] = await Promise.all([
+    getReportData(from, to),
+    getSettings().catch(() => null),
+  ]);
+  const academyName = settings?.academyNameEn ?? "Nitaq Academy";
 
   const periodLabel = from || to
     ? `${from ?? "start"} → ${to ?? "today"}`
@@ -223,6 +228,7 @@ export default async function ReportsPage({
       {/* Header + Filter */}
       <div className="flex flex-col gap-3">
         <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">{academyName}</p>
           <h1 className="text-2xl font-bold text-[#0D1F0E]">Reports</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {data.isFiltered ? `Filtered: ${periodLabel}` : "All time — use filters to narrow by date"}
