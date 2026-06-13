@@ -9,6 +9,7 @@ export interface IUser extends Document {
   password: string;
   role: UserRole;
   active: boolean;
+  mobileNumber?: string;
   lastLogin?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -16,12 +17,13 @@ export interface IUser extends Document {
 
 const UserSchema = new Schema<IUser>(
   {
-    name:      { type: String, required: true, trim: true },
-    email:     { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password:  { type: String, required: true },
-    role:      { type: String, enum: [...userRoles], default: "sales" },
-    active:    { type: Boolean, default: true },
-    lastLogin: Date,
+    name:         { type: String, required: true, trim: true },
+    email:        { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password:     { type: String, required: true },
+    role:         { type: String, enum: [...userRoles], default: "sales" },
+    active:       { type: Boolean, default: true },
+    mobileNumber: { type: String, trim: true },
+    lastLogin:    Date,
   },
   { timestamps: true }
 );

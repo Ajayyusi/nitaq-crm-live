@@ -23,6 +23,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const updates: Record<string, unknown> = {};
 
     if (body.name !== undefined) updates.name = String(body.name).trim();
+    if (body.email !== undefined) {
+      const email = String(body.email).trim().toLowerCase();
+      if (!email) return NextResponse.json({ error: "Email cannot be empty." }, { status: 400 });
+      // Check uniqueness excluding current user
+      const conflict = await User.findOne({ email, _id: { $ne: id } });
+      if (conflict) return NextResponse.json({ error: "This email is already used by another account." }, { status: 409 });
+      updates.email = email;
+    }
+    if (body.mobileNumber !== undefined) updates.mobileNumber = String(body.mobileNumber).trim() || undefined;
     if (body.role !== undefined) {
       const role = String(body.role).trim();
       if (!allowedRoles.has(role)) return NextResponse.json({ error: "Invalid role." }, { status: 400 });
@@ -45,7 +54,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
 
     return NextResponse.json({
-      user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role, active: user.active },
+      user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role, active: user.active, mobileNumber: user.mobileNumber ?? "" },
     });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed." }, { status: 500 });

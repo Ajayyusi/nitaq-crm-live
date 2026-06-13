@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Building2, Users, Database, Info, CheckCircle2, Plus, X, Loader2, ShieldCheck, UserCog, User, Power, DollarSign, GraduationCap } from "lucide-react";
+import {
+  Building2, Users, Database, Info, CheckCircle2, Plus, X,
+  Loader2, ShieldCheck, UserCog, User, Power, DollarSign,
+  GraduationCap, Pencil, Phone,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 const inp = "w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9] bg-white";
@@ -24,16 +28,6 @@ const ROLE_ICONS: Record<string, typeof ShieldCheck> = {
   trainer: GraduationCap,
 };
 
-type StaffUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  active: boolean;
-  lastLogin: string | null;
-  createdAt: string;
-};
-
 const ALL_ROLES = [
   { value: "admin",   label: "Administrator" },
   { value: "manager", label: "Manager" },
@@ -42,9 +36,23 @@ const ALL_ROLES = [
   { value: "trainer", label: "Trainer" },
 ];
 
-type NewUserForm = { name: string; email: string; password: string; role: string };
-const emptyForm: NewUserForm = { name: "", email: "", password: "", role: "sales" };
+type StaffUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  mobileNumber: string;
+  lastLogin: string | null;
+  createdAt: string;
+};
 
+type NewUserForm = { name: string; email: string; password: string; role: string; mobileNumber: string };
+const emptyNewForm: NewUserForm = { name: "", email: "", password: "", role: "sales", mobileNumber: "" };
+
+type EditForm = { name: string; email: string; role: string; mobileNumber: string };
+
+// ── Shared Section wrapper ────────────────────────────────────────────────────
 function Section({ icon: Icon, title, children }: { icon: typeof Building2; title: string; children: React.ReactNode }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -59,19 +67,25 @@ function Section({ icon: Icon, title, children }: { icon: typeof Building2; titl
   );
 }
 
+// ── Staff Management ──────────────────────────────────────────────────────────
 function StaffManagement({ currentUserId }: { currentUserId: string }) {
-  const [users, setUsers] = useState<StaffUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState<NewUserForm>(emptyForm);
-  const [saving, setSaving] = useState(false);
-  const [resetId, setResetId] = useState<string | null>(null);
-  const [newPw, setNewPw] = useState("");
+  const [users, setUsers]         = useState<StaffUser[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [adding, setAdding]       = useState(false);
+  const [newForm, setNewForm]     = useState<NewUserForm>(emptyNewForm);
+  const [saving, setSaving]       = useState(false);
+
+  // per-user panel state: null = closed, "edit" = edit form, "pw" = password reset
+  const [openPanel, setOpenPanel]   = useState<{ id: string; mode: "edit" | "pw" } | null>(null);
+  const [editForm, setEditForm]     = useState<EditForm>({ name: "", email: "", role: "sales", mobileNumber: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [newPw, setNewPw]           = useState("");
+  const [pwSaving, setPwSaving]     = useState(false);
 
   async function loadUsers() {
     setLoading(true);
     try {
-      const res = await fetch("/api/users");
+      const res  = await fetch("/api/users");
       const data = await res.json();
       setUsers(data.users ?? []);
     } catch {
@@ -83,20 +97,21 @@ function StaffManagement({ currentUserId }: { currentUserId: string }) {
 
   useEffect(() => { void loadUsers(); }, []);
 
+  // ── Add new user ──────────────────────────────────────────────────────────
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch("/api/users", {
+      const res  = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(newForm),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success(`${data.user.name} added successfully.`);
       setAdding(false);
-      setForm(emptyForm);
+      setNewForm(emptyNewForm);
       await loadUsers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add user.");
@@ -105,35 +120,78 @@ function StaffManagement({ currentUserId }: { currentUserId: string }) {
     }
   }
 
-  async function toggleActive(user: StaffUser) {
-    if (user.id === currentUserId && user.active) {
-      toast.error("You cannot deactivate your own account.");
+  // ── Open edit panel for a user ────────────────────────────────────────────
+  function openEdit(u: StaffUser) {
+    if (openPanel?.id === u.id && openPanel.mode === "edit") {
+      setOpenPanel(null);
       return;
     }
-    const action = user.active ? "Deactivate" : "Activate";
-    if (!confirm(`${action} ${user.name}? ${user.active ? "They will no longer be able to log in." : ""}`)) return;
+    setEditForm({ name: u.name, email: u.email, role: u.role, mobileNumber: u.mobileNumber });
+    setOpenPanel({ id: u.id, mode: "edit" });
+  }
+
+  // ── Save edit ─────────────────────────────────────────────────────────────
+  async function saveEdit(userId: string) {
+    if (!editForm.name.trim()) { toast.error("Name is required."); return; }
+    if (!editForm.email.trim()) { toast.error("Email is required."); return; }
+    setEditSaving(true);
     try {
-      const res = await fetch(`/api/users/${user.id}`, {
+      const res  = await fetch(`/api/users/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active: !user.active }),
+        body: JSON.stringify(editForm),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success(`${user.name} ${user.active ? "deactivated" : "activated"}.`);
+      toast.success("User updated successfully.");
+      setOpenPanel(null);
       await loadUsers();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed.");
+      toast.error(err instanceof Error ? err.message : "Failed to update user.");
+    } finally {
+      setEditSaving(false);
     }
   }
 
-  async function resetPassword(userId: string) {
-    if (!newPw || newPw.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+  // ── Toggle active / inactive ──────────────────────────────────────────────
+  async function toggleActive(u: StaffUser) {
+    if (u.id === currentUserId && u.active) {
+      toast.error("You cannot deactivate your own account.");
       return;
     }
+    const action = u.active ? "deactivate" : "activate";
+    if (!confirm(`${u.active ? "Deactivate" : "Activate"} ${u.name}? ${u.active ? "They will no longer be able to log in." : ""}`)) return;
     try {
-      const res = await fetch(`/api/users/${userId}`, {
+      const res  = await fetch(`/api/users/${u.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !u.active }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success(`${u.name} ${u.active ? "deactivated" : "activated"} successfully.`);
+      await loadUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to ${action} user.`);
+    }
+  }
+
+  // ── Reset password ────────────────────────────────────────────────────────
+  function openPw(u: StaffUser) {
+    if (openPanel?.id === u.id && openPanel.mode === "pw") {
+      setOpenPanel(null);
+      setNewPw("");
+      return;
+    }
+    setNewPw("");
+    setOpenPanel({ id: u.id, mode: "pw" });
+  }
+
+  async function resetPassword(userId: string) {
+    if (!newPw || newPw.length < 8) { toast.error("Password must be at least 8 characters."); return; }
+    setPwSaving(true);
+    try {
+      const res  = await fetch(`/api/users/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newPassword: newPw }),
@@ -141,61 +199,72 @@ function StaffManagement({ currentUserId }: { currentUserId: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success("Password reset successfully.");
-      setResetId(null);
+      setOpenPanel(null);
       setNewPw("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed.");
+      toast.error(err instanceof Error ? err.message : "Failed to reset password.");
+    } finally {
+      setPwSaving(false);
     }
   }
 
   return (
     <div>
+      {/* Header row */}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-slate-500">{users.length} staff account{users.length !== 1 ? "s" : ""}</p>
         <button
-          onClick={() => setAdding(true)}
+          onClick={() => { setAdding((v) => !v); setOpenPanel(null); }}
           className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-xs font-bold text-white hover:bg-[#1B5E20]"
         >
-          <Plus className="h-3.5 w-3.5" />
-          Add Staff
+          {adding ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+          {adding ? "Cancel" : "Add Staff"}
         </button>
       </div>
 
-      {/* Add staff modal */}
+      {/* ── Add new staff form ─────────────────────────────────────────── */}
       {adding && (
-        <div className="mb-4 overflow-hidden rounded-xl border border-[#2E7D32]/30 bg-[#E8F5E9]">
-          <div className="flex items-center justify-between border-b border-[#2E7D32]/20 px-5 py-4">
+        <div className="mb-5 overflow-hidden rounded-xl border border-[#2E7D32]/30 bg-[#E8F5E9]">
+          <div className="border-b border-[#2E7D32]/20 px-5 py-4">
             <p className="text-sm font-bold text-[#0D1F0E]">Add New Staff Account</p>
-            <button onClick={() => setAdding(false)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-[#2E7D32]/10">
-              <X className="h-4 w-4 text-slate-500" />
-            </button>
           </div>
           <form onSubmit={addUser} className="space-y-3 p-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-bold text-slate-700">Full Name *</label>
-                <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={inp} placeholder="Sara Al Mansoori" />
+                <input required value={newForm.name} onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))}
+                  className={inp} placeholder="Sara Al Mansoori" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-bold text-slate-700">Email *</label>
-                <input required type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={inp} placeholder="sara@nitaqacademy.com" />
+                <input required type="email" value={newForm.email} onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))}
+                  className={inp} placeholder="sara@nitaqacademy.com" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">Password *</label>
-                <input required type="password" minLength={8} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className={inp} placeholder="Min. 8 characters" />
+                <label className="mb-1 block text-xs font-bold text-slate-700">Mobile Number</label>
+                <input type="tel" value={newForm.mobileNumber} onChange={(e) => setNewForm((f) => ({ ...f, mobileNumber: e.target.value }))}
+                  className={inp} placeholder="+971 50 XXX XXXX" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-bold text-slate-700">Role *</label>
-                <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className={inp}>
-                  {ALL_ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
+                <select value={newForm.role} onChange={(e) => setNewForm((f) => ({ ...f, role: e.target.value }))} className={inp}>
+                  {ALL_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-bold text-slate-700">Password *</label>
+                <input required type="password" minLength={8} value={newForm.password}
+                  onChange={(e) => setNewForm((f) => ({ ...f, password: e.target.value }))}
+                  className={inp} placeholder="Min. 8 characters" />
               </div>
             </div>
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setAdding(false)} className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={saving} className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-xs font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
+              <button type="button" onClick={() => setAdding(false)}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button type="submit" disabled={saving}
+                className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-xs font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
                 {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Create Account
               </button>
@@ -204,83 +273,138 @@ function StaffManagement({ currentUserId }: { currentUserId: string }) {
         </div>
       )}
 
+      {/* ── User list ─────────────────────────────────────────────────── */}
       {loading ? (
         <div className="flex items-center justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-[#2E7D32]" />
         </div>
       ) : users.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
-          <p className="text-sm text-slate-400">No staff accounts found. Run seed data or add accounts above.</p>
+          <p className="text-sm text-slate-400">No staff accounts found. Add one above or load seed data.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {users.map((u) => {
-            const Icon = ROLE_ICONS[u.role] ?? User;
+            const RoleIcon = ROLE_ICONS[u.role] ?? User;
+            const isSelf   = u.id === currentUserId;
+            const panel    = openPanel?.id === u.id ? openPanel.mode : null;
+
             return (
-              <div
-                key={u.id}
-                className={`rounded-xl border p-4 transition ${u.active ? "border-slate-100 bg-slate-50" : "border-slate-100 bg-white opacity-60"}`}
-              >
-                <div className="flex items-center gap-3">
+              <div key={u.id} className={`overflow-hidden rounded-xl border transition ${u.active ? "border-slate-100 bg-slate-50" : "border-slate-100 bg-white opacity-60"}`}>
+                {/* ── User row ── */}
+                <div className="flex items-center gap-3 p-4">
+                  {/* Avatar */}
                   <div className={`grid h-10 w-10 flex-shrink-0 place-items-center rounded-full text-sm font-bold ${u.active ? "bg-[#1B5E20] text-white" : "bg-slate-200 text-slate-500"}`}>
                     {u.name.charAt(0).toUpperCase()}
                   </div>
+
+                  {/* Info */}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-bold text-[#0D1F0E] text-sm">{u.name}</p>
+                      <p className="text-sm font-bold text-[#0D1F0E]">{u.name}</p>
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${ROLE_COLORS[u.role] ?? "bg-slate-100 text-slate-600"}`}>
-                        <Icon className="h-2.5 w-2.5" />
-                        {u.role.charAt(0).toUpperCase() + u.role.slice(1)}
+                        <RoleIcon className="h-2.5 w-2.5" />
+                        {ALL_ROLES.find((r) => r.value === u.role)?.label ?? u.role}
                       </span>
-                      {!u.active && (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">Inactive</span>
-                      )}
+                      {!u.active && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">Inactive</span>}
+                      {isSelf && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold text-green-700">You</span>}
                     </div>
-                    <p className="text-xs text-slate-400">{u.email}</p>
+                    <p className="text-xs text-slate-500">{u.email}</p>
+                    {u.mobileNumber && (
+                      <p className="flex items-center gap-1 text-xs text-slate-400">
+                        <Phone className="h-3 w-3" />{u.mobileNumber}
+                      </p>
+                    )}
                     {u.lastLogin && (
                       <p className="text-[11px] text-slate-400">Last login: {new Date(u.lastLogin).toLocaleDateString("en-AE")}</p>
                     )}
                   </div>
-                  <div className="flex flex-shrink-0 items-center gap-1.5">
+
+                  {/* Action buttons */}
+                  <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1.5">
                     <button
-                      onClick={() => setResetId(resetId === u.id ? null : u.id)}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                      onClick={() => openEdit(u)}
+                      className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition ${panel === "edit" ? "border-[#2E7D32] bg-[#E8F5E9] text-[#2E7D32]" : "border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"}`}
+                    >
+                      <Pencil className="inline h-3 w-3 mr-1" />Edit
+                    </button>
+                    <button
+                      onClick={() => openPw(u)}
+                      className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition ${panel === "pw" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"}`}
                     >
                       Reset PW
                     </button>
                     <button
                       onClick={() => void toggleActive(u)}
-                      title={u.active ? "Deactivate" : "Activate"}
-                      className={`grid h-8 w-8 place-items-center rounded-lg border transition ${u.active ? "border-slate-200 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600" : "border-green-200 bg-green-50 text-green-600 hover:bg-green-100"}`}
+                      disabled={isSelf && u.active}
+                      title={isSelf && u.active ? "Cannot deactivate your own account" : u.active ? "Deactivate" : "Activate"}
+                      className={`grid h-8 w-8 place-items-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-40 ${u.active ? "border-slate-200 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600" : "border-green-200 bg-green-50 text-green-600 hover:bg-green-100"}`}
                     >
                       <Power className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Password reset inline form */}
-                {resetId === u.id && (
-                  <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
-                    <input
-                      type="password"
-                      minLength={8}
-                      value={newPw}
-                      onChange={(e) => setNewPw(e.target.value)}
-                      className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#2E7D32]"
-                      placeholder="New password (min 8 chars)"
-                    />
-                    <button
-                      onClick={() => void resetPassword(u.id)}
-                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => { setResetId(null); setNewPw(""); }}
-                      className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                {/* ── Edit panel ── */}
+                {panel === "edit" && (
+                  <div className="border-t border-slate-100 bg-white px-5 py-4">
+                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Edit Details</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-bold text-slate-700">Full Name *</label>
+                        <input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                          className={inp} placeholder="Full name" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-bold text-slate-700">Email *</label>
+                        <input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                          className={inp} placeholder="email@example.com" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-bold text-slate-700">Mobile Number</label>
+                        <input type="tel" value={editForm.mobileNumber} onChange={(e) => setEditForm((f) => ({ ...f, mobileNumber: e.target.value }))}
+                          className={inp} placeholder="+971 50 XXX XXXX" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-bold text-slate-700">Role *</label>
+                        <select value={editForm.role} onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))} className={inp}>
+                          {ALL_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button onClick={() => setOpenPanel(null)}
+                        className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 hover:bg-slate-50">
+                        Cancel
+                      </button>
+                      <button onClick={() => void saveEdit(u.id)} disabled={editSaving}
+                        className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-xs font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
+                        {editSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Save Changes
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Password reset panel ── */}
+                {panel === "pw" && (
+                  <div className="border-t border-slate-100 bg-white px-5 py-4">
+                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Reset Password for {u.name}</p>
+                    <div className="flex gap-2">
+                      <input type="password" minLength={8} value={newPw}
+                        onChange={(e) => setNewPw(e.target.value)}
+                        className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#2E7D32]"
+                        placeholder="New password (min 8 characters)" />
+                      <button onClick={() => void resetPassword(u.id)} disabled={pwSaving}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-60">
+                        {pwSaving && <Loader2 className="h-3 w-3 animate-spin" />}
+                        Save
+                      </button>
+                      <button onClick={() => { setOpenPanel(null); setNewPw(""); }}
+                        className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-100">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -292,9 +416,10 @@ function StaffManagement({ currentUserId }: { currentUserId: string }) {
   );
 }
 
+// ── Seed button ───────────────────────────────────────────────────────────────
 function SeedButton() {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg]     = useState("");
 
   async function seed() {
     setState("loading");
@@ -314,26 +439,25 @@ function SeedButton() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600">
-        Load realistic sample data to explore the CRM: 3 staff accounts, 15 leads, 5 enrollments, 6 payments, 8 follow-ups, 5 expenses.
+        Load realistic sample data: 3 staff accounts, 15 leads, 5 enrollments, 6 payments, 8 follow-ups, 5 expenses.
+        Also runs the legacy role migration (staff → sales).
       </p>
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <button
           onClick={seed}
           disabled={state === "loading" || state === "done"}
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-800 px-5 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50"
         >
           {state === "loading" && <Loader2 className="h-4 w-4 animate-spin" />}
-          {state === "loading" ? "Loading…" : state === "done" ? "Done" : "Load Seed Data"}
+          {state === "loading" ? "Loading…" : state === "done" ? "Done ✓" : "Load Seed Data"}
         </button>
         {msg && <p className={`text-sm font-medium ${state === "error" ? "text-rose-600" : "text-[#2E7D32]"}`}>{msg}</p>}
       </div>
-      <p className="text-xs text-slate-400">
-        Credentials: admin@nitaqacademy.com / NitaqAdmin2026! · muzzamil@nitaqacademy.com / NitaqManager2026! · staff@nitaqacademy.com / NitaqStaff2026!
-      </p>
     </div>
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -341,20 +465,14 @@ export default function SettingsPage() {
   useEffect(() => {
     if (status === "authenticated") {
       const role = (session?.user as { role?: string })?.role;
-      if (role !== "admin") {
-        router.replace("/access-denied");
-      }
+      if (role !== "admin") router.replace("/access-denied");
     }
   }, [status, session, router]);
 
   const [academy, setAcademy] = useState({
-    name: "Nitaq Academy",
-    nameAr: "أكاديمية نطاق",
-    city: "Sharjah",
-    phone: "+971 6 XXX XXXX",
-    email: "info@nitaqacademy.com",
-    vatNumber: "",
-    vatRate: "5",
+    name: "Nitaq Academy", nameAr: "أكاديمية نطاق",
+    city: "Sharjah", phone: "+971 6 XXX XXXX",
+    email: "info@nitaqacademy.com", vatNumber: "", vatRate: "5",
   });
   const [saved, setSaved] = useState(false);
 
@@ -363,6 +481,8 @@ export default function SettingsPage() {
     toast.success("Academy settings saved.");
     setTimeout(() => setSaved(false), 3000);
   }
+
+  const currentUserId = (session?.user as { id?: string })?.id ?? "";
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -374,7 +494,7 @@ export default function SettingsPage() {
 
       {/* Academy info */}
       <Section icon={Building2} title="Academy Information">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-700">Academy Name (English)</label>
             <input className={inp} value={academy.name} onChange={(e) => setAcademy((a) => ({ ...a, name: e.target.value }))} />
@@ -391,7 +511,7 @@ export default function SettingsPage() {
             <label className="mb-1 block text-xs font-bold text-slate-700">Phone</label>
             <input className={inp} value={academy.phone} onChange={(e) => setAcademy((a) => ({ ...a, phone: e.target.value }))} />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-bold text-slate-700">Email</label>
             <input className={inp} type="email" value={academy.email} onChange={(e) => setAcademy((a) => ({ ...a, email: e.target.value }))} />
           </div>
@@ -405,10 +525,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="mt-5 flex items-center gap-3">
-          <button
-            onClick={saveAcademy}
-            className="h-10 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white hover:bg-[#1B5E20]"
-          >
+          <button onClick={saveAcademy} className="h-10 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white hover:bg-[#1B5E20]">
             Save Changes
           </button>
           {saved && (
@@ -421,7 +538,7 @@ export default function SettingsPage() {
 
       {/* Staff accounts */}
       <Section icon={Users} title="Staff Accounts">
-        <StaffManagement currentUserId={(session?.user as { id?: string })?.id ?? ""} />
+        <StaffManagement currentUserId={currentUserId} />
       </Section>
 
       {/* Seed data */}
@@ -431,11 +548,11 @@ export default function SettingsPage() {
 
       {/* System info */}
       <Section icon={Info} title="System Information">
-        <dl className="grid grid-cols-2 gap-4 text-sm">
+        <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
           {[
             ["Platform", "Nitaq Academy CRM"],
-            ["Version", "1.0.0"],
-            ["Framework", "Next.js 15 + MongoDB"],
+            ["Version", "1.1.0"],
+            ["Framework", "Next.js 16 + MongoDB"],
             ["Auth", "NextAuth.js v5 (JWT)"],
           ].map(([k, v]) => (
             <div key={k}>
