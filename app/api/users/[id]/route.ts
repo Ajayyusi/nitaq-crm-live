@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
-import bcrypt from "bcryptjs";
 import { userRoles } from "@/models/User";
+import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 
 const allowedRoles = new Set<string>(userRoles);
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const authed = await requireAuth(["admin"]);
+  if (authed instanceof NextResponse) return authed;
+
   try {
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -24,7 +28,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       if (!allowedRoles.has(role)) return NextResponse.json({ error: "Invalid role." }, { status: 400 });
       updates.role = role;
     }
-    if (body.active !== undefined) updates.active = Boolean(body.active);
+    if (body.active !== undefined) {
+      // Prevent admin from deactivating their own account
+      if (id === authed.id && !body.active) {
+        return NextResponse.json({ error: "You cannot deactivate your own account." }, { status: 400 });
+      }
+      updates.active = Boolean(body.active);
+    }
     if (body.newPassword !== undefined && body.newPassword !== "") {
       const pw = String(body.newPassword).trim();
       if (pw.length < 8) return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
@@ -43,10 +53,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 }
 
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const authed = await requireAuth(["admin"]);
+  if (authed instanceof NextResponse) return authed;
+
   try {
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid user ID." }, { status: 400 });
+    }
+
+    // Prevent admin from deleting their own account
+    if (id === authed.id) {
+      return NextResponse.json({ error: "You cannot delete your own account." }, { status: 400 });
     }
 
     await connectDB();

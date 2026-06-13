@@ -21,48 +21,44 @@ import {
   BellRing,
   X,
 } from "lucide-react";
+import { SIDEBAR_VISIBILITY, userRoleLabels } from "@/lib/permissions";
+import type { AppRole } from "@/lib/permissions";
 
 const navGroups = [
   {
     label: "Workspace",
     items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { label: "Leads", href: "/leads", icon: TrendingUp },
-      { label: "Follow-Ups", href: "/follow-ups", icon: BellRing, badge: true },
-      { label: "Students", href: "/students", icon: GraduationCap },
+      { label: "Dashboard",   href: "/dashboard",   icon: LayoutDashboard },
+      { label: "Leads",       href: "/leads",        icon: TrendingUp },
+      { label: "Follow-Ups",  href: "/follow-ups",   icon: BellRing, badge: true },
+      { label: "Students",    href: "/students",     icon: GraduationCap },
     ],
   },
   {
     label: "Academy Ops",
     items: [
-      { label: "Courses", href: "/courses", icon: BookOpen },
-      { label: "Trainers", href: "/teachers", icon: UserCheck },
-      { label: "Enrollments", href: "/enrollments", icon: ClipboardList },
-      { label: "Classes", href: "/classes", icon: CalendarDays },
+      { label: "Courses",     href: "/courses",      icon: BookOpen },
+      { label: "Trainers",    href: "/teachers",     icon: UserCheck },
+      { label: "Enrollments", href: "/enrollments",  icon: ClipboardList },
+      { label: "Classes",     href: "/classes",      icon: CalendarDays },
     ],
   },
   {
     label: "Business",
     items: [
-      { label: "Finance", href: "/finance", icon: WalletCards },
-      { label: "Expenses", href: "/expenses", icon: ReceiptText },
-      { label: "Reports", href: "/reports", icon: BarChart3 },
+      { label: "Finance",     href: "/finance",      icon: WalletCards },
+      { label: "Expenses",    href: "/expenses",     icon: ReceiptText },
+      { label: "Reports",     href: "/reports",      icon: BarChart3 },
     ],
   },
   {
     label: "System",
     items: [
       { label: "Import / Export", href: "/import-export", icon: ArrowUpDown },
-      { label: "Settings", href: "/settings", icon: Settings },
+      { label: "Settings",        href: "/settings",       icon: Settings },
     ],
   },
 ];
-
-const roleLabel: Record<string, string> = {
-  admin: "Administrator",
-  manager: "Manager",
-  staff: "Staff",
-};
 
 function FollowUpBadge() {
   const [count, setCount] = useState(0);
@@ -94,7 +90,7 @@ export default function Sidebar({
 
   const user = session?.user;
   const fullName = user?.name ?? "Staff";
-  const role = (user as { role?: string })?.role ?? "staff";
+  const role = ((user as { role?: string })?.role ?? "sales") as AppRole;
   const initials = fullName
     .split(" ")
     .filter(Boolean)
@@ -102,6 +98,16 @@ export default function Sidebar({
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        const allowed = SIDEBAR_VISIBILITY[item.href];
+        return !allowed || (allowed as string[]).includes(role);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <aside
@@ -119,7 +125,6 @@ export default function Sidebar({
             <p className="text-sm font-bold tracking-tight text-white">Nitaq Academy</p>
             <p className="mt-0.5 text-xs font-medium text-green-200">Internal CRM</p>
           </div>
-          {/* Close button — mobile only */}
           <button
             onClick={onClose}
             aria-label="Close navigation"
@@ -136,7 +141,7 @@ export default function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label} className="mb-5 last:mb-0">
             <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-widest text-green-400">
               {group.label}
@@ -184,7 +189,7 @@ export default function Sidebar({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold text-white">{fullName}</p>
-              <p className="text-xs text-green-300">{roleLabel[role] ?? role}</p>
+              <p className="text-xs text-green-300">{userRoleLabels[role] ?? role}</p>
             </div>
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}

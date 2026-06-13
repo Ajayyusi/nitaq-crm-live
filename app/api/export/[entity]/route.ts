@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
+import { IMPORT_EXPORT_PERMISSIONS, hasRole } from "@/lib/permissions";
+import type { AppRole } from "@/lib/permissions";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import FollowUp from "@/models/FollowUp";
@@ -16,7 +19,16 @@ function toDate(d: unknown): string {
 }
 
 export async function GET(_req: Request, context: RouteContext) {
+  const authed = await requireAuth();
+  if (authed instanceof NextResponse) return authed;
+
   const { entity } = await context.params;
+
+  const entityPerms = IMPORT_EXPORT_PERMISSIONS[entity];
+  if (!entityPerms || !hasRole(authed.role as AppRole, entityPerms.export)) {
+    return NextResponse.json({ error: "You do not have permission to export this data." }, { status: 403 });
+  }
+
   await connectDB();
 
   try {

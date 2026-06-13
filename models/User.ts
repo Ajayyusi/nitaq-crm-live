@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export const userRoles = ["admin", "manager", "staff"] as const;
+export const userRoles = ["admin", "manager", "sales", "finance", "trainer"] as const;
 export type UserRole = (typeof userRoles)[number];
 
 export interface IUser extends Document {
@@ -16,11 +16,11 @@ export interface IUser extends Document {
 
 const UserSchema = new Schema<IUser>(
   {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true },
-    role: { type: String, enum: [...userRoles], default: "staff" },
-    active: { type: Boolean, default: true },
+    name:      { type: String, required: true, trim: true },
+    email:     { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password:  { type: String, required: true },
+    role:      { type: String, enum: [...userRoles], default: "sales" },
+    active:    { type: Boolean, default: true },
     lastLogin: Date,
   },
   { timestamps: true }

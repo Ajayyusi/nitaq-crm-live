@@ -3,6 +3,7 @@ import connectDB from "@/lib/db";
 import AttendanceSession, { attendanceStatuses } from "@/models/Attendance";
 import Enrollment from "@/models/Enrollment";
 import { serializeSession } from "@/lib/serializers";
+import { requireAuth } from "@/lib/api-auth";
 
 const allowedStatuses = new Set<string>(attendanceStatuses);
 
@@ -12,6 +13,10 @@ function clean(v: unknown) {
 
 
 export async function GET(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager", "trainer"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     await connectDB();
     const { searchParams } = new URL(request.url);
@@ -39,6 +44,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager", "trainer"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     await connectDB();
     const body = await request.json();

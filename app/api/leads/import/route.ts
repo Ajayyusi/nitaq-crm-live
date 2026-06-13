@@ -3,6 +3,7 @@ import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import { getNextSequence } from "@/models/Counter";
 import { leadSources, leadStages, courseList } from "@/constants/leads";
+import { requireAuth } from "@/lib/api-auth";
 
 const allowedStages = new Set<string>(leadStages);
 const allowedSources = new Set<string>(leadSources);
@@ -37,6 +38,10 @@ function normalizeHeader(h: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     const formData = await request.formData();
     const file = formData.get("file");

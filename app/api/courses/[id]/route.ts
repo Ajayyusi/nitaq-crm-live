@@ -10,6 +10,7 @@ import {
 } from "@/models/Course";
 import { serializeCourse } from "@/lib/serializers";
 import { getNextSequence } from "@/models/Counter";
+import { requireAuth } from "@/lib/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -23,6 +24,10 @@ function clean(v: unknown) {
 }
 
 export async function GET(_req: NextRequest, context: RouteContext) {
+  const authed = await requireAuth(["admin", "manager", "sales", "trainer"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   const { id } = await context.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
@@ -34,6 +39,10 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const authed = await requireAuth(["admin", "manager"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -83,6 +92,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_req: NextRequest, context: RouteContext) {
+  const authed = await requireAuth(["admin", "manager"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   const { id } = await context.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
@@ -95,6 +108,10 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
 
 // POST /api/courses/[id]/batches
 export async function POST(request: NextRequest, context: RouteContext) {
+  const authed = await requireAuth(["admin", "manager"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {

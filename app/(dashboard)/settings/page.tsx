@@ -1,21 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Building2, Users, Database, Info, CheckCircle2, Plus, X, Loader2, ShieldCheck, UserCog, User, Power } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { Building2, Users, Database, Info, CheckCircle2, Plus, X, Loader2, ShieldCheck, UserCog, User, Power, DollarSign, GraduationCap } from "lucide-react";
 import toast from "react-hot-toast";
 
 const inp = "w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9] bg-white";
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "bg-purple-100 text-purple-700",
+  admin:   "bg-purple-100 text-purple-700",
   manager: "bg-blue-100 text-blue-700",
-  staff: "bg-green-100 text-green-700",
+  sales:   "bg-green-100 text-green-700",
+  finance: "bg-amber-100 text-amber-700",
+  trainer: "bg-cyan-100 text-cyan-700",
 };
 
 const ROLE_ICONS: Record<string, typeof ShieldCheck> = {
-  admin: ShieldCheck,
+  admin:   ShieldCheck,
   manager: UserCog,
-  staff: User,
+  sales:   User,
+  finance: DollarSign,
+  trainer: GraduationCap,
 };
 
 type StaffUser = {
@@ -28,8 +34,16 @@ type StaffUser = {
   createdAt: string;
 };
 
+const ALL_ROLES = [
+  { value: "admin",   label: "Administrator" },
+  { value: "manager", label: "Manager" },
+  { value: "sales",   label: "Sales" },
+  { value: "finance", label: "Finance" },
+  { value: "trainer", label: "Trainer" },
+];
+
 type NewUserForm = { name: string; email: string; password: string; role: string };
-const emptyForm: NewUserForm = { name: "", email: "", password: "", role: "staff" };
+const emptyForm: NewUserForm = { name: "", email: "", password: "", role: "sales" };
 
 function Section({ icon: Icon, title, children }: { icon: typeof Building2; title: string; children: React.ReactNode }) {
   return (
@@ -45,7 +59,7 @@ function Section({ icon: Icon, title, children }: { icon: typeof Building2; titl
   );
 }
 
-function StaffManagement() {
+function StaffManagement({ currentUserId }: { currentUserId: string }) {
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -92,8 +106,12 @@ function StaffManagement() {
   }
 
   async function toggleActive(user: StaffUser) {
+    if (user.id === currentUserId && user.active) {
+      toast.error("You cannot deactivate your own account.");
+      return;
+    }
     const action = user.active ? "Deactivate" : "Activate";
-    if (!confirm(`${action} ${user.name}?`)) return;
+    if (!confirm(`${action} ${user.name}? ${user.active ? "They will no longer be able to log in." : ""}`)) return;
     try {
       const res = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",
@@ -169,9 +187,9 @@ function StaffManagement() {
               <div>
                 <label className="mb-1 block text-xs font-bold text-slate-700">Role *</label>
                 <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} className={inp}>
-                  <option value="admin">Admin</option>
-                  <option value="manager">Manager</option>
-                  <option value="staff">Staff</option>
+                  {ALL_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -317,6 +335,18 @@ function SeedButton() {
 }
 
 export default function SettingsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      const role = (session?.user as { role?: string })?.role;
+      if (role !== "admin") {
+        router.replace("/access-denied");
+      }
+    }
+  }, [status, session, router]);
+
   const [academy, setAcademy] = useState({
     name: "Nitaq Academy",
     nameAr: "أكاديمية نطاق",
@@ -391,7 +421,7 @@ export default function SettingsPage() {
 
       {/* Staff accounts */}
       <Section icon={Users} title="Staff Accounts">
-        <StaffManagement />
+        <StaffManagement currentUserId={(session?.user as { id?: string })?.id ?? ""} />
       </Section>
 
       {/* Seed data */}

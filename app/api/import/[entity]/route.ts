@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
+import { IMPORT_EXPORT_PERMISSIONS, hasRole } from "@/lib/permissions";
+import type { AppRole } from "@/lib/permissions";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import FollowUp, { followUpTypes, followUpStatuses } from "@/models/FollowUp";
@@ -23,7 +26,16 @@ function str(v: unknown): string {
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
+  const authed = await requireAuth();
+  if (authed instanceof NextResponse) return authed;
+
   const { entity } = await context.params;
+
+  const entityPerms = IMPORT_EXPORT_PERMISSIONS[entity];
+  if (!entityPerms || !hasRole(authed.role as AppRole, entityPerms.import)) {
+    return NextResponse.json({ error: "You do not have permission to import this data." }, { status: 403 });
+  }
+
   const body = await req.json();
 
   if (!Array.isArray(body.rows)) {

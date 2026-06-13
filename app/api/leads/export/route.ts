@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
+import { requireAuth } from "@/lib/api-auth";
 
 const columns = [
   "leadId",
@@ -21,6 +22,10 @@ function csvEscape(value: unknown) {
 }
 
 export async function GET() {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     await connectDB();
     const leads = await Lead.find({}).sort({ createdAt: -1 }).lean();
