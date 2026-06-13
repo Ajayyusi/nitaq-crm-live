@@ -65,6 +65,7 @@ const EnrollmentSchema = new Schema<IEnrollment>(
 
 EnrollmentSchema.index({ status: 1, createdAt: -1 });
 EnrollmentSchema.index({ course: 1, status: 1 });
+EnrollmentSchema.index({ registrationDate: -1 });
 
 const Enrollment =
   (mongoose.models.Enrollment as mongoose.Model<IEnrollment>) ||

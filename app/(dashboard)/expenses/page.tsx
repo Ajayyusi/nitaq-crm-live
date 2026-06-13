@@ -4,7 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Receipt, TrendingDown, X, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import DateRangePicker from "@/components/shared/DateRangePicker";
 import { expenseCategories } from "@/constants/modelConstants";
+import { thisMonthRange, describeRange } from "@/lib/dateRange";
 
 type Expense = {
   id: string; expenseId: string; category: string; amount: number;
@@ -46,6 +48,8 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [catFilter, setCatFilter] = useState("All");
+  const [dateFrom, setDateFrom] = useState(() => thisMonthRange().from);
+  const [dateTo, setDateTo] = useState(() => thisMonthRange().to);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Expense | null>(null);
   const [form, setForm] = useState({ ...BLANK });
@@ -58,6 +62,8 @@ export default function ExpensesPage() {
     try {
       const params = new URLSearchParams();
       if (catFilter !== "All") params.set("category", catFilter);
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
       const res = await fetch(`/api/expenses?${params}`);
       const data = await res.json();
       setExpenses(data.expenses ?? []);
@@ -68,7 +74,7 @@ export default function ExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [catFilter]);
+  }, [catFilter, dateFrom, dateTo]);
 
   useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -122,11 +128,11 @@ export default function ExpensesPage() {
     }
   }
 
-  // Totals per category for current view
   const byCategory: Record<string, number> = {};
   for (const e of expenses) {
     byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amount;
   }
+  const periodLabel = describeRange(dateFrom, dateTo);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -151,7 +157,7 @@ export default function ExpensesPage() {
           </div>
           <div>
             <p className="text-xs text-slate-500 font-medium">
-              {catFilter === "All" ? "Total Expenses" : catFilter}
+              {catFilter === "All" ? `Expenses (${periodLabel})` : `${catFilter} (${periodLabel})`}
             </p>
             <p className="text-xl font-bold text-red-700">{fmt(total)}</p>
           </div>
@@ -172,7 +178,14 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Category filter */}
+      {/* Date + Category filters */}
+      <div className="px-6 pb-2 flex flex-wrap gap-2 items-center">
+        <DateRangePicker
+          from={dateFrom}
+          to={dateTo}
+          onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+        />
+      </div>
       <div className="px-6 pb-3 flex gap-2 flex-wrap">
         {["All", ...expenseCategories].map((c) => (
           <button
