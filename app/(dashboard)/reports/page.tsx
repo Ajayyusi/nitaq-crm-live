@@ -60,6 +60,8 @@ async function getReportData(from?: string, to?: string) {
       paymentsByMethod,
       outstandingBalance,
       pendingPayments,
+      revenueByCourse,
+      studentBalances,
     ] = await Promise.all([
       Lead.aggregate([{ $group: { _id: "$stage", count: { $sum: 1 } } }]),
       Lead.aggregate([{ $group: { _id: "$source", count: { $sum: 1 } } }]),
@@ -108,6 +110,28 @@ async function getReportData(from?: string, to?: string) {
         { $group: { _id: null, outstanding: { $sum: { $subtract: ["$totalFee", "$amountPaid"] } } } },
       ]).then((r) => r[0]?.outstanding ?? 0),
       Payment.countDocuments({ status: "Pending" }),
+
+      Payment.aggregate([
+        {
+          $match: {
+            status: "Received",
+            paymentType: { $ne: "Refund" },
+            course: { $exists: true, $ne: "" },
+            ...(datePaidFilter ? { datePaid: datePaidFilter } : {}),
+          },
+        },
+        { $group: { _id: "$course", revenue: { $sum: "$amount" }, payments: { $sum: 1 } } },
+        { $sort: { revenue: -1 } },
+        { $limit: 12 },
+      ]),
+
+      Enrollment.aggregate([
+        { $match: { $expr: { $gt: ["$totalFee", "$amountPaid"] } } },
+        { $addFields: { balanceDue: { $subtract: ["$totalFee", "$amountPaid"] } } },
+        { $sort: { balanceDue: -1 } },
+        { $limit: 25 },
+        { $project: { enrollmentId: 1, fullName: 1, course: 1, totalFee: 1, amountPaid: 1, balanceDue: 1, paymentStatus: 1, status: 1 } },
+      ]),
     ]);
 
     const revenueTotal = revenueFiltered;
@@ -129,6 +153,8 @@ async function getReportData(from?: string, to?: string) {
       paymentsByMethod: paymentsByMethod as { _id: string; total: number }[],
       outstandingBalance,
       pendingPayments,
+      revenueByCourse: revenueByCourse as { _id: string; revenue: number; payments: number }[],
+      studentBalances: studentBalances as { _id: string; enrollmentId: string; fullName: string; course: string; totalFee: number; amountPaid: number; balanceDue: number; paymentStatus: string; status: string }[],
       isFiltered: Boolean(from || to),
     };
   } catch {
@@ -327,6 +353,106 @@ export default async function ReportsPage({
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* Revenue by Course — finance / admin / manager */}
+      {showFinance && data.revenueByCourse.length > 0 && (
+        <section>
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+            <BookOpen className="w-4 h-4" /> Revenue by Course
+          </h2>
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm font-semibold text-[#0D1F0E]">
+                {data.isFiltered ? `Revenue per course (${periodLabel})` : "All-time revenue per course"}
+              </p>
+              <span className="text-xs text-slate-400">{data.revenueByCourse.length} courses</span>
+            </div>
+            <div className="space-y-3">
+              {data.revenueByCourse.map((r) => {
+                const maxRev = data.revenueByCourse[0]?.revenue ?? 1;
+                const pct = Math.max(4, Math.round((r.revenue / maxRev) * 100));
+                return (
+                  <div key={r._id} className="flex items-center gap-3">
+                    <span className="w-44 text-sm text-slate-600 truncate flex-shrink-0">{r._id || "—"}</span>
+                    <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-[#2E7D32]" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="w-36 flex-shrink-0 text-right">
+                      <span className="text-sm font-semibold text-[#0D1F0E]">{fmt(r.revenue)}</span>
+                      <span className="ml-2 text-xs text-slate-400">({r.payments})</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2.5">
+              <span className="text-sm text-slate-600">Total across all courses</span>
+              <span className="text-sm font-bold text-[#2E7D32]">{fmt(data.revenueByCourse.reduce((s, r) => s + r.revenue, 0))}</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Student Balance Report — finance / admin / manager */}
+      {showFinance && data.studentBalances.length > 0 && (
+        <section>
+          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+            <CreditCard className="w-4 h-4" /> Student Balances
+          </h2>
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <p className="text-sm font-semibold text-[#0D1F0E]">Enrollments with outstanding balance</p>
+              <span className="text-xs text-slate-400">{data.studentBalances.length} students</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[580px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    {["Student", "Course", "Total Fee", "Paid", "Balance Due", "Payment Status"].map((h) => (
+                      <th
+                        key={h}
+                        className={`px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide ${
+                          ["Total Fee", "Paid", "Balance Due"].includes(h) ? "text-right" : "text-left"
+                        }`}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.studentBalances.map((s) => (
+                    <tr key={s.enrollmentId || String(s._id)} className="hover:bg-[#E8F5E9]/30 transition-colors">
+                      <td className="px-5 py-3 font-semibold text-[#0D1F0E]">{s.fullName}</td>
+                      <td className="px-5 py-3 text-slate-500 max-w-[160px] truncate">{s.course || "—"}</td>
+                      <td className="px-5 py-3 text-right text-slate-600">{fmt(s.totalFee)}</td>
+                      <td className="px-5 py-3 text-right font-semibold text-[#2E7D32]">{fmt(s.amountPaid)}</td>
+                      <td className="px-5 py-3 text-right font-bold text-amber-600">{fmt(s.balanceDue)}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                          s.paymentStatus === "Overdue"
+                            ? "bg-rose-100 text-rose-700"
+                            : s.paymentStatus === "Paid Full"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {s.paymentStatus}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3">
+              <span className="text-sm text-slate-600">Total outstanding</span>
+              <span className="text-sm font-bold text-amber-600">
+                {fmt(data.studentBalances.reduce((s, r) => s + r.balanceDue, 0))}
+              </span>
+            </div>
+          </div>
         </section>
       )}
 
