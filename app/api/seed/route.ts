@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import Enrollment from "@/models/Enrollment";
@@ -22,6 +23,9 @@ const daysFromNow = (n: number) => {
 };
 
 export async function POST() {
+  const user = await requireAuth(["admin"]);
+  if (user instanceof NextResponse) return user;
+
   try {
     await connectDB();
 

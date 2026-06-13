@@ -4,6 +4,7 @@ import Enrollment from "@/models/Enrollment";
 import { enrollmentStatuses, paymentStatuses, scheduleFormats } from "@/models/Enrollment";
 import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
+import { requireAuth } from "@/lib/api-auth";
 
 const allowedStatuses = new Set<string>(enrollmentStatuses);
 const allowedPaymentStatuses = new Set<string>(paymentStatuses);
@@ -15,6 +16,10 @@ function clean(v: unknown) {
 
 
 export async function GET(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager", "sales", "finance"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     await connectDB();
     const { searchParams } = new URL(request.url);
@@ -41,6 +46,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     await connectDB();
     const body = await request.json();

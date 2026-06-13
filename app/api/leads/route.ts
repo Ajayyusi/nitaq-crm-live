@@ -4,6 +4,7 @@ import Lead from "@/models/Lead";
 import { getNextSequence } from "@/models/Counter";
 import { leadSources, leadStages, courseList } from "@/constants/leads";
 import { serializeLead } from "@/lib/serializers";
+import { requireAuth } from "@/lib/api-auth";
 
 type LeadPayload = {
   fullName?: string;
@@ -58,6 +59,10 @@ function buildLeadPayload(body: LeadPayload) {
 
 
 export async function GET(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     await connectDB();
 
@@ -94,6 +99,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     await connectDB();
     const body = (await request.json()) as LeadPayload;

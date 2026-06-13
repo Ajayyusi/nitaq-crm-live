@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/api-auth";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
-import bcrypt from "bcryptjs";
 import { userRoles } from "@/models/User";
+import bcrypt from "bcryptjs";
 
 const allowedRoles = new Set<string>(userRoles);
 
 export async function GET() {
+  const authed = await requireAuth(["admin"]);
+  if (authed instanceof NextResponse) return authed;
+
   try {
     await connectDB();
     const users = await User.find({}, { password: 0 }).sort({ role: 1, name: 1 }).lean();
@@ -26,19 +30,22 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authed = await requireAuth(["admin"]);
+  if (authed instanceof NextResponse) return authed;
+
   try {
     await connectDB();
     const body = await request.json();
 
-    const name = String(body.name ?? "").trim();
-    const email = String(body.email ?? "").trim().toLowerCase();
+    const name     = String(body.name ?? "").trim();
+    const email    = String(body.email ?? "").trim().toLowerCase();
     const password = String(body.password ?? "").trim();
-    const role = String(body.role ?? "staff").trim();
+    const role     = String(body.role ?? "sales").trim();
 
-    if (!name) return NextResponse.json({ error: "Name is required." }, { status: 400 });
-    if (!email) return NextResponse.json({ error: "Email is required." }, { status: 400 });
-    if (!password || password.length < 8) return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
-    if (!allowedRoles.has(role)) return NextResponse.json({ error: "Invalid role." }, { status: 400 });
+    if (!name)                              return NextResponse.json({ error: "Name is required." }, { status: 400 });
+    if (!email)                             return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    if (!password || password.length < 8)  return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+    if (!allowedRoles.has(role))           return NextResponse.json({ error: "Invalid role." }, { status: 400 });
 
     const existing = await User.findOne({ email });
     if (existing) return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });

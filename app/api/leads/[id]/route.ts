@@ -4,6 +4,7 @@ import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import { leadSources, leadStages, courseList } from "@/constants/leads";
 import { serializeLead } from "@/lib/serializers";
+import { requireAuth } from "@/lib/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 type LeadUpdatePayload = Partial<
@@ -80,6 +81,10 @@ async function getLeadById(id: string) {
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   const { id } = await context.params;
   const lead = await getLeadById(id);
   if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
@@ -87,6 +92,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   try {
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -107,6 +116,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
+  const authed = await requireAuth(["admin", "manager", "sales"]);
+  if (authed instanceof NextResponse) return authed;
+
+
   const { id } = await context.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return NextResponse.json({ message: "Invalid lead ID." }, { status: 400 });
