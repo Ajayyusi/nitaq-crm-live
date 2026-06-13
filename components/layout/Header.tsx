@@ -1,7 +1,8 @@
 "use client";
 
-import { Bell, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { NotificationPanel } from "./NotificationPanel";
 
 export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
   return (
@@ -29,14 +30,7 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
             Sharjah
           </span>
           <ThemeToggle />
-          <button
-            type="button"
-            className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32] dark:border-slate-700 dark:bg-[#112013] dark:text-slate-300 dark:hover:border-[#2E7D32] dark:hover:bg-[#1a2e1b]"
-            aria-label="Notifications"
-          >
-            <Bell className="h-4 w-4" />
-            <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#2E7D32] ring-2 ring-white dark:ring-[#112013]" />
-          </button>
+          <NotificationPanel />
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1B5E20] text-xs font-bold text-white shadow-sm">
             NA
           </div>
