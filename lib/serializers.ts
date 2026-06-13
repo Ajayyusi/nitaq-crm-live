@@ -150,6 +150,8 @@ export function serializePayment(p: any) {
     receiptRef: p.receiptRef ?? "",
     notes: p.notes ?? "",
     recordedBy: p.recordedBy ?? "",
+    installmentNumber: p.installmentNumber ?? null,
+    totalInstallments: p.totalInstallments ?? null,
     createdAt: p.createdAt?.toISOString() ?? "",
   };
 }

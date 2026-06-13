@@ -19,6 +19,9 @@ type Payment = {
   course: string; amount: number; paymentType: string; paymentMethod: string;
   status: string; datePaid: string; dueDate: string; receiptRef: string;
   notes: string; recordedBy: string; createdAt: string;
+  enrollmentId: string | null;
+  installmentNumber: number | null;
+  totalInstallments: number | null;
 };
 
 type Enrollment = {
@@ -71,6 +74,7 @@ const BLANK = {
   paymentType: "Full Payment", paymentMethod: "Cash", status: "Received",
   datePaid: today, dueDate: "", receiptRef: "", notes: "", recordedBy: "",
   enrollmentId: "",
+  installmentNumber: "", totalInstallments: "",
 };
 
 export default function PaymentsPage() {
@@ -141,7 +145,9 @@ export default function PaymentsPage() {
       paymentType: p.paymentType, paymentMethod: p.paymentMethod,
       status: p.status, datePaid: p.datePaid, dueDate: p.dueDate,
       receiptRef: p.receiptRef, notes: p.notes, recordedBy: p.recordedBy,
-      enrollmentId: "",
+      enrollmentId: p.enrollmentId ?? "",
+      installmentNumber: p.installmentNumber != null ? String(p.installmentNumber) : "",
+      totalInstallments: p.totalInstallments != null ? String(p.totalInstallments) : "",
     });
     setError("");
     setDrawerOpen(true);
@@ -150,6 +156,8 @@ export default function PaymentsPage() {
   function fillFromEnrollment(eid: string) {
     const e = enrollments.find((en) => en.id === eid);
     if (!e) return;
+    // Count payments already linked to this enrollment to suggest next installment number
+    const existingCount = payments.filter((p) => p.enrollmentId === eid).length;
     setForm((f) => ({
       ...f,
       enrollmentId: eid,
@@ -157,6 +165,7 @@ export default function PaymentsPage() {
       studentPhone: e.phone,
       course: e.course,
       amount: String(e.balanceDue > 0 ? e.balanceDue : e.totalFee),
+      installmentNumber: String(existingCount + 1),
     }));
   }
 
@@ -179,6 +188,8 @@ export default function PaymentsPage() {
       notes: form.notes,
       recordedBy: form.recordedBy,
       enrollmentId: form.enrollmentId || undefined,
+      installmentNumber: form.installmentNumber ? Number(form.installmentNumber) : undefined,
+      totalInstallments: form.totalInstallments ? Number(form.totalInstallments) : undefined,
     };
     try {
       const url = editTarget ? `/api/payments/${editTarget.id}` : "/api/payments";
@@ -314,7 +325,7 @@ export default function PaymentsPage() {
             <table className="w-full min-w-[800px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  {["ID", "Student", "Course", "Amount", "Type", "Method", "Status", "Date", ""].map((h) => (
+                  {["ID", "Student", "Course", "Amount", "Type / Inst", "Method", "Status", "Date", ""].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                       {h}
                     </th>
@@ -347,6 +358,16 @@ export default function PaymentsPage() {
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig[p.paymentType] ?? "bg-slate-100 text-slate-600"}`}>
                           {p.paymentType}
                         </span>
+                        {p.installmentNumber != null && p.totalInstallments != null && (
+                          <span className="ml-1.5 text-[10px] font-bold text-slate-400">
+                            {p.installmentNumber}/{p.totalInstallments}
+                          </span>
+                        )}
+                        {p.installmentNumber != null && p.totalInstallments == null && (
+                          <span className="ml-1.5 text-[10px] font-bold text-slate-400">
+                            #{p.installmentNumber}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${methodConfig[p.paymentMethod] ?? "bg-slate-100 text-slate-600"}`}>
@@ -406,35 +427,44 @@ export default function PaymentsPage() {
                 </div>
               )}
 
-              {/* Quick-fill from enrolment */}
-              {!editTarget && (
-                <div className="border border-[#2E7D32]/30 rounded-xl overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setExpandEnrolment((v) => !v)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-[#E8F5E9] text-sm font-medium text-[#1B5E20]"
-                  >
-                    <span>Quick-fill from enrollment</span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${expandEnrolment ? "rotate-180" : ""}`} />
-                  </button>
-                  {expandEnrolment && (
-                    <div className="px-4 py-3">
-                      <select
-                        className={cls}
-                        value={form.enrollmentId}
-                        onChange={(e) => fillFromEnrollment(e.target.value)}
-                      >
-                        <option value="">Select enrollment…</option>
-                        {enrollments.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.fullName} — {e.course} (bal: {fmt(e.balanceDue)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+              {/* Link to enrollment */}
+              <div className="border border-[#2E7D32]/30 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 bg-[#E8F5E9] text-sm font-semibold text-[#1B5E20]">
+                  Link to Enrollment (optional)
                 </div>
-              )}
+                <div className="px-4 py-3 space-y-2">
+                  <select
+                    className={cls}
+                    value={form.enrollmentId}
+                    onChange={(e) => {
+                      if (e.target.value) fillFromEnrollment(e.target.value);
+                      else setForm((f) => ({ ...f, enrollmentId: "" }));
+                    }}
+                  >
+                    <option value="">— No enrollment linked —</option>
+                    {enrollments.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.fullName} · {e.course} · bal: {fmt(e.balanceDue)}
+                      </option>
+                    ))}
+                  </select>
+                  {form.enrollmentId && (() => {
+                    const enr = enrollments.find((e) => e.id === form.enrollmentId);
+                    if (!enr) return null;
+                    return (
+                      <div className="flex gap-3 text-xs text-[#1B5E20]">
+                        <span>Total: <strong>{fmt(enr.totalFee)}</strong></span>
+                        <span>·</span>
+                        <span>Paid: <strong>{fmt(enr.amountPaid)}</strong></span>
+                        <span>·</span>
+                        <span className={enr.balanceDue > 0 ? "text-rose-600" : ""}>
+                          Balance: <strong>{fmt(enr.balanceDue)}</strong>
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -500,7 +530,31 @@ export default function PaymentsPage() {
                 </Field>
               </div>
 
+              {/* Installment fields */}
               <div className="grid grid-cols-2 gap-4">
+                <Field label="Instalment # (optional)">
+                  <div className="flex items-center gap-2">
+                    <input
+                      className={cls}
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="e.g. 1"
+                      value={form.installmentNumber}
+                      onChange={(e) => setForm((f) => ({ ...f, installmentNumber: e.target.value }))}
+                    />
+                    <span className="text-xs text-slate-400 whitespace-nowrap">of</span>
+                    <input
+                      className={cls}
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="e.g. 3"
+                      value={form.totalInstallments}
+                      onChange={(e) => setForm((f) => ({ ...f, totalInstallments: e.target.value }))}
+                    />
+                  </div>
+                </Field>
                 <Field label="Status">
                   <select
                     className={cls}
@@ -510,15 +564,16 @@ export default function PaymentsPage() {
                     {txStatuses.map((s) => <option key={s}>{s}</option>)}
                   </select>
                 </Field>
-                <Field label="Date Paid">
-                  <input
-                    className={cls}
-                    type="date"
-                    value={form.datePaid}
-                    onChange={(e) => setForm((f) => ({ ...f, datePaid: e.target.value }))}
-                  />
-                </Field>
               </div>
+
+              <Field label="Date Paid">
+                <input
+                  className={cls}
+                  type="date"
+                  value={form.datePaid}
+                  onChange={(e) => setForm((f) => ({ ...f, datePaid: e.target.value }))}
+                />
+              </Field>
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Due Date">

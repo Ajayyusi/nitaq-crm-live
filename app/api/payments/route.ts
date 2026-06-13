@@ -78,6 +78,9 @@ export async function POST(request: NextRequest) {
     const seq = await getNextSequence("payment");
     const paymentId = `P-${String(seq).padStart(3, "0")}`;
 
+    const installmentNumber = body.installmentNumber ? Number(body.installmentNumber) : undefined;
+    const totalInstallments = body.totalInstallments ? Number(body.totalInstallments) : undefined;
+
     const payment = await Payment.create({
       paymentId,
       studentName,
@@ -93,6 +96,8 @@ export async function POST(request: NextRequest) {
       notes: clean(body.notes) || undefined,
       recordedBy: clean(body.recordedBy) || undefined,
       enrollmentId: body.enrollmentId || undefined,
+      installmentNumber: installmentNumber && installmentNumber >= 1 ? installmentNumber : undefined,
+      totalInstallments: totalInstallments && totalInstallments >= 1 ? totalInstallments : undefined,
     });
 
     return NextResponse.json({ payment: serializePayment(payment) }, { status: 201 });

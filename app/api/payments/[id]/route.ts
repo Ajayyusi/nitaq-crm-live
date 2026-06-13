@@ -73,6 +73,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     for (const f of ["datePaid", "dueDate"] as const) {
       if (f in body) update[f] = body[f] ? new Date(body[f]) : undefined;
     }
+    if ("installmentNumber" in body) {
+      const n = Number(body.installmentNumber);
+      update.installmentNumber = n >= 1 ? n : undefined;
+    }
+    if ("totalInstallments" in body) {
+      const n = Number(body.totalInstallments);
+      update.totalInstallments = n >= 1 ? n : undefined;
+    }
 
     const payment = await Payment.findByIdAndUpdate(id, update, { new: true, runValidators: true });
     if (!payment) return NextResponse.json({ message: "Payment not found." }, { status: 404 });
