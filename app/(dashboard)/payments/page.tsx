@@ -3,14 +3,16 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Plus, CreditCard, DollarSign, Clock, AlertCircle,
-  TrendingUp, X, ChevronDown, Trash2,
+  X, ChevronDown, Trash2,
 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import DateRangePicker from "@/components/shared/DateRangePicker";
 import { courseList } from "@/constants/leads";
 import {
   paymentMethods, paymentTypes, txStatuses,
 } from "@/constants/modelConstants";
+import { thisMonthRange, describeRange } from "@/lib/dateRange";
 
 type Payment = {
   id: string; paymentId: string; studentName: string; studentPhone: string;
@@ -78,6 +80,8 @@ export default function PaymentsPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [methodFilter, setMethodFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState(() => thisMonthRange().from);
+  const [dateTo, setDateTo] = useState(() => thisMonthRange().to);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Payment | null>(null);
   const [form, setForm] = useState({ ...BLANK });
@@ -94,6 +98,8 @@ export default function PaymentsPage() {
       if (statusFilter !== "All") params.set("status", statusFilter);
       if (methodFilter !== "All") params.set("method", methodFilter);
       if (search) params.set("search", search);
+      if (dateFrom) params.set("from", dateFrom);
+      if (dateTo) params.set("to", dateTo);
       const res = await fetch(`/api/payments?${params}`);
       const data = await res.json();
       setPayments(data.payments ?? []);
@@ -105,7 +111,7 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, methodFilter, search]);
+  }, [statusFilter, methodFilter, search, dateFrom, dateTo]);
 
   const fetchEnrollments = useCallback(async () => {
     try {
@@ -203,9 +209,7 @@ export default function PaymentsPage() {
   }
 
   const overdue = payments.filter((p) => p.status === "Overdue");
-  const thisMonthRevenue = payments
-    .filter((p) => p.status === "Received" && p.paymentType !== "Refund" && p.datePaid?.startsWith(today.slice(0, 7)))
-    .reduce((s, p) => s + p.amount, 0);
+  const periodLabel = describeRange(dateFrom, dateTo);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -237,9 +241,9 @@ export default function PaymentsPage() {
       {/* KPI cards */}
       <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { icon: DollarSign, label: "Total Received", value: fmt(totalRevenue), cls: "text-[#2E7D32]" },
-          { icon: TrendingUp, label: "This Month", value: fmt(thisMonthRevenue), cls: "text-teal-600" },
+          { icon: DollarSign, label: `Received (${periodLabel})`, value: fmt(totalRevenue), cls: "text-[#2E7D32]" },
           { icon: Clock, label: "Pending / Overdue", value: fmt(totalPending), cls: "text-amber-600" },
+          { icon: AlertCircle, label: "Overdue Records", value: String(overdue.length), cls: "text-red-600" },
           { icon: CreditCard, label: "Total Records", value: String(payments.length), cls: "text-slate-700" },
         ].map((k) => (
           <div key={k.label} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3">
@@ -256,6 +260,11 @@ export default function PaymentsPage() {
 
       {/* Filters */}
       <div className="px-6 pb-3 flex flex-wrap gap-3 items-center">
+        <DateRangePicker
+          from={dateFrom}
+          to={dateTo}
+          onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+        />
         <input
           type="search"
           placeholder="Search name, ID, receipt…"

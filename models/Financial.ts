@@ -89,6 +89,7 @@ const PaymentSchema = new Schema<IPayment>(
 );
 
 PaymentSchema.index({ status: 1, datePaid: -1 });
+PaymentSchema.index({ datePaid: -1 });
 
 export const Payment =
   (mongoose.models.Payment as mongoose.Model<IPayment>) ||
@@ -119,6 +120,9 @@ const ExpenseSchema = new Schema<IExpense>(
   },
   { timestamps: true },
 );
+
+ExpenseSchema.index({ expenseDate: -1 });
+ExpenseSchema.index({ category: 1, expenseDate: -1 });
 
 export const Expense =
   (mongoose.models.Expense as mongoose.Model<IExpense>) ||

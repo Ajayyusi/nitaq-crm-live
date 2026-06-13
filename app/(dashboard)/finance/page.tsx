@@ -1,40 +1,44 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import connectDB from "@/lib/db";
 import { Payment, Expense } from "@/models/Financial";
 import { CreditCard, Receipt, TrendingDown, TrendingUp, ArrowRight, BarChart3 } from "lucide-react";
 import { RevenueExpensesChart, CourseRevenuePieChart } from "@/components/finance/FinanceCharts";
+import UrlDateFilter from "@/components/shared/UrlDateFilter";
+import { buildDateFilter, describeRange } from "@/lib/dateRange";
 
 const fmt = (n: number) =>
   "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-async function getFinanceData() {
+async function getFinanceData(from: string, to: string) {
   try {
     await connectDB();
 
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
+    const dateFilter = buildDateFilter(from || undefined, to || undefined);
+
     const [
-      totalRevenue,
-      monthlyRevenue,
+      periodRevenue,
       totalPending,
-      totalExpenses,
-      monthlyExpenses,
+      periodExpenses,
+      allTimeRevenue,
       monthlyRevenueByMonth,
       monthlyExpensesByMonth,
       courseRevenue,
       expensesByCategory,
     ] = await Promise.all([
       Payment.aggregate([
-        { $match: { status: "Received" } },
-        { $group: { _id: null, total: { $sum: "$amount" } } },
-      ]).then((r) => r[0]?.total ?? 0),
-
-      Payment.aggregate([
-        { $match: { status: "Received", datePaid: { $gte: monthStart } } },
+        {
+          $match: {
+            status: "Received",
+            paymentType: { $ne: "Refund" },
+            ...(dateFilter ? { datePaid: dateFilter } : {}),
+          },
+        },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]).then((r) => r[0]?.total ?? 0),
 
@@ -44,11 +48,12 @@ async function getFinanceData() {
       ]).then((r) => r[0]?.total ?? 0),
 
       Expense.aggregate([
+        { $match: dateFilter ? { expenseDate: dateFilter } : {} },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]).then((r) => r[0]?.total ?? 0),
 
-      Expense.aggregate([
-        { $match: { expenseDate: { $gte: monthStart } } },
+      Payment.aggregate([
+        { $match: { status: "Received", paymentType: { $ne: "Refund" } } },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]).then((r) => r[0]?.total ?? 0),
 
@@ -75,13 +80,20 @@ async function getFinanceData() {
       ]),
 
       Payment.aggregate([
-        { $match: { status: "Received", course: { $exists: true, $ne: "" } } },
+        {
+          $match: {
+            status: "Received",
+            course: { $exists: true, $ne: "" },
+            ...(dateFilter ? { datePaid: dateFilter } : {}),
+          },
+        },
         { $group: { _id: "$course", total: { $sum: "$amount" } } },
         { $sort: { total: -1 } },
         { $limit: 6 },
       ]),
 
       Expense.aggregate([
+        { $match: dateFilter ? { expenseDate: dateFilter } : {} },
         { $group: { _id: "$category", total: { $sum: "$amount" } } },
         { $sort: { total: -1 } },
       ]),
@@ -103,13 +115,11 @@ async function getFinanceData() {
     });
 
     return {
-      totalRevenue,
-      monthlyRevenue,
+      periodRevenue,
       totalPending,
-      totalExpenses,
-      monthlyExpenses,
-      net: totalRevenue - totalExpenses,
-      monthlyNet: monthlyRevenue - monthlyExpenses,
+      periodExpenses,
+      allTimeRevenue,
+      periodNet: periodRevenue - periodExpenses,
       monthlyChart,
       courseRevenue: courseRevenue.map((c: { _id: string; total: number }) => ({ name: c._id ?? "Other", value: c.total })),
       expensesByCategory: expensesByCategory.map((e: { _id: string; total: number }) => ({ category: e._id ?? "Other", total: e.total })),
@@ -119,8 +129,15 @@ async function getFinanceData() {
   }
 }
 
-export default async function FinancePage() {
-  const data = await getFinanceData();
+export default async function FinancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const { from = "", to = "" } = await searchParams;
+  const data = await getFinanceData(from, to);
+  const isFiltered = Boolean(from || to);
+  const periodLabel = isFiltered ? describeRange(from, to) : "All Time";
 
   if (!data) {
     return (
@@ -132,11 +149,41 @@ export default async function FinancePage() {
   }
 
   const kpis = [
-    { icon: TrendingUp, label: "Total Revenue", value: fmt(data.totalRevenue), sub: "All received payments", color: "#2E7D32" },
-    { icon: CreditCard, label: "This Month", value: fmt(data.monthlyRevenue), sub: "Received this month", color: "#2196F3" },
-    { icon: Receipt, label: "Pending / Overdue", value: fmt(data.totalPending), sub: "Not yet collected", color: "#F59E0B" },
-    { icon: TrendingDown, label: "Total Expenses", value: fmt(data.totalExpenses), sub: "All time", color: "#EF5350" },
-    { icon: BarChart3, label: "Net Income", value: fmt(data.net), sub: "Revenue minus expenses", color: data.net >= 0 ? "#2E7D32" : "#EF5350" },
+    {
+      icon: TrendingUp,
+      label: isFiltered ? `Revenue (${periodLabel})` : "Total Revenue",
+      value: fmt(data.periodRevenue),
+      sub: isFiltered ? "Received in period" : "All received payments",
+      color: "#2E7D32",
+    },
+    {
+      icon: TrendingDown,
+      label: isFiltered ? `Expenses (${periodLabel})` : "Total Expenses",
+      value: fmt(data.periodExpenses),
+      sub: isFiltered ? "Costs in period" : "All time",
+      color: "#EF5350",
+    },
+    {
+      icon: BarChart3,
+      label: isFiltered ? `Net (${periodLabel})` : "Net Income",
+      value: fmt(data.periodNet),
+      sub: "Revenue minus expenses",
+      color: data.periodNet >= 0 ? "#2E7D32" : "#EF5350",
+    },
+    {
+      icon: CreditCard,
+      label: "Pending / Overdue",
+      value: fmt(data.totalPending),
+      sub: "Not yet collected (all time)",
+      color: "#F59E0B",
+    },
+    {
+      icon: TrendingUp,
+      label: "All-Time Revenue",
+      value: fmt(data.allTimeRevenue),
+      sub: "Total received ever",
+      color: "#2196F3",
+    },
   ];
 
   const maxExpense = Math.max(...data.expensesByCategory.map((e) => e.total), 1);
@@ -144,10 +191,17 @@ export default async function FinancePage() {
   return (
     <div className="space-y-7">
       {/* Header */}
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">Business</p>
-        <h1 className="mt-1 text-3xl font-bold text-[#0D1F0E]">Finance</h1>
-        <p className="mt-1 text-sm text-slate-500">Revenue, expenses, and financial performance</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">Business</p>
+          <h1 className="mt-1 text-3xl font-bold text-[#0D1F0E]">Finance</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {isFiltered ? `Filtered: ${periodLabel}` : "Revenue, expenses, and financial performance"}
+          </p>
+        </div>
+        <Suspense fallback={null}>
+          <UrlDateFilter />
+        </Suspense>
       </div>
 
       {/* KPI cards */}
@@ -202,9 +256,11 @@ export default async function FinancePage() {
           )}
           {/* Monthly net row */}
           <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-            <span className="text-sm font-semibold text-slate-600">Net this month</span>
-            <span className={`text-lg font-bold ${data.monthlyNet >= 0 ? "text-[#2E7D32]" : "text-rose-600"}`}>
-              {data.monthlyNet >= 0 ? "+" : ""}{fmt(data.monthlyNet)}
+            <span className="text-sm font-semibold text-slate-600">
+              {isFiltered ? `Net (${periodLabel})` : "Net this month"}
+            </span>
+            <span className={`text-lg font-bold ${data.periodNet >= 0 ? "text-[#2E7D32]" : "text-rose-600"}`}>
+              {data.periodNet >= 0 ? "+" : ""}{fmt(data.periodNet)}
             </span>
           </div>
         </div>
@@ -213,7 +269,9 @@ export default async function FinancePage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4">
             <h2 className="text-base font-bold text-[#0D1F0E]">Revenue by Course</h2>
-            <p className="mt-0.5 text-xs text-slate-500">All received payments</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {isFiltered ? periodLabel : "All received payments"}
+            </p>
           </div>
           {data.courseRevenue.length === 0 ? (
             <div className="flex h-48 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
@@ -248,7 +306,9 @@ export default async function FinancePage() {
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold text-[#0D1F0E]">Expenses by Category</h2>
-              <p className="mt-0.5 text-xs text-slate-500">All time breakdown</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {isFiltered ? periodLabel : "All time breakdown"}
+              </p>
             </div>
             <Link
               href="/expenses"
