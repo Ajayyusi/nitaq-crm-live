@@ -118,7 +118,7 @@ export default function Sidebar({
       {/* Logo */}
       <div className="border-b border-white/10 px-5 py-5">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg">
+          <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg dark:bg-green-200 dark:text-[#1B5E20]">
             NA
           </div>
           <div className="flex-1 min-w-0">
@@ -184,7 +184,7 @@ export default function Sidebar({
       <div className="border-t border-white/10 p-4">
         <div className="rounded-xl bg-white/[0.08] p-3">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full bg-white text-xs font-bold text-[#1B5E20]">
+            <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full bg-white text-xs font-bold text-[#1B5E20] dark:bg-green-200 dark:text-[#1B5E20]">
               {initials}
             </div>
             <div className="min-w-0 flex-1">

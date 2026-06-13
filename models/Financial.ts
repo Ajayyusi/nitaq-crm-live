@@ -6,6 +6,7 @@ export const paymentMethods = [
   "Card",
   "Cheque",
   "Online",
+  "Tabby",
 ] as const;
 
 export const paymentTypes = [
