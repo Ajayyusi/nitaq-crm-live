@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import {
   ClipboardList, Edit3, Loader2, MessageCircle, Plus, Search, Trash2, X,
 } from "lucide-react";
-import { enrollmentStatuses, paymentStatuses, scheduleFormats } from "@/constants/modelConstants";
+import { enrollmentStatuses, paymentMethods, paymentStatuses, scheduleFormats } from "@/constants/modelConstants";
 import { courseList } from "@/constants/leads";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import { thisMonthRange } from "@/lib/dateRange";
@@ -19,14 +19,15 @@ type Enrollment = {
 type FormState = {
   fullName: string; phone: string; email: string; emiratesId: string; nationality: string;
   course: string; batchName: string; startDate: string; endDate: string; schedule: string;
-  format: string; status: string; paymentStatus: string; totalFee: string; amountPaid: string; notes: string;
+  format: string; status: string; paymentStatus: string; totalFee: string; amountPaid: string;
+  paymentMethod: string; notes: string;
 };
 
 const emptyForm: FormState = {
   fullName: "", phone: "", email: "", emiratesId: "", nationality: "",
   course: "Other", batchName: "", startDate: "", endDate: "", schedule: "",
   format: "In-Person", status: "Active", paymentStatus: "Instalment 1 Paid",
-  totalFee: "", amountPaid: "", notes: "",
+  totalFee: "", amountPaid: "", paymentMethod: "Cash", notes: "",
 };
 
 function getErr(v: unknown, fb: string) {
@@ -117,7 +118,7 @@ export default function EnrollmentsPage() {
       fullName: e.fullName, phone: e.phone, email: e.email, emiratesId: "", nationality: "",
       course: e.course, batchName: e.batchName, startDate: e.startDate, endDate: e.endDate,
       schedule: e.schedule, format: e.format, status: e.status, paymentStatus: e.paymentStatus,
-      totalFee: e.totalFee.toString(), amountPaid: e.amountPaid.toString(), notes: e.notes,
+      totalFee: e.totalFee.toString(), amountPaid: e.amountPaid.toString(), paymentMethod: "Cash", notes: e.notes,
     });
     setFormError(""); setDrawerOpen(true);
   }
@@ -196,6 +197,7 @@ export default function EnrollmentsPage() {
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Total fee (AED)</label><input type="number" min="0" value={form.totalFee} onChange={(e) => set("totalFee", e.target.value)} className={inp} /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Amount paid (AED)</label><input type="number" min="0" value={form.amountPaid} onChange={(e) => set("amountPaid", e.target.value)} className={inp} /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Payment status</label><select value={form.paymentStatus} onChange={(e) => set("paymentStatus", e.target.value)} className={inp}>{paymentStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>
+                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Payment method</label><select value={form.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value)} className={inp}>{paymentMethods.map((m) => <option key={m}>{m}</option>)}</select></div>
                 </div>
                 <div><label className="block text-sm font-bold text-slate-700 mb-1">Notes</label><textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} className={inp} /></div>
               </div>

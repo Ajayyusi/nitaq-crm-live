@@ -2,9 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Enrollment from "@/models/Enrollment";
 import { enrollmentStatuses, paymentStatuses, scheduleFormats } from "@/models/Enrollment";
+import { Payment, paymentMethods } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+
+const allowedPaymentMethods = new Set<string>(paymentMethods);
+
+function derivePaymentType(paymentStatus: string, isFirstPayment: boolean): string {
+  if (paymentStatus === "Instalment 1 Paid" || paymentStatus === "Instalment 2 Pending") {
+    return "Instalment 1 of 2";
+  }
+  if (paymentStatus === "Paid Full" && !isFirstPayment) {
+    return "Instalment 2 of 2";
+  }
+  return "Full Payment";
+}
 
 const allowedStatuses = new Set<string>(enrollmentStatuses);
 const allowedPaymentStatuses = new Set<string>(paymentStatuses);
@@ -97,6 +110,28 @@ export async function POST(request: NextRequest) {
       notes: clean(body.notes) || undefined,
       leadId: body.leadId || undefined,
     });
+
+    const amountPaid = Number(body.amountPaid) || 0;
+    if (amountPaid > 0) {
+      const paymentType = derivePaymentType(paymentStatus, true);
+      const rawMethod = typeof body.paymentMethod === "string" ? body.paymentMethod.trim() : "";
+      const paymentMethod = allowedPaymentMethods.has(rawMethod) ? rawMethod : "Cash";
+      const seq = await getNextSequence("payment");
+      const paymentId = `P-${String(seq).padStart(3, "0")}`;
+      await Payment.create({
+        paymentId,
+        enrollmentId: enrollment._id,
+        studentName: fullName,
+        studentPhone: clean(body.phone) || undefined,
+        course: course || undefined,
+        amount: amountPaid,
+        paymentType,
+        paymentMethod,
+        status: "Received",
+        datePaid: new Date(),
+        notes: `Auto-recorded from enrollment ${enrollment.enrollmentId}`,
+      });
+    }
 
     return NextResponse.json({ enrollment: serializeEnrollment(enrollment) }, { status: 201 });
   } catch (error) {
