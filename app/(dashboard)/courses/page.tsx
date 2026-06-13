@@ -113,7 +113,7 @@ export default function CoursesPage() {
   }
 
   async function deleteCourse(c: Course) {
-    if (!window.confirm(`Delete "${c.courseName}"?`)) return;
+    if (!window.confirm(`Delete course "${c.courseName}"? This cannot be undone.`)) return;
     try {
       await fetch(`/api/courses/${c.id}`, { method: "DELETE" });
       setNotice("Course deleted.");

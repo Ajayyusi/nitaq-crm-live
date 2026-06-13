@@ -116,7 +116,7 @@ export default function EnrollmentsPage() {
   }
 
   async function deleteEnrollment(e: Enrollment) {
-    if (!window.confirm(`Delete enrollment for ${e.fullName}?`)) return;
+    if (!window.confirm(`Delete enrollment for ${e.fullName}? This cannot be undone.`)) return;
     try {
       await fetch(`/api/enrollments/${e.id}`, { method: "DELETE" });
       setNotice("Enrollment deleted."); await load();

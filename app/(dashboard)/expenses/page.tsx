@@ -113,7 +113,7 @@ export default function ExpensesPage() {
   }
 
   async function deleteExpense(e: Expense) {
-    if (!confirm(`Delete expense ${e.expenseId}? This cannot be undone.`)) return;
+    if (!confirm(`Delete expense ${e.expenseId} (${e.category})? This will permanently remove this financial record and cannot be undone.`)) return;
     try {
       await fetch(`/api/expenses/${e.id}`, { method: "DELETE" });
       void fetchExpenses();

@@ -134,7 +134,7 @@ export default function FollowUpsPage() {
   }
 
   async function deleteFollowUp(id: string, name: string) {
-    if (!window.confirm(`Delete follow-up for ${name}?`)) return;
+    if (!window.confirm(`Delete follow-up for ${name}? This cannot be undone.`)) return;
     try {
       await fetch(`/api/follow-ups/${id}`, { method: "DELETE" });
       setNotice("Follow-up deleted.");

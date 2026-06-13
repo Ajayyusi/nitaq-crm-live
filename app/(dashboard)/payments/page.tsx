@@ -193,7 +193,7 @@ export default function PaymentsPage() {
   }
 
   async function deletePayment(p: Payment) {
-    if (!confirm(`Delete payment ${p.paymentId}? This cannot be undone.`)) return;
+    if (!confirm(`Delete payment ${p.paymentId} (${p.studentName})? This will permanently remove this financial record and cannot be undone.`)) return;
     try {
       await fetch(`/api/payments/${p.id}`, { method: "DELETE" });
       void fetchPayments();

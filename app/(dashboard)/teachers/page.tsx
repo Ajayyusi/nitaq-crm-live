@@ -100,7 +100,7 @@ export default function TrainersPage() {
   }
 
   async function deleteTrainer(t: Trainer) {
-    if (!window.confirm(`Delete trainer ${t.fullName}?`)) return;
+    if (!window.confirm(`Delete trainer ${t.fullName}? This cannot be undone.`)) return;
     try {
       await fetch(`/api/teachers/${t.id}`, { method: "DELETE" });
       setNotice("Trainer deleted."); await load();
