@@ -67,6 +67,25 @@ export default function EnrollmentsPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
+  // Pre-fill from lead conversion query params
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const name = params.get("name");
+    if (!name) return;
+    setForm({
+      ...emptyForm,
+      fullName: name,
+      phone: params.get("phone") ?? "",
+      email: params.get("email") ?? "",
+      course: params.get("course") ?? "Other",
+    });
+    setEditingEnrollment(null);
+    setFormError("");
+    setDrawerOpen(true);
+    window.history.replaceState({}, "", "/enrollments");
+  }, []);
+
   async function load() {
     setLoading(true);
     try {

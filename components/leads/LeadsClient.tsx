@@ -13,6 +13,7 @@ import {
   Edit3,
   ExternalLink,
   Filter,
+  GraduationCap,
   Loader2,
   MessageCircle,
   Plus,
@@ -22,6 +23,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   courseList,
   leadSources,
@@ -143,12 +145,14 @@ function whatsappUrl(phone: string) {
 }
 
 export default function LeadsClient() {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
   const [source, setSource] = useState("all");
   const [sort, setSort] = useState<SortOrder>("newest");
   const [loading, setLoading] = useState(true);
+  const [converting, setConverting] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
@@ -261,6 +265,32 @@ export default function LeadsClient() {
       await loadLeads();
     } catch (caught) {
       setError(getErrorMessage(caught, "Unable to delete lead."));
+    }
+  }
+
+  async function convertToEnrollment(lead: Lead) {
+    setConverting(lead.id);
+    setError("");
+    try {
+      // Mark lead as Enrolled
+      await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: "Enrolled" }),
+      });
+      await loadLeads();
+      // Navigate to enrollments with pre-filled data
+      const params = new URLSearchParams({
+        name: lead.fullName,
+        phone: lead.phone,
+        ...(lead.email ? { email: lead.email } : {}),
+        course: lead.course,
+      });
+      router.push(`/enrollments?${params.toString()}`);
+    } catch {
+      setError("Could not start conversion. Please try again.");
+    } finally {
+      setConverting(null);
     }
   }
 
@@ -612,6 +642,20 @@ export default function LeadsClient() {
                             >
                               <Edit3 className="h-4 w-4" />
                             </button>
+                            {lead.stage !== "Enrolled" && (
+                              <button
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-teal-200 text-teal-600 transition hover:bg-teal-50 disabled:opacity-40"
+                                onClick={() => void convertToEnrollment(lead)}
+                                type="button"
+                                disabled={converting === lead.id}
+                                title="Convert to Enrollment"
+                                aria-label={`Convert ${lead.fullName} to enrollment`}
+                              >
+                                {converting === lead.id
+                                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                                  : <GraduationCap className="h-4 w-4" />}
+                              </button>
+                            )}
                             <button
                               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 text-rose-600 transition hover:bg-rose-50"
                               onClick={() => void deleteLead(lead)}
