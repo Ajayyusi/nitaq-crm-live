@@ -187,6 +187,11 @@ export default function LeadsClient() {
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
 
+  // Lead detail view panel
+  const [viewLead, setViewLead] = useState<Lead | null>(null);
+  const [viewTimeline, setViewTimeline] = useState<FollowUpEntry[]>([]);
+  const [viewTimelineLoading, setViewTimelineLoading] = useState(false);
+
   // Lead edit/create drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -242,16 +247,30 @@ export default function LeadsClient() {
   }, [queryString]);
 
   useEffect(() => {
-    if (!drawerOpen && !fuDrawerOpen) return;
+    if (!drawerOpen && !fuDrawerOpen && !viewLead) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (fuDrawerOpen) setFuDrawerOpen(false);
-        else closeDrawer();
+        else if (drawerOpen) closeDrawer();
+        else setViewLead(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [drawerOpen, fuDrawerOpen]);
+  }, [drawerOpen, fuDrawerOpen, viewLead]);
+
+  // ── Lead detail view ─────────────────────────────────────────────────────────
+
+  function openViewPanel(lead: Lead) {
+    setViewLead(lead);
+    setViewTimeline([]);
+    setViewTimelineLoading(true);
+    fetch(`/api/leads/${lead.id}/follow-ups`)
+      .then((r) => r.json())
+      .then((d) => setViewTimeline(d.followUps ?? []))
+      .catch(() => {})
+      .finally(() => setViewTimelineLoading(false));
+  }
 
   // ── Lead drawer ──────────────────────────────────────────────────────────────
 
@@ -456,6 +475,18 @@ export default function LeadsClient() {
 
   return (
     <>
+      {/* Lead detail panel */}
+      <LeadDetailPanel
+        lead={viewLead}
+        timeline={viewTimeline}
+        timelineLoading={viewTimelineLoading}
+        converting={converting}
+        onClose={() => setViewLead(null)}
+        onEdit={(lead) => { setViewLead(null); openEditForm(lead); }}
+        onAddFollowUp={(lead) => { setViewLead(null); openFollowUpFor(lead); }}
+        onConvert={(lead) => { setViewLead(null); void convertToEnrollment(lead); }}
+      />
+
       {/* Lead edit/create drawer */}
       <LeadDrawer
         open={drawerOpen}
@@ -667,10 +698,10 @@ export default function LeadsClient() {
                         <td className="px-4 py-4 max-w-[220px]">
                           <button
                             type="button"
-                            onClick={() => openEditForm(lead)}
+                            onClick={() => openViewPanel(lead)}
                             className="text-left group"
                           >
-                            <p className="font-bold text-[#0D1F0E] group-hover:text-[#2E7D32] transition-colors">
+                            <p className="font-bold text-[#0D1F0E] group-hover:text-[#2E7D32] transition-colors underline-offset-2 group-hover:underline">
                               {lead.fullName}
                             </p>
                           </button>
@@ -778,6 +809,218 @@ export default function LeadsClient() {
         </section>
       </div>
     </>
+  );
+}
+
+// ── Lead Detail Panel ────────────────────────────────────────────────────────
+
+function LeadDetailPanel({
+  lead, timeline, timelineLoading, converting,
+  onClose, onEdit, onAddFollowUp, onConvert,
+}: {
+  lead: Lead | null;
+  timeline: FollowUpEntry[];
+  timelineLoading: boolean;
+  converting: string | null;
+  onClose: () => void;
+  onEdit: (lead: Lead) => void;
+  onAddFollowUp: (lead: Lead) => void;
+  onConvert: (lead: Lead) => void;
+}) {
+  if (!lead) return null;
+  const waUrl = whatsappUrl(lead.phone);
+  const urgency = getFollowUpUrgency(lead.nextFollowUpDate);
+  const canConvert = lead.stage !== "Enrolled" && lead.stage !== "Paid";
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-[#0D1F0E]/40 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[540px] flex-col bg-white shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="border-b border-white/10 bg-[#0D1F0E] px-6 py-5 text-white">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">Lead Details</p>
+              <h2 className="mt-1 text-xl font-bold truncate">{lead.fullName}</h2>
+              <div className="mt-1 flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full flex-shrink-0 ${stageConfig[lead.stage]?.dot ?? "bg-slate-400"}`} />
+                <span className="text-sm text-slate-300">{lead.stage}</span>
+                <span className="text-slate-600">·</span>
+                <span className="text-xs text-slate-400 font-mono">{lead.leadId}</span>
+              </div>
+            </div>
+            <button
+              className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-white/10 text-white transition hover:bg-white/20"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Action bar */}
+        <div className="flex flex-wrap gap-2 border-b border-slate-100 bg-slate-50 px-6 py-3">
+          {waUrl && (
+            <a href={waUrl} target="_blank" rel="noopener noreferrer"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-green-200 bg-[#E8F5E9] px-3 text-xs font-bold text-[#2E7D32] hover:bg-green-100 transition">
+              <MessageCircle className="h-3.5 w-3.5" />WhatsApp
+            </a>
+          )}
+          <button type="button" onClick={() => onAddFollowUp(lead)}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-bold text-amber-700 hover:bg-amber-100 transition">
+            <BellRing className="h-3.5 w-3.5" />Add Follow-Up
+          </button>
+          <button type="button" onClick={() => onEdit(lead)}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 transition">
+            <Edit3 className="h-3.5 w-3.5" />Edit
+          </button>
+          {canConvert && (
+            <button type="button" onClick={() => onConvert(lead)} disabled={converting === lead.id}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 text-xs font-bold text-teal-700 hover:bg-teal-100 transition disabled:opacity-50">
+              {converting === lead.id
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <GraduationCap className="h-3.5 w-3.5" />}
+              Enroll
+            </button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+          {/* Contact info */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <InfoRow label="Phone">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-800">{lead.phone || "—"}</span>
+                {waUrl && (
+                  <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-[#2E7D32] hover:underline text-xs flex items-center gap-0.5">
+                    <MessageCircle className="h-3 w-3" />WA
+                  </a>
+                )}
+              </div>
+            </InfoRow>
+            <InfoRow label="Email">
+              <span className="text-sm font-semibold text-slate-800">{lead.email || "—"}</span>
+            </InfoRow>
+            <InfoRow label="Course Interest">
+              <span className="text-sm font-semibold text-slate-800">{lead.course}</span>
+            </InfoRow>
+            <InfoRow label="Source">
+              <Badge className={sourceConfig[lead.source]}>{lead.source}</Badge>
+            </InfoRow>
+            <InfoRow label="Stage">
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${stageConfig[lead.stage]?.dot ?? "bg-slate-300"}`} />
+                <Badge className={stageConfig[lead.stage]?.cls ?? "bg-slate-100 text-slate-600 ring-slate-200"}>
+                  {lead.stage}
+                </Badge>
+              </div>
+            </InfoRow>
+            <InfoRow label="Assigned To">
+              <span className="text-sm font-semibold text-slate-800">{lead.assignedTo || "—"}</span>
+            </InfoRow>
+            <InfoRow label="Created">
+              <span className="text-sm text-slate-600">{formatDate(lead.createdAt)}</span>
+            </InfoRow>
+            <InfoRow label="Next Follow-Up">
+              <span className={`text-sm font-semibold ${
+                urgency === "overdue" ? "text-rose-700" :
+                urgency === "today" ? "text-amber-700" : "text-slate-800"
+              }`}>
+                {urgency === "overdue" && "⚠ "}
+                {urgency === "today" && "● "}
+                {formatDate(lead.nextFollowUpDate)}
+              </span>
+            </InfoRow>
+          </div>
+
+          {/* Notes */}
+          {lead.notes && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Notes</p>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{lead.notes}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Follow-up timeline */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Follow-Up History</p>
+              <button type="button" onClick={() => onAddFollowUp(lead)}
+                className="text-xs font-bold text-amber-600 hover:text-amber-700 transition">
+                + Add
+              </button>
+            </div>
+            {timelineLoading ? (
+              <div className="flex items-center gap-2 py-4 text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-xs">Loading history...</span>
+              </div>
+            ) : timeline.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center">
+                <CalendarDays className="h-6 w-6 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">No follow-ups recorded yet.</p>
+                <button type="button" onClick={() => onAddFollowUp(lead)}
+                  className="mt-2 text-xs font-bold text-amber-600 hover:underline">
+                  Add the first one →
+                </button>
+              </div>
+            ) : (
+              <div className="relative border-l-2 border-slate-200 pl-4 ml-2 space-y-0">
+                {timeline.map((fu) => (
+                  <div key={fu.id} className="relative pb-4 last:pb-0">
+                    <span className="absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 border-white bg-[#2E7D32] shadow" />
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-slate-700">{formatDate(fu.followUpDate)}</span>
+                        <span className="text-[10px] rounded-full bg-white border border-slate-200 px-2 py-0.5 font-semibold text-slate-600">{fu.type}</span>
+                        <TimelineStatusBadge status={fu.status} />
+                      </div>
+                      {fu.notes && <p className="text-xs text-slate-600 leading-relaxed">{fu.notes}</p>}
+                      {fu.assignedTo && <p className="mt-1.5 text-[10px] text-slate-400">by {fu.assignedTo}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex justify-between items-center">
+          <span className="text-xs text-slate-400">Updated {formatDate(lead.updatedAt)}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100 transition"
+          >
+            Close
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{label}</p>
+      {children}
+    </div>
   );
 }
 
