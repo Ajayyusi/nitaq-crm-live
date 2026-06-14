@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   BellRing,
   CheckCircle2,
@@ -43,7 +43,10 @@ type FormState = {
   notes: string;
   status: FollowUpStatus;
   assignedTo: string;
+  leadId: string;
 };
+
+type LeadOption = { id: string; fullName: string; phone: string; course: string; stage: string };
 
 const emptyForm: FormState = {
   contactName: "",
@@ -54,6 +57,7 @@ const emptyForm: FormState = {
   notes: "",
   status: "Pending",
   assignedTo: "",
+  leadId: "",
 };
 
 const statusConfig: Record<FollowUpStatus, string> = {
@@ -94,6 +98,11 @@ function getErr(v: unknown, fallback: string) {
 export default function FollowUpsPage() {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loading, setLoading] = useState(true);
+  // Lead search for auto-fill
+  const [leadSearch, setLeadSearch] = useState("");
+  const [leadResults, setLeadResults] = useState<LeadOption[]>([]);
+  const [leadSearchLoading, setLeadSearchLoading] = useState(false);
+  const leadSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [statusFilter, setStatusFilter] = useState("Pending");
   const [viewFilter, setViewFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -104,6 +113,32 @@ export default function FollowUpsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState("");
+
+  const searchLeads = useCallback((q: string) => {
+    if (leadSearchRef.current) clearTimeout(leadSearchRef.current);
+    if (!q.trim()) { setLeadResults([]); return; }
+    leadSearchRef.current = setTimeout(async () => {
+      setLeadSearchLoading(true);
+      try {
+        const res = await fetch(`/api/leads?search=${encodeURIComponent(q.trim())}&sort=newest`);
+        const data = await res.json();
+        setLeadResults((data.leads ?? []).slice(0, 6));
+      } catch { /* ignore */ }
+      finally { setLeadSearchLoading(false); }
+    }, 300);
+  }, []);
+
+  function pickLead(lead: LeadOption) {
+    setForm((f) => ({
+      ...f,
+      contactName: lead.fullName,
+      phone: lead.phone,
+      course: lead.course || f.course,
+      leadId: lead.id,
+    }));
+    setLeadSearch(`${lead.fullName} — ${lead.phone}`);
+    setLeadResults([]);
+  }
 
   async function loadFollowUps() {
     setLoading(true);
@@ -161,13 +196,15 @@ export default function FollowUpsPage() {
       const res = await fetch("/api/follow-ups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, leadId: form.leadId || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw data;
       setNotice("Follow-up created.");
       setDrawerOpen(false);
       setForm(emptyForm);
+      setLeadSearch("");
+      setLeadResults([]);
       await loadFollowUps();
     } catch (caught) {
       setFormError(getErr(caught, "Failed to create follow-up."));
@@ -215,6 +252,42 @@ export default function FollowUpsPage() {
                     {formError}
                   </div>
                 )}
+                {/* Lead search picker */}
+                <div className="relative">
+                  <F label="Search existing lead (optional — auto-fills details)">
+                    <div className="relative">
+                      <input
+                        value={leadSearch}
+                        onChange={(e) => { setLeadSearch(e.target.value); searchLeads(e.target.value); }}
+                        className={inp}
+                        placeholder="Type name or phone to search leads..."
+                        autoComplete="off"
+                      />
+                      {leadSearchLoading && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <svg className="h-4 w-4 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                        </span>
+                      )}
+                    </div>
+                  </F>
+                  {leadResults.length > 0 && (
+                    <div className="absolute left-0 right-0 z-10 mt-1 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                      {leadResults.map((lead) => (
+                        <button key={lead.id} type="button" onClick={() => pickLead(lead)}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-[#E8F5E9] transition border-b border-slate-100 last:border-0">
+                          <div>
+                            <p className="font-bold text-[#0D1F0E]">{lead.fullName}</p>
+                            <p className="text-xs text-slate-500">{lead.phone} · {lead.course} · <span className="font-semibold text-slate-600">{lead.stage}</span></p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {form.leadId && (
+                    <p className="mt-1 text-xs text-[#2E7D32] font-semibold">✓ Linked to lead — details auto-filled below</p>
+                  )}
+                </div>
+
                 <div className="grid gap-4 sm:grid-cols-2">
                   <F label="Contact name *">
                     <input required value={form.contactName} onChange={(e) => setForm((f) => ({ ...f, contactName: e.target.value }))} className={inp} placeholder="Lead or student name" />

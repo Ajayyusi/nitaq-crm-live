@@ -75,8 +75,9 @@ async function getDashboardData(role: string, from: string, to: string) {
     let todayFollowUps: { id: string; contactName: string; phone: string; course: string; type: string; assignedTo: string }[] = [];
     let recentEnrollments: { id: string; enrollmentId: string; fullName: string; course: string; status: string; paymentStatus: string; amountPaid: number; totalFee: number }[] = [];
 
+    let leadsNoFollowUp = 0;
     if (showSales) {
-      [leadTotal, fresh, interested, enrolled, paid, lost, overdueFollowUps] = await Promise.all([
+      [leadTotal, fresh, interested, enrolled, paid, lost, overdueFollowUps, leadsNoFollowUp] = await Promise.all([
         Lead.countDocuments(),
         Lead.countDocuments({ stage: "Lead" }),
         Lead.countDocuments({ stage: "Interested" }),
@@ -84,6 +85,7 @@ async function getDashboardData(role: string, from: string, to: string) {
         Lead.countDocuments({ stage: "Paid" }),
         Lead.countDocuments({ stage: "Lost" }),
         Lead.countDocuments({ nextFollowUpDate: { $lt: todayStart }, stage: { $nin: ["Paid", "Lost"] } }),
+        Lead.countDocuments({ nextFollowUpDate: { $exists: false }, stage: { $nin: ["Enrolled", "Paid", "Lost"] } }),
       ]);
       const rawFollowUps = await FollowUp.find({ followUpDate: { $gte: todayStart, $lt: todayEnd }, status: "Pending" })
         .sort({ followUpDate: 1 }).limit(8).lean();
@@ -150,7 +152,7 @@ async function getDashboardData(role: string, from: string, to: string) {
 
     return {
       role, showFinance, showSales, showClasses,
-      leadTotal, fresh, interested, enrolled, paid, lost,
+      leadTotal, fresh, interested, enrolled, paid, lost, leadsNoFollowUp,
       activeStudents, monthlyRevenue, pendingPayments, overdueFollowUps,
       upcomingSessions, conversionRate,
       todayFollowUps, recentEnrollments, courseBreakdown, recentPayments,
@@ -263,6 +265,11 @@ export default async function DashboardPage({
     data.showSales && data.overdueFollowUps > 0 && {
       label: "Overdue Follow-Ups", value: data.overdueFollowUps,
       sub: "Need immediate action", icon: BellRing, topColor: "#EF5350", href: "/follow-ups",
+    },
+    // Sales — leads with no follow-up scheduled
+    data.showSales && data.leadsNoFollowUp > 0 && {
+      label: "No Follow-Up Set", value: data.leadsNoFollowUp,
+      sub: "Active leads not scheduled", icon: UserPlus, topColor: "#78909C", href: "/leads",
     },
   ].filter(Boolean) as { label: string; value: number | string; sub: string; icon: typeof UserPlus; topColor: string; href: string }[];
 
