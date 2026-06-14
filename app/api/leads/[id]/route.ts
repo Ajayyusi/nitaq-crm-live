@@ -114,11 +114,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!existing) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
     if (!canAccessLead(authed, existing)) return NextResponse.json({ message: "Access denied." }, { status: 403 });
 
-    const body = (await request.json()) as LeadUpdatePayload;
+    const body = (await request.json()) as LeadUpdatePayload & { appendNote?: string };
     // Sales cannot reassign leads to others
     if (authed.role === "sales") delete body.assignedTo;
 
-    const lead = await Lead.findByIdAndUpdate(id, buildUpdate(body), {
+    // Handle note append separately via $push
+    const { appendNote, ...rest } = body;
+    const updateOps: Record<string, unknown> = { $set: buildUpdate(rest as LeadUpdatePayload) };
+    if (appendNote && typeof appendNote === "string" && appendNote.trim()) {
+      updateOps.$push = { noteLog: { text: appendNote.trim(), by: authed.name, at: new Date() } };
+    }
+
+    const lead = await Lead.findByIdAndUpdate(id, updateOps, {
       new: true,
       runValidators: true,
     });

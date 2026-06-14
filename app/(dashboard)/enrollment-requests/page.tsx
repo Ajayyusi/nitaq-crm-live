@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, Loader2, X, MessageCircle } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Clock, Loader2, X, MessageCircle, GraduationCap } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import { useSession } from "next-auth/react";
 
@@ -240,12 +241,22 @@ function RequestRow({ r, isSales, onReview }: { r: EnrollmentRequest; isSales: b
           </p>
         )}
       </div>
-      {!isSales && r.status === "Pending" && (
-        <button onClick={onReview} type="button"
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#2E7D32] bg-[#E8F5E9] px-4 text-sm font-bold text-[#2E7D32] transition hover:bg-green-100 shrink-0">
-          Review
-        </button>
-      )}
+      <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+        {!isSales && r.status === "Pending" && (
+          <button onClick={onReview} type="button"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#2E7D32] bg-[#E8F5E9] px-4 text-sm font-bold text-[#2E7D32] transition hover:bg-green-100">
+            Review
+          </button>
+        )}
+        {!isSales && r.status === "Approved" && (
+          <Link
+            href={`/enrollments?name=${encodeURIComponent(r.leadName)}&phone=${encodeURIComponent(r.leadPhone)}&course=${encodeURIComponent(r.course)}`}
+            className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-sm font-bold text-white transition hover:bg-[#1B5E20]">
+            <GraduationCap className="h-4 w-4" />
+            Convert to Enrollment
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

@@ -42,6 +42,8 @@ import { thisMonthRange } from "@/lib/dateRange";
 type SortOrder = "newest" | "oldest";
 type SalesUser = { id: string; name: string; email: string };
 
+type NoteEntry = { text: string; by: string; at: string };
+
 type Lead = {
   id: string;
   leadId: string;
@@ -52,6 +54,7 @@ type Lead = {
   source: LeadSource;
   stage: LeadStage;
   notes: string;
+  noteLog: NoteEntry[];
   nextFollowUpDate: string;
   assignedTo: string;
   createdBy: string;
@@ -236,6 +239,12 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
       .catch(() => {});
   }, [isSales]);
 
+  // WhatsApp template dropdown
+  const [waMenuId, setWaMenuId] = useState<string | null>(null);
+
+  // Duplicate warning
+  const [dupWarning, setDupWarning] = useState<{ message: string; duplicate?: Lead } | null>(null);
+
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAssignTo, setBulkAssignTo] = useState("");
@@ -358,6 +367,11 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
         },
       );
       const data = await res.json();
+      if (!editingLead && res.status === 409) {
+        setDupWarning({ message: data.message, duplicate: data.duplicate });
+        setSaving(false);
+        return;
+      }
       if (!res.ok) throw data;
       setNotice(editingLead ? "Lead updated." : "Lead added.");
       closeDrawer();
@@ -521,7 +535,7 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
     setError("");
     setNotice("");
     try {
-      const res = await fetch("/api/leads/export");
+      const res = await fetch(`/api/leads/export?${queryString}`);
       if (!res.ok) throw await res.json();
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -729,7 +743,7 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
         </div>
 
         {/* Alerts */}
-        {(notice || error) && (
+        {(notice || error || dupWarning) && (
           <div className="space-y-2">
             {notice && (
               <div className="flex items-center justify-between rounded-xl border border-green-200 bg-[#E8F5E9] px-4 py-3 text-sm font-semibold text-[#2E7D32]">
@@ -741,6 +755,20 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
               <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
                 <span>{error}</span>
                 <button onClick={() => setError("")} type="button"><X className="h-4 w-4" /></button>
+              </div>
+            )}
+            {dupWarning && (
+              <div className="flex flex-col gap-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-800">Duplicate phone detected</span>
+                  <button onClick={() => setDupWarning(null)} type="button"><X className="h-4 w-4 text-amber-700" /></button>
+                </div>
+                <p className="text-amber-700">{dupWarning.message}</p>
+                {dupWarning.duplicate && (
+                  <p className="text-xs text-amber-600">
+                    Existing: <strong>{dupWarning.duplicate.fullName}</strong> · {dupWarning.duplicate.stage} · {dupWarning.duplicate.course}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -955,13 +983,43 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
                           {lead.assignedTo || <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-4 py-4">
-                          <div className="flex justify-end gap-1.5">
+                          <div className="relative flex justify-end gap-1.5">
                             {waUrl && (
-                              <a href={waUrl} target="_blank" rel="noopener noreferrer"
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-green-200 bg-[#E8F5E9] text-[#2E7D32] transition hover:bg-green-100"
-                                title="Open WhatsApp">
-                                <MessageCircle className="h-4 w-4" />
-                              </a>
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setWaMenuId(waMenuId === lead.id ? null : lead.id)}
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-green-200 bg-[#E8F5E9] text-[#2E7D32] transition hover:bg-green-100"
+                                  title="WhatsApp templates">
+                                  <MessageCircle className="h-4 w-4" />
+                                </button>
+                                {waMenuId === lead.id && (
+                                  <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setWaMenuId(null)} />
+                                    <div className="absolute right-0 top-10 z-50 w-64 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                                      <p className="border-b border-slate-100 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">WhatsApp Templates</p>
+                                      {[
+                                        { label: "Initial contact", text: `Hi ${lead.fullName}! 👋 I'm from Nitaq Academy Sharjah. I noticed you're interested in ${lead.course}. Would you like to know more about our upcoming batches and pricing?` },
+                                        { label: "Follow-up reminder", text: `Hi ${lead.fullName}, just following up on your interest in ${lead.course} at Nitaq Academy. Have you had a chance to consider enrolling? I'd love to help you get started! 😊` },
+                                        { label: "Share brochure", text: `Hi ${lead.fullName}! I'm sending you the Nitaq Academy brochure for ${lead.course}. Feel free to reach out if you have any questions. We'd be happy to schedule a quick call! 📚` },
+                                        { label: "Enrollment offer", text: `Hi ${lead.fullName}! Great news — we have limited seats available for ${lead.course} at Nitaq Academy Sharjah. Enroll now to secure your spot. Reply YES and I'll guide you through the process! 🎓` },
+                                        { label: "Payment reminder", text: `Hi ${lead.fullName}, hope you're doing well! This is a friendly reminder about the pending payment for your ${lead.course} enrollment at Nitaq Academy. Please let me know if you need any assistance. 🙏` },
+                                      ].map((t) => (
+                                        <a
+                                          key={t.label}
+                                          href={`${waUrl}?text=${encodeURIComponent(t.text)}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={() => setWaMenuId(null)}
+                                          className="flex w-full items-center gap-3 border-b border-slate-50 px-4 py-2.5 text-left text-sm last:border-0 hover:bg-[#E8F5E9] transition">
+                                          <MessageCircle className="h-3.5 w-3.5 flex-shrink-0 text-[#2E7D32]" />
+                                          <span className="font-medium text-slate-700">{t.label}</span>
+                                        </a>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             )}
                             <button
                               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-200 text-amber-600 transition hover:bg-amber-50"
@@ -1258,6 +1316,40 @@ function LeadDrawer({
   isSales?: boolean;
   salesUsers?: SalesUser[];
 }) {
+  const [noteInput, setNoteInput] = useState("");
+  const [noteLog, setNoteLog] = useState<NoteEntry[]>([]);
+  const [noteSaving, setNoteSaving] = useState(false);
+
+  // Sync noteLog from editingLead when drawer opens
+  const prevLeadId = useRef<string | null>(null);
+  if (editingLead && editingLead.id !== prevLeadId.current) {
+    prevLeadId.current = editingLead.id;
+    setNoteLog(editingLead.noteLog ?? []);
+    setNoteInput("");
+  }
+  if (!editingLead && prevLeadId.current !== null) {
+    prevLeadId.current = null;
+    setNoteLog([]);
+    setNoteInput("");
+  }
+
+  async function appendNote() {
+    if (!editingLead || !noteInput.trim()) return;
+    setNoteSaving(true);
+    try {
+      const res = await fetch(`/api/leads/${editingLead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appendNote: noteInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setNoteLog(data.lead?.noteLog ?? []);
+      setNoteInput("");
+    } catch { /* ignore */ }
+    finally { setNoteSaving(false); }
+  }
+
   return (
     <>
       <div
@@ -1329,6 +1421,37 @@ function LeadDrawer({
                 placeholder="Conversation summary, parent preferences, key info..."
               />
             </label>
+
+            {/* Note log (editing only) */}
+            {editingLead && (
+              <div>
+                <p className="mb-2 text-sm font-bold text-slate-700">Note History</p>
+                <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                  {noteLog.length === 0 ? (
+                    <p className="text-xs text-slate-400">No notes recorded yet.</p>
+                  ) : [...noteLog].reverse().map((n, i) => (
+                    <div key={i} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+                      <p className="text-slate-800 leading-relaxed">{n.text}</p>
+                      <p className="mt-1 text-slate-400">{n.by} · {new Date(n.at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={noteInput}
+                    onChange={(e) => setNoteInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void appendNote(); }}}
+                    placeholder="Add a note and press Enter…"
+                    className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
+                  />
+                  <button type="button" onClick={() => void appendNote()} disabled={noteSaving || !noteInput.trim()}
+                    className="inline-flex h-9 items-center rounded-xl bg-[#2E7D32] px-3 text-xs font-bold text-white hover:bg-[#1B5E20] disabled:opacity-50">
+                    {noteSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Follow-up timeline (editing only) */}
             {editingLead && (

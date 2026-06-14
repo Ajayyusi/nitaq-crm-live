@@ -162,20 +162,23 @@ async function getDashboardData(role: string, from: string, to: string, userName
     }
 
     // Sales performance — admin/manager only
-    let salesPerformance: { name: string; total: number; interested: number; converted: number; overdue: number }[] = [];
+    let salesPerformance: { name: string; total: number; interested: number; converted: number; overdue: number; fuDone: number; fuTotal: number }[] = [];
     if (!isSalesOnly && can(role, SALES_ROLES)) {
       const salesStaff = await User.find({ role: { $in: ["sales", "staff"] }, active: true }, { name: 1 }).lean();
       salesPerformance = await Promise.all(
         salesStaff.map(async (u) => {
           const nameRx = new RegExp(`^${u.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
           const ownerFilter = { $or: [{ assignedTo: nameRx }, { createdBy: nameRx }] };
-          const [total, interested, converted, overdue] = await Promise.all([
+          const fuOwnerFilter = { assignedTo: nameRx };
+          const [total, interested, converted, overdue, fuDone, fuTotal] = await Promise.all([
             Lead.countDocuments(ownerFilter),
             Lead.countDocuments({ ...ownerFilter, stage: "Interested" }),
             Lead.countDocuments({ ...ownerFilter, stage: { $in: ["Enrolled", "Paid"] } }),
             Lead.countDocuments({ ...ownerFilter, nextFollowUpDate: { $lt: todayStart }, stage: { $nin: ["Paid", "Lost"] } }),
+            FollowUp.countDocuments({ ...fuOwnerFilter, status: "Done" }),
+            FollowUp.countDocuments(fuOwnerFilter),
           ]);
-          return { name: u.name, total, interested, converted, overdue };
+          return { name: u.name, total, interested, converted, overdue, fuDone, fuTotal };
         })
       );
       salesPerformance = salesPerformance.filter((s) => s.total > 0).sort((a, b) => b.total - a.total);
@@ -459,8 +462,8 @@ export default async function DashboardPage({
         </div>
       </section>
 
-      {/* ── Period filter (finance-relevant roles) ──────────────────────── */}
-      {data.showFinance && (
+      {/* ── Period filter (finance + sales roles) ───────────────────────── */}
+      {(data.showFinance || data.showSales) && (
         <div className="flex items-center gap-3 text-sm text-slate-500">
           <span className="font-medium">Period:</span>
           <Suspense fallback={null}>
@@ -656,12 +659,14 @@ export default async function DashboardPage({
                   <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Interested</th>
                   <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Converted</th>
                   <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Overdue</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Rate</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Done%</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Conv%</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {data.salesPerformance.map((s) => {
                   const rate = s.total > 0 ? Math.round((s.converted / s.total) * 100) : 0;
+                  const donePct = s.fuTotal > 0 ? Math.round((s.fuDone / s.fuTotal) * 100) : null;
                   return (
                     <tr key={s.name} className="hover:bg-slate-50 transition">
                       <td className="px-6 py-3.5">
@@ -678,6 +683,15 @@ export default async function DashboardPage({
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <span className={`text-sm font-bold ${s.overdue > 0 ? "text-rose-600" : "text-slate-400"}`}>{s.overdue}</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        {donePct === null ? (
+                          <span className="text-xs text-slate-400">—</span>
+                        ) : (
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${donePct >= 70 ? "bg-green-100 text-green-700" : donePct >= 40 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
+                            {donePct}%
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${rate >= 20 ? "bg-green-100 text-green-700" : rate >= 10 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>

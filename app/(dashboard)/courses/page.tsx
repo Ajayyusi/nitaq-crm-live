@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { BookOpen, Edit3, Loader2, Plus, Search, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { courseCategories, courseStatuses, batchFormats } from "@/constants/modelConstants";
 
 type Batch = {
@@ -43,6 +44,11 @@ const statusColors: Record<string, string> = {
 const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]";
 
 export default function CoursesPage() {
+  const { data: session } = useSession();
+  const rawRole = (session?.user as { role?: string })?.role ?? "sales";
+  const role = rawRole === "staff" ? "sales" : rawRole;
+  const isReadOnly = role === "sales" || role === "trainer";
+
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -218,9 +224,11 @@ export default function CoursesPage() {
               <h1 className="mt-2 text-3xl font-bold text-[#0D1F0E]">Courses</h1>
               <p className="mt-2 text-sm text-slate-500">Manage the course catalog, pricing, and batch scheduling.</p>
             </div>
-            <button onClick={openCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white shadow transition hover:bg-[#1B5E20]">
-              <Plus className="h-4 w-4" /> Add Course
-            </button>
+            {!isReadOnly && (
+              <button onClick={openCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white shadow transition hover:bg-[#1B5E20]">
+                <Plus className="h-4 w-4" /> Add Course
+              </button>
+            )}
           </div>
         </section>
 
@@ -252,7 +260,7 @@ export default function CoursesPage() {
             <div className="flex min-h-60 flex-col items-center justify-center gap-3 text-center">
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#E8F5E9] text-[#2E7D32]"><BookOpen className="h-6 w-6" /></div>
               <p className="text-lg font-bold text-[#0D1F0E]">No courses yet</p>
-              <button onClick={openCreate} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-sm font-bold text-white"><Plus className="h-4 w-4" />Add Course</button>
+              {!isReadOnly && <button onClick={openCreate} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-sm font-bold text-white"><Plus className="h-4 w-4" />Add Course</button>}
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -278,8 +286,8 @@ export default function CoursesPage() {
                       <button onClick={() => setExpandedId(expandedId === c.id ? null : c.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100" title="Toggle batches">
                         {expandedId === c.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </button>
-                      <button onClick={() => openEdit(c)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"><Edit3 className="h-4 w-4" /></button>
-                      <button onClick={() => void deleteCourse(c)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>
+                      {!isReadOnly && <button onClick={() => openEdit(c)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"><Edit3 className="h-4 w-4" /></button>}
+                      {!isReadOnly && <button onClick={() => void deleteCourse(c)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>}
                     </div>
                   </div>
                   {expandedId === c.id && (

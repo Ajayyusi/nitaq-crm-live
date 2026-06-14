@@ -21,14 +21,43 @@ function csvEscape(value: unknown) {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
 
+  const { searchParams } = new URL(req.url);
+  const stage = searchParams.get("stage") ?? "";
+  const source = searchParams.get("source") ?? "";
+  const course = searchParams.get("course") ?? "";
+  const assignedTo = searchParams.get("assignedTo") ?? "";
+  const search = searchParams.get("search") ?? "";
 
   try {
     await connectDB();
-    const leads = await Lead.find({}).sort({ createdAt: -1 }).lean();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filter: Record<string, any> = {};
+
+    // Sales role: restrict to own leads
+    if (authed.role === "sales") {
+      const nameRx = new RegExp(`^${authed.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+      filter.$or = [{ assignedTo: nameRx }, { createdBy: nameRx }];
+    }
+
+    if (stage) filter.stage = stage;
+    if (source) filter.source = source;
+    if (course) filter.course = course;
+    if (assignedTo && authed.role !== "sales") filter.assignedTo = assignedTo;
+    if (search) {
+      const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      const searchOr = [{ fullName: rx }, { phone: rx }, { course: rx }];
+      filter.$and = filter.$or
+        ? [{ $or: filter.$or }, { $or: searchOr }]
+        : [{ $or: searchOr }];
+      if (filter.$or) delete filter.$or;
+    }
+
+    const leads = await Lead.find(filter).sort({ createdAt: -1 }).lean();
 
     const lines = [
       columns.join(","),

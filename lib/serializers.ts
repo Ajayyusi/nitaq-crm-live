@@ -14,6 +14,11 @@ export function serializeLead(l: any) {
     nextFollowUpDate: l.nextFollowUpDate ? l.nextFollowUpDate.toISOString().slice(0, 10) : "",
     assignedTo: l.assignedTo ?? "",
     createdBy: l.createdBy ?? "",
+    noteLog: (l.noteLog ?? []).map((n: any) => ({
+      text: n.text ?? "",
+      by: n.by ?? "",
+      at: n.at ? new Date(n.at).toISOString() : "",
+    })),
     createdAt: l.createdAt?.toISOString() ?? "",
     updatedAt: l.updatedAt?.toISOString() ?? "",
   };

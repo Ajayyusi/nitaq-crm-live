@@ -143,6 +143,16 @@ export async function POST(request: NextRequest) {
       payload.createdBy = authed.name;
     }
 
+    // Duplicate phone detection
+    const phoneNorm = payload.phone.replace(/\s+/g, "");
+    const existing = await Lead.findOne({ phone: new RegExp(`^${phoneNorm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }).lean();
+    if (existing) {
+      return NextResponse.json({
+        message: `A lead with this phone number already exists (${existing.leadId} — ${existing.fullName}).`,
+        duplicate: serializeLead(existing),
+      }, { status: 409 });
+    }
+
     const seq = await getNextSequence("lead");
     const leadId = `L-${String(seq).padStart(3, "0")}`;
     const lead = await Lead.create({ ...payload, leadId });

@@ -9,6 +9,12 @@ import {
   type CourseOption,
 } from "@/constants/leads";
 
+export interface NoteEntry {
+  text: string;
+  by: string;
+  at: Date;
+}
+
 export interface ILead extends Document {
   leadId: string;
   fullName: string;
@@ -18,6 +24,7 @@ export interface ILead extends Document {
   source: LeadSource;
   stage: LeadStage;
   notes?: string;
+  noteLog?: NoteEntry[];
   nextFollowUpDate?: Date;
   assignedTo?: string;
   createdBy?: string;
@@ -86,6 +93,14 @@ const LeadSchema = new Schema<ILead>(
       trim: true,
       maxlength: [120, "Created by cannot exceed 120 characters"],
     },
+    noteLog: [
+      {
+        text: { type: String, required: true, trim: true, maxlength: 2000 },
+        by:   { type: String, required: true, trim: true, maxlength: 120 },
+        at:   { type: Date,   default: Date.now },
+        _id: false,
+      },
+    ],
   },
   { timestamps: true },
 );
