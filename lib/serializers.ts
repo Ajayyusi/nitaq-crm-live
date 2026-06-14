@@ -13,6 +13,7 @@ export function serializeLead(l: any) {
     notes: l.notes ?? "",
     nextFollowUpDate: l.nextFollowUpDate ? l.nextFollowUpDate.toISOString().slice(0, 10) : "",
     assignedTo: l.assignedTo ?? "",
+    createdBy: l.createdBy ?? "",
     createdAt: l.createdAt?.toISOString() ?? "",
     updatedAt: l.updatedAt?.toISOString() ?? "",
   };

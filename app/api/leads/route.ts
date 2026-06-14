@@ -16,6 +16,7 @@ type LeadPayload = {
   notes?: string;
   nextFollowUpDate?: string;
   assignedTo?: string;
+  createdBy?: string;
 };
 
 const allowedStages = new Set<string>(leadStages);
@@ -44,6 +45,8 @@ function buildLeadPayload(body: LeadPayload) {
   const assignedTo = cleanText(body.assignedTo);
   const nextFollowUpDate = cleanText(body.nextFollowUpDate);
 
+  const createdBy = cleanText(body.createdBy);
+
   return {
     fullName,
     phone,
@@ -53,6 +56,7 @@ function buildLeadPayload(body: LeadPayload) {
     stage,
     notes: notes || undefined,
     assignedTo: assignedTo || undefined,
+    createdBy: createdBy || undefined,
     nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : undefined,
   };
 }
@@ -61,7 +65,6 @@ function buildLeadPayload(body: LeadPayload) {
 export async function GET(request: NextRequest) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
-
 
   try {
     await connectDB();
@@ -76,6 +79,13 @@ export async function GET(request: NextRequest) {
 
     const query: Record<string, unknown> = {};
 
+    // Sales users only see leads assigned to or created by them
+    if (authed.role === "sales") {
+      const nameEsc = authed.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const nameRx = new RegExp(`^${nameEsc}$`, "i");
+      query.$or = [{ assignedTo: nameRx }, { createdBy: nameRx }];
+    }
+
     if (stage && allowedStages.has(stage)) query.stage = stage;
     if (source && allowedSources.has(source)) query.source = source;
     if (from || to) {
@@ -85,16 +95,26 @@ export async function GET(request: NextRequest) {
       query.createdAt = dateQ;
     }
     if (search) {
-      const regex = new RegExp(
+      const searchRx = new RegExp(
         search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
         "i",
       );
-      query.$or = [
-        { fullName: regex },
-        { phone: regex },
-        { course: regex },
-        { leadId: regex },
-      ];
+      // For sales users, combine ownership filter with search using $and
+      if (query.$or) {
+        const ownershipFilter = query.$or;
+        delete query.$or;
+        query.$and = [
+          { $or: ownershipFilter as unknown[] },
+          { $or: [{ fullName: searchRx }, { phone: searchRx }, { course: searchRx }, { leadId: searchRx }] },
+        ];
+      } else {
+        query.$or = [
+          { fullName: searchRx },
+          { phone: searchRx },
+          { course: searchRx },
+          { leadId: searchRx },
+        ];
+      }
     }
 
     const leads = await Lead.find(query).sort({ createdAt: sort }).lean();
@@ -110,11 +130,19 @@ export async function POST(request: NextRequest) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
 
-
   try {
     await connectDB();
     const body = (await request.json()) as LeadPayload;
     const payload = buildLeadPayload(body);
+
+    // Sales users: auto-assign to themselves; override any submitted assignedTo
+    if (authed.role === "sales") {
+      payload.assignedTo = authed.name;
+      payload.createdBy = authed.name;
+    } else if (!payload.createdBy) {
+      payload.createdBy = authed.name;
+    }
+
     const seq = await getNextSequence("lead");
     const leadId = `L-${String(seq).padStart(3, "0")}`;
     const lead = await Lead.create({ ...payload, leadId });

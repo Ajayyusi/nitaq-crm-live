@@ -32,6 +32,7 @@ const navGroups = [
       { label: "Leads",       href: "/leads",        icon: TrendingUp },
       { label: "Follow-Ups",  href: "/follow-ups",   icon: BellRing, badge: true },
       { label: "Students",    href: "/students",     icon: GraduationCap },
+      { label: "Enroll Requests", href: "/enrollment-requests", icon: ClipboardList },
     ],
   },
   {

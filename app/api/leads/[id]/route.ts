@@ -80,14 +80,23 @@ async function getLeadById(id: string) {
   return Lead.findById(id);
 }
 
+function canAccessLead(authed: { role: string; name: string }, lead: { assignedTo?: string; createdBy?: string }) {
+  if (authed.role !== "sales") return true;
+  const n = authed.name.toLowerCase();
+  return (
+    (lead.assignedTo ?? "").toLowerCase() === n ||
+    (lead.createdBy ?? "").toLowerCase() === n
+  );
+}
+
 export async function GET(_request: NextRequest, context: RouteContext) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
 
-
   const { id } = await context.params;
   const lead = await getLeadById(id);
   if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
+  if (!canAccessLead(authed, lead)) return NextResponse.json({ message: "Access denied." }, { status: 403 });
   return NextResponse.json({ lead: serializeLead(lead) });
 }
 
@@ -95,14 +104,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
 
-
   try {
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ message: "Invalid lead ID." }, { status: 400 });
     }
     await connectDB();
+    const existing = await Lead.findById(id).lean();
+    if (!existing) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
+    if (!canAccessLead(authed, existing)) return NextResponse.json({ message: "Access denied." }, { status: 403 });
+
     const body = (await request.json()) as LeadUpdatePayload;
+    // Sales cannot reassign leads to others
+    if (authed.role === "sales") delete body.assignedTo;
+
     const lead = await Lead.findByIdAndUpdate(id, buildUpdate(body), {
       new: true,
       runValidators: true,
@@ -116,9 +131,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const authed = await requireAuth(["admin", "manager", "sales"]);
+  const authed = await requireAuth(["admin", "manager"]);
   if (authed instanceof NextResponse) return authed;
-
 
   const { id } = await context.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {

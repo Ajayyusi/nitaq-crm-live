@@ -17,7 +17,6 @@ export async function GET(request: NextRequest) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
 
-
   try {
     await connectDB();
     const { searchParams } = new URL(request.url);
@@ -29,14 +28,20 @@ export async function GET(request: NextRequest) {
 
     const query: Record<string, unknown> = {};
 
-    if (status && allowedStatuses.has(status)) {
-      query.status = status;
-    }
-    if (assignedTo) {
+    // Sales users only see follow-ups they created or are assigned to
+    if (authed.role === "sales") {
+      const nameEsc = authed.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const nameRx = new RegExp(`^${nameEsc}$`, "i");
+      query.$or = [{ assignedTo: nameRx }, { createdBy: nameRx }];
+    } else if (assignedTo) {
       query.assignedTo = new RegExp(
         assignedTo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
         "i",
       );
+    }
+
+    if (status && allowedStatuses.has(status)) {
+      query.status = status;
     }
 
     // Date range filter on followUpDate — only when no specific view is selected
@@ -82,7 +87,6 @@ export async function POST(request: NextRequest) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
 
-
   try {
     await connectDB();
     const body = await request.json();
@@ -99,6 +103,10 @@ export async function POST(request: NextRequest) {
     if (!allowedTypes.has(type)) throw new Error("Invalid follow-up type.");
     if (!allowedStatuses.has(status)) throw new Error("Invalid status.");
 
+    // Sales: auto-set assignedTo and createdBy to themselves
+    const assignedTo = authed.role === "sales" ? authed.name : (clean(body.assignedTo) || undefined);
+    const createdBy = authed.name;
+
     const followUp = await FollowUp.create({
       contactName,
       phone,
@@ -107,8 +115,8 @@ export async function POST(request: NextRequest) {
       type,
       status,
       notes: clean(body.notes) || undefined,
-      assignedTo: clean(body.assignedTo) || undefined,
-      createdBy: clean(body.createdBy) || undefined,
+      assignedTo,
+      createdBy,
       leadId: body.leadId || undefined,
     });
 

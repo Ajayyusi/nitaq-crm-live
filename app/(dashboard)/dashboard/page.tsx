@@ -52,7 +52,7 @@ function formatDate(d: Date) {
 }
 
 // ── Data fetcher — only runs queries the role needs ──────────────────────────
-async function getDashboardData(role: string, from: string, to: string) {
+async function getDashboardData(role: string, from: string, to: string, userName = "") {
   try {
     await connectDB();
 
@@ -63,31 +63,42 @@ async function getDashboardData(role: string, from: string, to: string) {
     const showFinance = can(role, FINANCE_ROLES);
     const showSales   = can(role, SALES_ROLES);
     const showClasses = can(role, CLASS_ROLES);
+    const isSalesOnly = role === "sales";
 
     const dateFilter = buildDateFilter(from || undefined, to || undefined);
 
-    // Always fetched (all roles)
-    const activeStudents = await Enrollment.countDocuments({ status: "Active" });
+    // For sales-only role: filter all queries to their own leads/follow-ups
+    const salesFilter = isSalesOnly && userName
+      ? { $or: [{ assignedTo: new RegExp(`^${userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, { createdBy: new RegExp(`^${userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }] }
+      : {};
+    const fuSalesFilter = isSalesOnly && userName
+      ? { $or: [{ assignedTo: new RegExp(`^${userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, { createdBy: new RegExp(`^${userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }] }
+      : {};
+
+    // Always fetched (admin/manager/finance — not sales-only)
+    const activeStudents = isSalesOnly ? 0 : await Enrollment.countDocuments({ status: "Active" });
 
     // Sales / leads data
     let leadTotal = 0, fresh = 0, interested = 0, enrolled = 0, paid = 0, lost = 0;
     let overdueFollowUps = 0;
     let todayFollowUps: { id: string; contactName: string; phone: string; course: string; type: string; assignedTo: string }[] = [];
     let recentEnrollments: { id: string; enrollmentId: string; fullName: string; course: string; status: string; paymentStatus: string; amountPaid: number; totalFee: number }[] = [];
+    let pendingEnrollmentRequests = 0;
+    let myPendingRequests = 0;
 
     let leadsNoFollowUp = 0;
     if (showSales) {
       [leadTotal, fresh, interested, enrolled, paid, lost, overdueFollowUps, leadsNoFollowUp] = await Promise.all([
-        Lead.countDocuments(),
-        Lead.countDocuments({ stage: "Lead" }),
-        Lead.countDocuments({ stage: "Interested" }),
-        Lead.countDocuments({ stage: "Enrolled" }),
-        Lead.countDocuments({ stage: "Paid" }),
-        Lead.countDocuments({ stage: "Lost" }),
-        Lead.countDocuments({ nextFollowUpDate: { $lt: todayStart }, stage: { $nin: ["Paid", "Lost"] } }),
-        Lead.countDocuments({ nextFollowUpDate: { $exists: false }, stage: { $nin: ["Enrolled", "Paid", "Lost"] } }),
+        Lead.countDocuments(salesFilter),
+        Lead.countDocuments({ ...salesFilter, stage: "Lead" }),
+        Lead.countDocuments({ ...salesFilter, stage: "Interested" }),
+        Lead.countDocuments({ ...salesFilter, stage: "Enrolled" }),
+        Lead.countDocuments({ ...salesFilter, stage: "Paid" }),
+        Lead.countDocuments({ ...salesFilter, stage: "Lost" }),
+        Lead.countDocuments({ ...salesFilter, nextFollowUpDate: { $lt: todayStart }, stage: { $nin: ["Paid", "Lost"] } }),
+        Lead.countDocuments({ ...salesFilter, nextFollowUpDate: { $exists: false }, stage: { $nin: ["Enrolled", "Paid", "Lost"] } }),
       ]);
-      const rawFollowUps = await FollowUp.find({ followUpDate: { $gte: todayStart, $lt: todayEnd }, status: "Pending" })
+      const rawFollowUps = await FollowUp.find({ ...fuSalesFilter, followUpDate: { $gte: todayStart, $lt: todayEnd }, status: "Pending" })
         .sort({ followUpDate: 1 }).limit(8).lean();
       todayFollowUps = rawFollowUps.map((f) => ({
         id: String(f._id), contactName: f.contactName, phone: f.phone,
@@ -95,8 +106,8 @@ async function getDashboardData(role: string, from: string, to: string) {
       }));
     }
 
-    // Enrollments list — sales sees it (without AED), finance sees it (with AED)
-    if (showSales || showFinance) {
+    // Enrollments list — finance only now (sales uses enrollment-request workflow)
+    if (showFinance) {
       const raw = await Enrollment.find().sort({ createdAt: -1 }).limit(6).lean();
       recentEnrollments = raw.map((e) => ({
         id: String(e._id), enrollmentId: e.enrollmentId,
@@ -104,6 +115,17 @@ async function getDashboardData(role: string, from: string, to: string) {
         paymentStatus: e.paymentStatus, amountPaid: e.amountPaid, totalFee: e.totalFee,
       }));
     }
+
+    // Enrollment requests — admin/manager see all pending; sales sees their own
+    // Import EnrollmentRequest dynamically to avoid top-level import issues
+    try {
+      const EnrollmentRequest = (await import("@/models/EnrollmentRequest")).default;
+      if (!isSalesOnly) {
+        pendingEnrollmentRequests = await EnrollmentRequest.countDocuments({ status: "Pending" });
+      } else {
+        myPendingRequests = await EnrollmentRequest.countDocuments({ salesEmail: userName, status: "Pending" });
+      }
+    } catch { /* model not yet registered */ }
 
     // Finance / payments data
     let monthlyRevenue = 0, pendingPayments = 0;
@@ -138,23 +160,26 @@ async function getDashboardData(role: string, from: string, to: string) {
       upcomingSessions = await AttendanceSession.countDocuments({ sessionDate: { $gte: todayStart } });
     }
 
-    // Course breakdown — all roles that can see it (show revenue only to finance)
-    const courseBreakdownRaw = await Enrollment.aggregate([
-      { $match: { status: "Active" } },
-      { $group: { _id: "$course", count: { $sum: 1 }, revenue: { $sum: "$amountPaid" } } },
-      { $sort: { count: -1 } }, { $limit: 6 },
-    ]);
-    const courseBreakdown = courseBreakdownRaw.map((c) => ({
-      course: c._id as string, count: c.count as number, revenue: c.revenue as number,
-    }));
+    // Course breakdown — admin/manager/finance only
+    let courseBreakdown: { course: string; count: number; revenue: number }[] = [];
+    if (!isSalesOnly) {
+      const courseBreakdownRaw = await Enrollment.aggregate([
+        { $match: { status: "Active" } },
+        { $group: { _id: "$course", count: { $sum: 1 }, revenue: { $sum: "$amountPaid" } } },
+        { $sort: { count: -1 } }, { $limit: 6 },
+      ]);
+      courseBreakdown = courseBreakdownRaw.map((c) => ({
+        course: c._id as string, count: c.count as number, revenue: c.revenue as number,
+      }));
+    }
 
     const conversionRate = leadTotal > 0 ? Math.round((paid / leadTotal) * 100) : 0;
 
     return {
-      role, showFinance, showSales, showClasses,
+      role, showFinance, showSales, showClasses, isSalesOnly,
       leadTotal, fresh, interested, enrolled, paid, lost, leadsNoFollowUp,
       activeStudents, monthlyRevenue, pendingPayments, overdueFollowUps,
-      upcomingSessions, conversionRate,
+      upcomingSessions, conversionRate, pendingEnrollmentRequests, myPendingRequests,
       todayFollowUps, recentEnrollments, courseBreakdown, recentPayments,
       connected: true,
       now: now.toISOString(),
@@ -195,8 +220,9 @@ export default async function DashboardPage({
   // If URL has no params, default to this month; if params present (even empty), use them
   const from = rawFrom !== undefined ? rawFrom : defaultRange.from;
   const to   = rawTo   !== undefined ? rawTo   : defaultRange.to;
+  const userName = session?.user?.name ?? "";
 
-  const data = await getDashboardData(role, from, to);
+  const data = await getDashboardData(role, from, to, userName);
 
   if (!data) {
     return (
@@ -220,11 +246,13 @@ export default async function DashboardPage({
   const kpis = [
     // Sales/leads KPIs
     data.showSales && {
-      label: "Total Leads", value: data.leadTotal,
-      sub: "All enquiries", icon: UserPlus, topColor: "#2196F3", href: "/leads",
+      label: data.isSalesOnly ? "My Leads" : "Total Leads",
+      value: data.leadTotal,
+      sub: data.isSalesOnly ? "Assigned to me" : "All enquiries",
+      icon: UserPlus, topColor: "#2196F3", href: "/leads",
     },
-    // All roles see active students
-    {
+    // Active students — admin/manager/finance only
+    !data.isSalesOnly && {
       label: "Active Students", value: data.activeStudents,
       sub: "Currently enrolled", icon: UsersRound, topColor: "#2E7D32", href: "/students",
     },
@@ -247,7 +275,8 @@ export default async function DashboardPage({
     },
     // Sales KPI — conversion
     data.showSales && {
-      label: "Paid / Converted", value: data.paid,
+      label: data.isSalesOnly ? "My Paid / Converted" : "Paid / Converted",
+      value: data.paid,
       sub: `${data.conversionRate}% conversion rate`, icon: CheckCircle2, topColor: "#00897B", href: "/leads",
     },
     // Classes KPI
@@ -260,6 +289,16 @@ export default async function DashboardPage({
       label: "Certificate Due",
       value: data.recentEnrollments.filter((e) => e.status === "Completed" && e.amountPaid >= e.totalFee).length,
       sub: "Completed & paid", icon: Award, topColor: "#C62828", href: "/students",
+    },
+    // Admin/Manager — pending enrollment requests
+    !data.isSalesOnly && data.showSales && data.pendingEnrollmentRequests > 0 && {
+      label: "Enrollment Requests", value: data.pendingEnrollmentRequests,
+      sub: "Pending review", icon: GraduationCap, topColor: "#F57C00", href: "/enrollment-requests",
+    },
+    // Sales only — their pending enrollment requests
+    data.isSalesOnly && data.myPendingRequests > 0 && {
+      label: "My Enrollment Requests", value: data.myPendingRequests,
+      sub: "Awaiting admin review", icon: GraduationCap, topColor: "#F57C00", href: "/enrollment-requests",
     },
     // Sales only — overdue follow-ups as separate KPI
     data.showSales && data.overdueFollowUps > 0 && {
@@ -307,9 +346,19 @@ export default async function DashboardPage({
                         <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold">{data.overdueFollowUps}</span>
                       )}
                     </Link>
-                    <Link href="/enrollments" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
-                      <GraduationCap className="h-4 w-4" /> Enroll
-                    </Link>
+                    {!data.isSalesOnly && (
+                      <Link href="/enrollments" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
+                        <GraduationCap className="h-4 w-4" /> Enroll
+                      </Link>
+                    )}
+                    {data.isSalesOnly && (
+                      <Link href="/enrollment-requests" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
+                        <GraduationCap className="h-4 w-4" /> My Requests
+                        {data.myPendingRequests > 0 && (
+                          <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">{data.myPendingRequests}</span>
+                        )}
+                      </Link>
+                    )}
                   </>
                 )}
                 {/* Finance actions */}
@@ -362,8 +411,8 @@ export default async function DashboardPage({
               </div>
             )}
 
-            {/* Live snapshot — sales only (no AED) */}
-            {data.showSales && !data.showFinance && (
+            {/* Live snapshot — manager (no AED) */}
+            {data.showSales && !data.showFinance && !data.isSalesOnly && (
               <div className="hidden rounded-2xl border border-white/10 bg-white/[0.07] p-5 lg:block" style={{ minWidth: 200 }}>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-green-300">Live snapshot</p>
                 <div className="mt-3 space-y-2.5">
@@ -567,8 +616,8 @@ export default async function DashboardPage({
 
       {/* ── Course Breakdown + Enrollments / Payments ────────────────────── */}
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        {/* Recent enrollments — shown to sales and finance */}
-        {(data.showSales || data.showFinance) && (
+        {/* Recent enrollments — shown to admin/manager/finance only (not sales-only) */}
+        {(data.showFinance || (data.showSales && !data.isSalesOnly)) && (
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <div>

@@ -22,9 +22,11 @@ export const PAGE_PERMISSIONS: { path: string; roles: AppRole[] }[] = [
   // Operations — not accessible to finance or trainer
   { path: "/leads", roles: ["admin", "manager", "sales"] },
   { path: "/follow-ups", roles: ["admin", "manager", "sales"] },
-  { path: "/students", roles: ["admin", "manager", "sales"] },
-  // Enrollments — sales can create; finance can read (API enforces separately)
-  { path: "/enrollments", roles: ["admin", "manager", "sales", "finance"] },
+  { path: "/students", roles: ["admin", "manager"] },
+  // Enrollments — finance can read; sales uses enrollment-request workflow
+  { path: "/enrollments", roles: ["admin", "manager", "finance"] },
+  // Enrollment requests — sales submits; admin/manager review
+  { path: "/enrollment-requests", roles: ["admin", "manager", "sales"] },
   // Academy ops — trainer can see courses and classes
   { path: "/courses", roles: ["admin", "manager", "sales", "trainer"] },
   { path: "/classes", roles: ["admin", "manager", "trainer"] },
@@ -41,10 +43,11 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   "/dashboard":     ["admin", "manager", "sales", "finance", "trainer"],
   "/leads":         ["admin", "manager", "sales"],
   "/follow-ups":    ["admin", "manager", "sales"],
-  "/students":      ["admin", "manager", "sales"],
+  "/students":      ["admin", "manager"],
   "/courses":       ["admin", "manager", "sales", "trainer"],
   "/teachers":      ["admin", "manager"],
-  "/enrollments":   ["admin", "manager", "sales", "finance"],
+  "/enrollments":   ["admin", "manager", "finance"],
+  "/enrollment-requests": ["admin", "manager", "sales"],
   "/classes":       ["admin", "manager", "trainer"],
   "/finance":       ["admin", "manager", "finance"],
   "/expenses":      ["admin", "manager", "finance"],
@@ -59,10 +62,11 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
 export const API_PERMISSIONS: Record<string, { read: AppRole[]; write: AppRole[] }> = {
   leads:       { read: ["admin", "manager", "sales"],             write: ["admin", "manager", "sales"] },
   "follow-ups":{ read: ["admin", "manager", "sales"],             write: ["admin", "manager", "sales"] },
-  students:    { read: ["admin", "manager", "sales"],             write: ["admin", "manager"] },
+  students:    { read: ["admin", "manager"],                       write: ["admin", "manager"] },
   courses:     { read: ["admin", "manager", "sales", "trainer"],  write: ["admin", "manager"] },
   teachers:    { read: ["admin", "manager"],                       write: ["admin", "manager"] },
-  enrollments: { read: ["admin", "manager", "sales", "finance"],  write: ["admin", "manager", "sales"] },
+  enrollments: { read: ["admin", "manager", "finance"],           write: ["admin", "manager"] },
+  "enrollment-requests": { read: ["admin", "manager", "sales"],  write: ["admin", "manager", "sales"] },
   classes:     { read: ["admin", "manager", "trainer"],           write: ["admin", "manager"] },
   attendance:  { read: ["admin", "manager", "trainer"],           write: ["admin", "manager", "trainer"] },
   payments:    { read: ["admin", "manager", "finance"],           write: ["admin", "manager", "finance"] },
@@ -80,6 +84,7 @@ export const IMPORT_EXPORT_PERMISSIONS: Record<string, { import: AppRole[]; expo
   leads:       { import: ["admin", "manager", "sales"],    export: ["admin", "manager", "sales"] },
   followups:   { import: ["admin", "manager", "sales"],    export: ["admin", "manager", "sales"] },
   enrollments: { import: ["admin", "manager"],             export: ["admin", "manager", "finance"] },
+  // Sales-only: leads + followups (filtered to own records at API level)
   courses:     { import: ["admin", "manager"],             export: ["admin", "manager"] },
   teachers:    { import: ["admin", "manager"],             export: ["admin", "manager"] },
   payments:    { import: ["admin", "manager", "finance"],  export: ["admin", "manager", "finance"] },

@@ -7,13 +7,23 @@ import bcrypt from "bcryptjs";
 
 const allowedRoles = new Set<string>(userRoles);
 
-export async function GET() {
-  const authed = await requireAuth(["admin"]);
+export async function GET(request: NextRequest) {
+  const authed = await requireAuth(["admin", "manager"]);
   if (authed instanceof NextResponse) return authed;
 
   try {
     await connectDB();
-    const users = await User.find({}, { password: 0 }).sort({ role: 1, name: 1 }).lean();
+    const { searchParams } = new URL(request.url);
+    const roleFilter = searchParams.get("role")?.trim();
+
+    // Non-admins can only query role-filtered lists (e.g. ?role=sales for assignment dropdowns)
+    const filter: Record<string, unknown> = {};
+    if (roleFilter) filter.role = roleFilter;
+    else if (authed.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    const users = await User.find(filter, { password: 0 }).sort({ role: 1, name: 1 }).lean();
     const serialized = users.map((u) => ({
       id: u._id.toString(),
       name: u.name,

@@ -20,6 +20,7 @@ export interface ILead extends Document {
   notes?: string;
   nextFollowUpDate?: Date;
   assignedTo?: string;
+  createdBy?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,6 +80,11 @@ const LeadSchema = new Schema<ILead>(
       type: String,
       trim: true,
       maxlength: [120, "Assigned to cannot exceed 120 characters"],
+    },
+    createdBy: {
+      type: String,
+      trim: true,
+      maxlength: [120, "Created by cannot exceed 120 characters"],
     },
   },
   { timestamps: true },

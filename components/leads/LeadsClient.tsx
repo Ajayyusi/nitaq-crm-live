@@ -52,6 +52,7 @@ type Lead = {
   notes: string;
   nextFollowUpDate: string;
   assignedTo: string;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -170,7 +171,7 @@ function whatsappUrl(phone: string) {
   return `https://wa.me/${digits}`;
 }
 
-export default function LeadsClient() {
+export default function LeadsClient({ role = "sales", userName = "" }: { role?: string; userName?: string }) {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState("");
@@ -206,6 +207,17 @@ export default function LeadsClient() {
   const [fuForm, setFuForm] = useState<FuFormState>(emptyFuForm);
   const [fuSaving, setFuSaving] = useState(false);
   const [fuError, setFuError] = useState("");
+
+  // Enrollment request modal (sales only)
+  const [erModalOpen, setErModalOpen] = useState(false);
+  const [erLead, setErLead] = useState<Lead | null>(null);
+  const [erNotes, setErNotes] = useState("");
+  const [erStartDate, setErStartDate] = useState("");
+  const [erSaving, setErSaving] = useState(false);
+  const [erError, setErError] = useState("");
+
+  const isSales = role === "sales";
+  const canDelete = role === "admin" || role === "manager";
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -421,6 +433,44 @@ export default function LeadsClient() {
     }
   }
 
+  function openEnrollmentRequest(lead: Lead) {
+    setErLead(lead);
+    setErNotes("");
+    setErStartDate("");
+    setErError("");
+    setErModalOpen(true);
+  }
+
+  async function submitEnrollmentRequest(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!erLead) return;
+    setErSaving(true);
+    setErError("");
+    try {
+      const res = await fetch("/api/enrollment-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: erLead.id,
+          leadRef: erLead.leadId,
+          leadName: erLead.fullName,
+          leadPhone: erLead.phone,
+          course: erLead.course,
+          notes: erNotes,
+          expectedStartDate: erStartDate || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw data;
+      setErModalOpen(false);
+      setNotice(`Enrollment request submitted for ${erLead.fullName}. Admin will review soon.`);
+    } catch (caught) {
+      setErError(getErrorMessage(caught, "Failed to submit request."));
+    } finally {
+      setErSaving(false);
+    }
+  }
+
   async function exportLeads() {
     setError("");
     setNotice("");
@@ -500,6 +550,7 @@ export default function LeadsClient() {
         onSubmit={saveLead}
         updateForm={updateForm}
         onAddFollowUp={editingLead ? () => { closeDrawer(); openFollowUpFor(editingLead); } : undefined}
+        isSales={isSales}
       />
 
       {/* Follow-up add drawer */}
@@ -513,6 +564,58 @@ export default function LeadsClient() {
         onSubmit={saveFollowUp}
         updateForm={(f, v) => setFuForm((cur) => ({ ...cur, [f]: v }))}
       />
+
+      {/* Enrollment Request modal (sales only) */}
+      {erModalOpen && erLead && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={() => setErModalOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+              <div className="border-b border-slate-200 bg-[#0D1F0E] px-6 py-5 rounded-t-2xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">Enrollment Request</p>
+                    <h2 className="mt-1 text-lg font-bold text-white">Request Enrollment for {erLead.fullName}</h2>
+                  </div>
+                  <button onClick={() => setErModalOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-white hover:bg-white/20" type="button">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <form onSubmit={submitEnrollmentRequest} className="p-6 space-y-4">
+                {erError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{erError}</div>}
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-1 text-sm">
+                  <p><span className="font-bold text-slate-600">Lead:</span> <span className="text-slate-900">{erLead.fullName}</span></p>
+                  <p><span className="font-bold text-slate-600">Phone:</span> <span className="text-slate-900">{erLead.phone}</span></p>
+                  <p><span className="font-bold text-slate-600">Course:</span> <span className="text-slate-900">{erLead.course}</span></p>
+                </div>
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700">Expected start date (optional)</span>
+                  <input type="date" value={erStartDate} onChange={(e) => setErStartDate(e.target.value)}
+                    className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]" />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700">Notes for Admin / Manager</span>
+                  <textarea value={erNotes} onChange={(e) => setErNotes(e.target.value)} rows={3}
+                    placeholder="Any special notes, agreed pricing discussion, parent preferences..."
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]" />
+                </label>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setErModalOpen(false)}
+                    className="flex-1 h-10 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={erSaving}
+                    className="flex-1 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
+                    {erSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Send Request
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="space-y-6">
         {/* Header */}
@@ -716,7 +819,7 @@ export default function LeadsClient() {
                             )}
                           </div>
                           {notesPreview && (
-                            <p className="mt-1 text-[11px] text-slate-400 leading-relaxed line-clamp-2 italic">
+                            <p className="mt-1 text-[11px] text-slate-500 leading-relaxed line-clamp-2 italic">
                               "{notesPreview}{lead.notes.length > 90 ? "…" : ""}"
                             </p>
                           )}
@@ -779,24 +882,37 @@ export default function LeadsClient() {
                               <Edit3 className="h-4 w-4" />
                             </button>
                             {lead.stage !== "Enrolled" && lead.stage !== "Paid" && (
+                              isSales ? (
+                                <button
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-teal-200 text-teal-600 transition hover:bg-teal-50"
+                                  onClick={() => openEnrollmentRequest(lead)}
+                                  type="button"
+                                  title="Request Enrollment"
+                                >
+                                  <GraduationCap className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-teal-200 text-teal-600 transition hover:bg-teal-50 disabled:opacity-40"
+                                  onClick={() => void convertToEnrollment(lead)}
+                                  type="button"
+                                  disabled={converting === lead.id}
+                                  title="Convert to Enrollment"
+                                >
+                                  {converting === lead.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <GraduationCap className="h-4 w-4" />}
+                                </button>
+                              )
+                            )}
+                            {canDelete && (
                               <button
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-teal-200 text-teal-600 transition hover:bg-teal-50 disabled:opacity-40"
-                                onClick={() => void convertToEnrollment(lead)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 text-rose-600 transition hover:bg-rose-50"
+                                onClick={() => void deleteLead(lead)}
                                 type="button"
-                                disabled={converting === lead.id}
-                                title="Convert to Enrollment"
+                                title="Delete lead"
                               >
-                                {converting === lead.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <GraduationCap className="h-4 w-4" />}
+                                <Trash2 className="h-4 w-4" />
                               </button>
                             )}
-                            <button
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 text-rose-600 transition hover:bg-rose-50"
-                              onClick={() => void deleteLead(lead)}
-                              type="button"
-                              title="Delete lead"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -972,7 +1088,7 @@ function LeadDetailPanel({
             ) : timeline.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center">
                 <CalendarDays className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">No follow-ups recorded yet.</p>
+                <p className="text-xs text-slate-500">No follow-ups recorded yet.</p>
                 <button type="button" onClick={() => onAddFollowUp(lead)}
                   className="mt-2 text-xs font-bold text-amber-600 hover:underline">
                   Add the first one →
@@ -990,7 +1106,7 @@ function LeadDetailPanel({
                         <TimelineStatusBadge status={fu.status} />
                       </div>
                       {fu.notes && <p className="text-xs text-slate-600 leading-relaxed">{fu.notes}</p>}
-                      {fu.assignedTo && <p className="mt-1.5 text-[10px] text-slate-400">by {fu.assignedTo}</p>}
+                      {fu.assignedTo && <p className="mt-1.5 text-[10px] text-slate-500">by {fu.assignedTo}</p>}
                     </div>
                   </div>
                 ))}
@@ -1018,7 +1134,7 @@ function LeadDetailPanel({
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">{label}</p>
       {children}
     </div>
   );
@@ -1028,7 +1144,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 
 function LeadDrawer({
   open, editingLead, form, formError, saving, timeline, timelineLoading,
-  onClose, onSubmit, updateForm, onAddFollowUp,
+  onClose, onSubmit, updateForm, onAddFollowUp, isSales,
 }: {
   open: boolean;
   editingLead: Lead | null;
@@ -1041,6 +1157,7 @@ function LeadDrawer({
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   updateForm: (field: keyof LeadFormState, value: string) => void;
   onAddFollowUp?: () => void;
+  isSales?: boolean;
 }) {
   return (
     <>
@@ -1080,7 +1197,9 @@ function LeadDrawer({
               <DrawerSelect label="Lead source" value={form.source} options={leadSources} onChange={(v) => updateForm("source", v)} />
               <DrawerSelect label="Stage" value={form.stage} options={leadStages} onChange={(v) => updateForm("stage", v)} />
               <DrawerField label="Next follow-up date" type="date" value={form.nextFollowUpDate} onChange={(v) => updateForm("nextFollowUpDate", v)} />
-              <DrawerField label="Assigned to" value={form.assignedTo} onChange={(v) => updateForm("assignedTo", v)} placeholder="Staff name" />
+              {!isSales && (
+                <DrawerField label="Assigned to" value={form.assignedTo} onChange={(v) => updateForm("assignedTo", v)} placeholder="Staff name" />
+              )}
             </div>
 
             <label className="block">
@@ -1114,7 +1233,7 @@ function LeadDrawer({
                 ) : timeline.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center">
                     <CalendarDays className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-                    <p className="text-xs text-slate-400">No follow-ups recorded yet.</p>
+                    <p className="text-xs text-slate-500">No follow-ups recorded yet.</p>
                   </div>
                 ) : (
                   <div className="relative space-y-0 border-l-2 border-slate-200 pl-4 ml-2">
@@ -1128,7 +1247,7 @@ function LeadDrawer({
                             <TimelineStatusBadge status={fu.status} />
                           </div>
                           {fu.notes && <p className="text-xs text-slate-600 leading-relaxed">{fu.notes}</p>}
-                          {fu.assignedTo && <p className="mt-1 text-[10px] text-slate-400">by {fu.assignedTo}</p>}
+                          {fu.assignedTo && <p className="mt-1 text-[10px] text-slate-500">by {fu.assignedTo}</p>}
                         </div>
                       </div>
                     ))}
