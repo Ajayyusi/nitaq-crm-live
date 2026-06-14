@@ -22,6 +22,7 @@ import {
 import { Suspense } from "react";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
+import User from "@/models/User";
 import Enrollment from "@/models/Enrollment";
 import FollowUp from "@/models/FollowUp";
 import { Payment } from "@/models/Financial";
@@ -160,6 +161,26 @@ async function getDashboardData(role: string, from: string, to: string, userName
       upcomingSessions = await AttendanceSession.countDocuments({ sessionDate: { $gte: todayStart } });
     }
 
+    // Sales performance — admin/manager only
+    let salesPerformance: { name: string; total: number; interested: number; converted: number; overdue: number }[] = [];
+    if (!isSalesOnly && can(role, SALES_ROLES)) {
+      const salesStaff = await User.find({ role: { $in: ["sales", "staff"] }, active: true }, { name: 1 }).lean();
+      salesPerformance = await Promise.all(
+        salesStaff.map(async (u) => {
+          const nameRx = new RegExp(`^${u.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+          const ownerFilter = { $or: [{ assignedTo: nameRx }, { createdBy: nameRx }] };
+          const [total, interested, converted, overdue] = await Promise.all([
+            Lead.countDocuments(ownerFilter),
+            Lead.countDocuments({ ...ownerFilter, stage: "Interested" }),
+            Lead.countDocuments({ ...ownerFilter, stage: { $in: ["Enrolled", "Paid"] } }),
+            Lead.countDocuments({ ...ownerFilter, nextFollowUpDate: { $lt: todayStart }, stage: { $nin: ["Paid", "Lost"] } }),
+          ]);
+          return { name: u.name, total, interested, converted, overdue };
+        })
+      );
+      salesPerformance = salesPerformance.filter((s) => s.total > 0).sort((a, b) => b.total - a.total);
+    }
+
     // Course breakdown — admin/manager/finance only
     let courseBreakdown: { course: string; count: number; revenue: number }[] = [];
     if (!isSalesOnly) {
@@ -180,7 +201,7 @@ async function getDashboardData(role: string, from: string, to: string, userName
       leadTotal, fresh, interested, enrolled, paid, lost, leadsNoFollowUp,
       activeStudents, monthlyRevenue, pendingPayments, overdueFollowUps,
       upcomingSessions, conversionRate, pendingEnrollmentRequests, myPendingRequests,
-      todayFollowUps, recentEnrollments, courseBreakdown, recentPayments,
+      todayFollowUps, recentEnrollments, courseBreakdown, recentPayments, salesPerformance,
       connected: true,
       now: now.toISOString(),
     };
@@ -610,6 +631,64 @@ export default async function DashboardPage({
             <Link href="/courses" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
               <BookOpen className="h-4 w-4" /> Course Reference
             </Link>
+          </div>
+        </section>
+      )}
+
+      {/* ── Sales Team Performance (admin/manager only) ─────────────────── */}
+      {!data.isSalesOnly && data.showSales && data.salesPerformance.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-[#0D1F0E]">Sales Team Performance</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Leads by sales staff member (all time)</p>
+            </div>
+            <Link href="/leads" className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
+              View All Leads
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="px-6 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Sales Rep</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Total</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Interested</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Converted</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Overdue</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {data.salesPerformance.map((s) => {
+                  const rate = s.total > 0 ? Math.round((s.converted / s.total) * 100) : 0;
+                  return (
+                    <tr key={s.name} className="hover:bg-slate-50 transition">
+                      <td className="px-6 py-3.5">
+                        <p className="text-sm font-semibold text-[#0D1F0E]">{s.name}</p>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="text-sm font-bold text-slate-700">{s.total}</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="text-sm text-[#2E7D32] font-semibold">{s.interested}</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="text-sm font-bold text-teal-600">{s.converted}</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`text-sm font-bold ${s.overdue > 0 ? "text-rose-600" : "text-slate-400"}`}>{s.overdue}</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${rate >= 20 ? "bg-green-100 text-green-700" : rate >= 10 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
+                          {rate}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
       )}

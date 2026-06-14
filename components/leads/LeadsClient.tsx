@@ -22,6 +22,7 @@ import {
   Search,
   Trash2,
   Upload,
+  UserCheck,
   UserPlus,
   X,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import DateRangePicker from "@/components/shared/DateRangePicker";
 import { thisMonthRange } from "@/lib/dateRange";
 
 type SortOrder = "newest" | "oldest";
+type SalesUser = { id: string; name: string; email: string };
 
 type Lead = {
   id: string;
@@ -171,6 +173,11 @@ function whatsappUrl(phone: string) {
   return `https://wa.me/${digits}`;
 }
 
+function leadAgeDays(updatedAt: string): number {
+  if (!updatedAt) return 0;
+  return Math.floor((Date.now() - new Date(updatedAt).getTime()) / 86400000);
+}
+
 export default function LeadsClient({ role = "sales", userName = "" }: { role?: string; userName?: string }) {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -218,6 +225,21 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
 
   const isSales = role === "sales";
   const canDelete = role === "admin" || role === "manager";
+
+  // Sales users list for assignment dropdown (admin/manager only)
+  const [salesUsers, setSalesUsers] = useState<SalesUser[]>([]);
+  useEffect(() => {
+    if (isSales) return;
+    fetch("/api/users?role=sales")
+      .then((r) => r.json())
+      .then((d) => setSalesUsers(d.users ?? []))
+      .catch(() => {});
+  }, [isSales]);
+
+  // Bulk selection
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkAssignTo, setBulkAssignTo] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -471,6 +493,30 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
     }
   }
 
+  async function bulkAssign() {
+    if (!bulkAssignTo || selected.size === 0) return;
+    setBulkSaving(true);
+    try {
+      await Promise.all(
+        [...selected].map((id) =>
+          fetch(`/api/leads/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assignedTo: bulkAssignTo }),
+          })
+        )
+      );
+      setNotice(`Assigned ${selected.size} lead${selected.size > 1 ? "s" : ""} to ${bulkAssignTo}.`);
+      setSelected(new Set());
+      setBulkAssignTo("");
+      await loadLeads();
+    } catch {
+      setError("Bulk assignment failed. Please try again.");
+    } finally {
+      setBulkSaving(false);
+    }
+  }
+
   async function exportLeads() {
     setError("");
     setNotice("");
@@ -551,6 +597,7 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
         updateForm={updateForm}
         onAddFollowUp={editingLead ? () => { closeDrawer(); openFollowUpFor(editingLead); } : undefined}
         isSales={isSales}
+        salesUsers={salesUsers}
       />
 
       {/* Follow-up add drawer */}
@@ -741,13 +788,35 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
 
         {/* Table */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
             <div>
               <h2 className="text-lg font-bold text-[#0D1F0E]">Lead Pipeline</h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                {loading ? "Loading..." : `${leads.length} result${leads.length === 1 ? "" : "s"}`}
+                {loading ? "Loading..." : `${leads.length} result${leads.length === 1 ? "" : "s"}${selected.size > 0 ? ` · ${selected.size} selected` : ""}`}
               </p>
             </div>
+            {/* Bulk assignment bar — admin/manager only */}
+            {!isSales && selected.size > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={bulkAssignTo}
+                  onChange={(e) => setBulkAssignTo(e.target.value)}
+                  className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2E7D32]"
+                >
+                  <option value="">Assign {selected.size} lead{selected.size > 1 ? "s" : ""} to…</option>
+                  {salesUsers.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                </select>
+                <button onClick={() => void bulkAssign()} disabled={!bulkAssignTo || bulkSaving} type="button"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2E7D32] px-4 text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-50">
+                  {bulkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+                  Assign
+                </button>
+                <button onClick={() => setSelected(new Set())} type="button"
+                  className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-600 hover:bg-slate-50">
+                  <X className="h-3.5 w-3.5" /> Clear
+                </button>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -777,6 +846,14 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
               <table className="min-w-full text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
                   <tr>
+                    {!isSales && (
+                      <th className="w-10 px-3 py-3">
+                        <input type="checkbox"
+                          checked={selected.size === leads.length && leads.length > 0}
+                          onChange={(e) => setSelected(e.target.checked ? new Set(leads.map((l) => l.id)) : new Set())}
+                          className="h-4 w-4 rounded border-slate-300 accent-[#2E7D32]" />
+                      </th>
+                    )}
                     <th className="px-4 py-3">ID</th>
                     <th className="px-4 py-3">Lead</th>
                     <th className="px-4 py-3">Course</th>
@@ -792,12 +869,33 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
                     const urgency = getFollowUpUrgency(lead.nextFollowUpDate);
                     const waUrl = whatsappUrl(lead.phone);
                     const notesPreview = lead.notes?.trim().slice(0, 90);
+                    const ageDays = leadAgeDays(lead.updatedAt);
+                    const isStale = ageDays >= 7 && !["Paid", "Lost", "Enrolled"].includes(lead.stage);
                     return (
                       <tr
                         key={lead.id}
-                        className={`transition hover:bg-slate-50/80 ${urgency === "overdue" ? "bg-rose-50/40" : urgency === "today" ? "bg-amber-50/40" : ""}`}
+                        className={`transition hover:bg-slate-50/80 ${urgency === "overdue" ? "bg-rose-50/40" : urgency === "today" ? "bg-amber-50/40" : isStale ? "bg-orange-50/30" : ""}`}
                       >
-                        <td className="px-4 py-4 font-mono text-xs font-semibold text-slate-500">{lead.leadId}</td>
+                        {!isSales && (
+                          <td className="w-10 px-3 py-4">
+                            <input type="checkbox"
+                              checked={selected.has(lead.id)}
+                              onChange={(e) => {
+                                const s = new Set(selected);
+                                e.target.checked ? s.add(lead.id) : s.delete(lead.id);
+                                setSelected(s);
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 accent-[#2E7D32]" />
+                          </td>
+                        )}
+                        <td className="px-4 py-4 font-mono text-xs font-semibold text-slate-500">
+                          {lead.leadId}
+                          {isStale && (
+                            <div className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-bold text-orange-600">
+                              <Clock className="h-2.5 w-2.5" />{ageDays}d
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-4 max-w-[220px]">
                           <button
                             type="button"
@@ -1144,7 +1242,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 
 function LeadDrawer({
   open, editingLead, form, formError, saving, timeline, timelineLoading,
-  onClose, onSubmit, updateForm, onAddFollowUp, isSales,
+  onClose, onSubmit, updateForm, onAddFollowUp, isSales, salesUsers,
 }: {
   open: boolean;
   editingLead: Lead | null;
@@ -1158,6 +1256,7 @@ function LeadDrawer({
   updateForm: (field: keyof LeadFormState, value: string) => void;
   onAddFollowUp?: () => void;
   isSales?: boolean;
+  salesUsers?: SalesUser[];
 }) {
   return (
     <>
@@ -1198,7 +1297,26 @@ function LeadDrawer({
               <DrawerSelect label="Stage" value={form.stage} options={leadStages} onChange={(v) => updateForm("stage", v)} />
               <DrawerField label="Next follow-up date" type="date" value={form.nextFollowUpDate} onChange={(v) => updateForm("nextFollowUpDate", v)} />
               {!isSales && (
-                <DrawerField label="Assigned to" value={form.assignedTo} onChange={(v) => updateForm("assignedTo", v)} placeholder="Staff name" />
+                <label className="block">
+                  <span className="text-sm font-bold text-slate-700">Assigned to</span>
+                  {salesUsers && salesUsers.length > 0 ? (
+                    <select
+                      value={form.assignedTo}
+                      onChange={(e) => updateForm("assignedTo", e.target.value)}
+                      className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
+                    >
+                      <option value="">— Unassigned —</option>
+                      {salesUsers.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
+                      value={form.assignedTo}
+                      onChange={(e) => updateForm("assignedTo", e.target.value)}
+                      placeholder="Staff name"
+                    />
+                  )}
+                </label>
               )}
             </div>
 

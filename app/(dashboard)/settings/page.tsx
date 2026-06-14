@@ -416,6 +416,51 @@ function StaffManagement({ currentUserId }: { currentUserId: string }) {
   );
 }
 
+// ── Super Admin button ────────────────────────────────────────────────────────
+function SuperAdminButton() {
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [result, setResult] = useState<{ email: string; password: string; message: string; note: string } | null>(null);
+
+  async function run() {
+    if (!window.confirm("This will create (or reset) the Super Admin account with a fixed password. Continue?")) return;
+    setState("loading");
+    try {
+      const res = await fetch("/api/admin/create-super-admin", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setResult(data);
+      setState("done");
+    } catch (e) {
+      setState("error");
+      toast.error(e instanceof Error ? e.message : "Failed.");
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-600">
+        Creates a permanent <strong>Super Admin</strong> account with full access. Safe to run multiple times — resets the password if the account already exists.
+      </p>
+      {result && (
+        <div className="rounded-xl border border-green-200 bg-[#E8F5E9] p-4 space-y-1 text-sm">
+          <p className="font-bold text-[#1B5E20]">{result.message}</p>
+          <p><span className="font-semibold text-slate-700">Email:</span> <code className="bg-white px-2 py-0.5 rounded text-[#0D1F0E]">{result.email}</code></p>
+          <p><span className="font-semibold text-slate-700">Password:</span> <code className="bg-white px-2 py-0.5 rounded text-[#0D1F0E]">{result.password}</code></p>
+          <p className="text-xs text-amber-700 font-semibold mt-2">{result.note}</p>
+        </div>
+      )}
+      <button
+        onClick={run}
+        disabled={state === "loading"}
+        className="inline-flex h-10 items-center gap-2 rounded-xl bg-purple-700 px-5 text-sm font-bold text-white hover:bg-purple-800 disabled:opacity-50"
+      >
+        {state === "loading" && <Loader2 className="h-4 w-4 animate-spin" />}
+        {state === "done" ? "Done ✓" : "Create / Reset Super Admin"}
+      </button>
+    </div>
+  );
+}
+
 // ── Backfill button ───────────────────────────────────────────────────────────
 function BackfillButton() {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -844,7 +889,12 @@ export default function SettingsPage() {
 
       {/* Maintenance */}
       <Section icon={Database} title="Maintenance">
-        <BackfillButton />
+        <div className="space-y-6 divide-y divide-slate-100">
+          <SuperAdminButton />
+          <div className="pt-6">
+            <BackfillButton />
+          </div>
+        </div>
       </Section>
 
       {/* System info */}
