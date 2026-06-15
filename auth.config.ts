@@ -7,6 +7,7 @@ const BASE_PUBLIC_PATHS = ["/login", "/api/auth"];
 
 export const authConfig = {
   pages: { signIn: "/login" },
+  trustHost: true, // 👈 FORCES NEXTAUTH TO TRUST THE SUBDOMAIN HOST HEADER
   callbacks: {
     // These two callbacks run in BOTH the full auth.ts context (on login)
     // AND the proxy.ts edge context (on every request).
