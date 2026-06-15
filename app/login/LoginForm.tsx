@@ -18,7 +18,13 @@ const ERRORS: Record<string, { msg: string; isDB?: boolean }> = {
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  // Accept only same-origin paths. If NextAuth ever embeds an absolute
+  // callbackUrl pointing to the old root domain, this strips it.
+  const rawCallback = searchParams.get("callbackUrl") ?? "";
+  const callbackUrl =
+    rawCallback.startsWith("/") && !rawCallback.startsWith("//")
+      ? rawCallback
+      : "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
