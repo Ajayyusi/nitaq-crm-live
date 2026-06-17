@@ -1,14 +1,21 @@
+import type { NextAuthConfig } from "next-auth";
+import { NextResponse } from "next/server";
+import { PAGE_PERMISSIONS } from "@/lib/permissions";
+import type { AppRole } from "@/lib/permissions";
+
+const BASE_PUBLIC_PATHS = ["/login", "/api/auth"];
+
 export const authConfig = {
   pages: { signIn: "/login" },
   trustHost: true,
   callbacks: {
-    // 👇 INSULATE REDIRECTS: Force all internal callback URLs to stay on the subdomain
+    // 👇 FIXED REDIRECTS: Force all absolute variations to stay locked on the subdomain
     async redirect({ url, baseUrl }) {
       if (url.includes("nitaqacademy.com") && !url.includes("app.nitaqacademy.com")) {
-        return "https://nitaqacademy.com";
+        return "https://nitaqacademy.com"; //  Now properly pointing to the subdomain login
       }
       if (url.startsWith("/")) return `${baseUrl}${url}`;
-      return baseUrl;
+      return "https://nitaqacademy.com";
     },
     
     jwt({ token, user }) {
@@ -26,7 +33,6 @@ export const authConfig = {
       return session;
     },
     authorized({ auth, request: { nextUrl } }) {
-      // ... your existing authorized check code remains exactly the same
       const isLoggedIn = !!auth?.user;
       const pathname = nextUrl.pathname;
       const publicPaths = process.env.ENABLE_SETUP === "true" ? ["/login", "/api/auth", "/setup"] : ["/login", "/api/auth"];
