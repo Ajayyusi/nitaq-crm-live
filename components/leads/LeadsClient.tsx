@@ -18,6 +18,7 @@ import {
   GraduationCap,
   Loader2,
   MessageCircle,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -215,9 +216,10 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
   const [timeline, setTimeline] = useState<FollowUpEntry[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
 
-  // Follow-up add drawer
+  // Follow-up add/edit drawer
   const [fuDrawerOpen, setFuDrawerOpen] = useState(false);
   const [fuLead, setFuLead] = useState<Lead | null>(null);
+  const [fuEditId, setFuEditId] = useState<string | null>(null);
   const [fuForm, setFuForm] = useState<FuFormState>(emptyFuForm);
   const [fuSaving, setFuSaving] = useState(false);
   const [fuError, setFuError] = useState("");
@@ -392,7 +394,22 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
 
   function openFollowUpFor(lead: Lead) {
     setFuLead(lead);
+    setFuEditId(null);
     setFuForm(emptyFuForm);
+    setFuError("");
+    setFuDrawerOpen(true);
+  }
+
+  function openEditFollowUp(fu: FollowUpEntry, lead: Lead) {
+    setFuLead(lead);
+    setFuEditId(fu.id);
+    setFuForm({
+      followUpDate: fu.followUpDate.slice(0, 10),
+      type: fu.type,
+      notes: fu.notes,
+      status: fu.status,
+      assignedTo: fu.assignedTo,
+    });
     setFuError("");
     setFuDrawerOpen(true);
   }
@@ -403,27 +420,58 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
     setFuSaving(true);
     setFuError("");
     try {
-      const res = await fetch("/api/follow-ups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contactName: fuLead.fullName,
-          phone: fuLead.phone,
-          course: fuLead.course,
-          leadId: fuLead.id,
-          ...fuForm,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw data;
-      // Update lead's nextFollowUpDate
-      await fetch(`/api/leads/${fuLead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextFollowUpDate: fuForm.followUpDate }),
-      });
-      setNotice(`Follow-up added for ${fuLead.fullName}.`);
+      if (fuEditId) {
+        // Editing existing follow-up
+        const res = await fetch(`/api/follow-ups/${fuEditId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fuForm),
+        });
+        const data = await res.json();
+        if (!res.ok) throw data;
+        setNotice(`Follow-up updated for ${fuLead.fullName}.`);
+      } else {
+        // Creating new follow-up
+        const res = await fetch("/api/follow-ups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contactName: fuLead.fullName,
+            phone: fuLead.phone,
+            course: fuLead.course,
+            leadId: fuLead.id,
+            ...fuForm,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw data;
+        // Update lead's nextFollowUpDate
+        await fetch(`/api/leads/${fuLead.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nextFollowUpDate: fuForm.followUpDate }),
+        });
+        setNotice(`Follow-up added for ${fuLead.fullName}.`);
+      }
       setFuDrawerOpen(false);
+      setFuEditId(null);
+      // Reload timelines if a lead detail/edit panel is open
+      if (viewLead) {
+        setViewTimelineLoading(true);
+        fetch(`/api/leads/${viewLead.id}/follow-ups`)
+          .then((r) => r.json())
+          .then((d) => setViewTimeline(d.followUps ?? []))
+          .catch(() => {})
+          .finally(() => setViewTimelineLoading(false));
+      }
+      if (editingLead) {
+        setTimelineLoading(true);
+        fetch(`/api/leads/${editingLead.id}/follow-ups`)
+          .then((r) => r.json())
+          .then((d) => setTimeline(d.followUps ?? []))
+          .catch(() => {})
+          .finally(() => setTimelineLoading(false));
+      }
       await loadLeads();
     } catch (caught) {
       setFuError(getErrorMessage(caught, "Failed to save follow-up."));
@@ -713,7 +761,8 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
         converting={converting}
         onClose={() => setViewLead(null)}
         onEdit={(lead) => { setViewLead(null); openEditForm(lead); }}
-        onAddFollowUp={(lead) => { setViewLead(null); openFollowUpFor(lead); }}
+        onAddFollowUp={(lead) => { openFollowUpFor(lead); }}
+        onEditFollowUp={(fu) => { if (viewLead) openEditFollowUp(fu, viewLead); }}
         onConvert={(lead) => { setViewLead(null); void convertToEnrollment(lead); }}
       />
 
@@ -729,19 +778,21 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
         onClose={closeDrawer}
         onSubmit={saveLead}
         updateForm={updateForm}
-        onAddFollowUp={editingLead ? () => { closeDrawer(); openFollowUpFor(editingLead); } : undefined}
+        onAddFollowUp={editingLead ? () => { openFollowUpFor(editingLead); } : undefined}
+        onEditFollowUp={editingLead ? (fu) => { openEditFollowUp(fu, editingLead); } : undefined}
         isSales={isSales}
         salesUsers={salesUsers}
       />
 
-      {/* Follow-up add drawer */}
+      {/* Follow-up add/edit drawer */}
       <FollowUpDrawer
         open={fuDrawerOpen}
         lead={fuLead}
+        isEditing={!!fuEditId}
         form={fuForm}
         saving={fuSaving}
         error={fuError}
-        onClose={() => setFuDrawerOpen(false)}
+        onClose={() => { setFuDrawerOpen(false); setFuEditId(null); }}
         onSubmit={saveFollowUp}
         updateForm={(f, v) => setFuForm((cur) => ({ ...cur, [f]: v }))}
       />
@@ -1222,7 +1273,7 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
 
 function LeadDetailPanel({
   lead, timeline, timelineLoading, converting,
-  onClose, onEdit, onAddFollowUp, onConvert,
+  onClose, onEdit, onAddFollowUp, onEditFollowUp, onConvert,
 }: {
   lead: Lead | null;
   timeline: FollowUpEntry[];
@@ -1231,6 +1282,7 @@ function LeadDetailPanel({
   onClose: () => void;
   onEdit: (lead: Lead) => void;
   onAddFollowUp: (lead: Lead) => void;
+  onEditFollowUp: (fu: FollowUpEntry) => void;
   onConvert: (lead: Lead) => void;
 }) {
   if (!lead) return null;
@@ -1390,10 +1442,20 @@ function LeadDetailPanel({
                   <div key={fu.id} className="relative pb-4 last:pb-0">
                     <span className="absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 border-white bg-[#2E7D32] shadow" />
                     <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-slate-700">{formatDate(fu.followUpDate)}</span>
-                        <span className="text-[10px] rounded-full bg-white border border-slate-200 px-2 py-0.5 font-semibold text-slate-600">{fu.type}</span>
-                        <TimelineStatusBadge status={fu.status} />
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-slate-700">{formatDate(fu.followUpDate)}</span>
+                          <span className="text-[10px] rounded-full bg-white border border-slate-200 px-2 py-0.5 font-semibold text-slate-600">{fu.type}</span>
+                          <TimelineStatusBadge status={fu.status} />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onEditFollowUp(fu)}
+                          className="flex-shrink-0 grid h-6 w-6 place-items-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+                          title="Edit follow-up"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
                       </div>
                       {fu.notes && <p className="text-xs text-slate-600 leading-relaxed">{fu.notes}</p>}
                       {fu.assignedTo && <p className="mt-1.5 text-[10px] text-slate-500">by {fu.assignedTo}</p>}
@@ -1434,7 +1496,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 
 function LeadDrawer({
   open, editingLead, form, formError, saving, timeline, timelineLoading,
-  onClose, onSubmit, updateForm, onAddFollowUp, isSales, salesUsers,
+  onClose, onSubmit, updateForm, onAddFollowUp, onEditFollowUp, isSales, salesUsers,
 }: {
   open: boolean;
   editingLead: Lead | null;
@@ -1447,6 +1509,7 @@ function LeadDrawer({
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   updateForm: (field: keyof LeadFormState, value: string) => void;
   onAddFollowUp?: () => void;
+  onEditFollowUp?: (fu: FollowUpEntry) => void;
   isSales?: boolean;
   salesUsers?: SalesUser[];
 }) {
@@ -1627,10 +1690,22 @@ function LeadDrawer({
                       <div key={fu.id} className="relative pb-4 last:pb-0">
                         <span className="absolute -left-[21px] top-1 h-3 w-3 rounded-full border-2 border-white bg-[#2E7D32] shadow" />
                         <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                            <span className="text-xs font-bold text-slate-700">{formatDate(fu.followUpDate)}</span>
-                            <span className="text-[10px] rounded-full bg-slate-200 px-2 py-0.5 font-semibold text-slate-600">{fu.type}</span>
-                            <TimelineStatusBadge status={fu.status} />
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-slate-700">{formatDate(fu.followUpDate)}</span>
+                              <span className="text-[10px] rounded-full bg-slate-200 px-2 py-0.5 font-semibold text-slate-600">{fu.type}</span>
+                              <TimelineStatusBadge status={fu.status} />
+                            </div>
+                            {onEditFollowUp && (
+                              <button
+                                type="button"
+                                onClick={() => onEditFollowUp(fu)}
+                                className="flex-shrink-0 grid h-6 w-6 place-items-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+                                title="Edit follow-up"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            )}
                           </div>
                           {fu.notes && <p className="text-xs text-slate-600 leading-relaxed">{fu.notes}</p>}
                           {fu.assignedTo && <p className="mt-1 text-[10px] text-slate-500">by {fu.assignedTo}</p>}
@@ -1674,10 +1749,11 @@ function TimelineStatusBadge({ status }: { status: string }) {
 // ── Follow-Up Add Drawer ──────────────────────────────────────────────────────
 
 function FollowUpDrawer({
-  open, lead, form, saving, error, onClose, onSubmit, updateForm,
+  open, lead, isEditing, form, saving, error, onClose, onSubmit, updateForm,
 }: {
   open: boolean;
   lead: Lead | null;
+  isEditing?: boolean;
   form: FuFormState;
   saving: boolean;
   error: string;
@@ -1702,7 +1778,7 @@ function FollowUpDrawer({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-amber-400">Follow-Up</p>
-              <h2 className="mt-1 text-xl font-bold">Add Follow-Up</h2>
+              <h2 className="mt-1 text-xl font-bold">{isEditing ? "Edit Follow-Up" : "Add Follow-Up"}</h2>
               {lead && <p className="mt-0.5 text-sm text-slate-300">for {lead.fullName}</p>}
             </div>
             <button className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white transition hover:bg-white/20" onClick={onClose} type="button">
@@ -1763,7 +1839,7 @@ function FollowUpDrawer({
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               <ChevronRight className="h-4 w-4" />
-              Save Follow-Up
+              {isEditing ? "Save Changes" : "Save Follow-Up"}
             </button>
           </div>
         </form>

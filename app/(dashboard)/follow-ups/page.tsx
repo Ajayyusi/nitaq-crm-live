@@ -7,6 +7,7 @@ import {
   Clock,
   Loader2,
   MessageCircle,
+  Pencil,
   Plus,
   Trash2,
   X,
@@ -111,6 +112,7 @@ export default function FollowUpsPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingFu, setEditingFu] = useState<FollowUp | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState("");
 
@@ -188,26 +190,56 @@ export default function FollowUpsPage() {
     }
   }
 
-  async function createFollowUp(e: FormEvent<HTMLFormElement>) {
+  function openEdit(fu: FollowUp) {
+    setEditingFu(fu);
+    setForm({
+      contactName: fu.contactName,
+      phone: fu.phone,
+      course: fu.course,
+      followUpDate: fu.followUpDate.slice(0, 10),
+      type: fu.type,
+      notes: fu.notes,
+      status: fu.status,
+      assignedTo: fu.assignedTo,
+      leadId: "",
+    });
+    setLeadSearch("");
+    setLeadResults([]);
+    setFormError("");
+    setDrawerOpen(true);
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    setEditingFu(null);
+    setForm(emptyForm);
+    setLeadSearch("");
+    setLeadResults([]);
+    setFormError("");
+  }
+
+  async function submitForm(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     setFormError("");
     try {
-      const res = await fetch("/api/follow-ups", {
-        method: "POST",
+      const url = editingFu ? `/api/follow-ups/${editingFu.id}` : "/api/follow-ups";
+      const method = editingFu ? "PATCH" : "POST";
+      const body = editingFu
+        ? { contactName: form.contactName, phone: form.phone, course: form.course, followUpDate: form.followUpDate, type: form.type, notes: form.notes, status: form.status, assignedTo: form.assignedTo }
+        : { ...form, leadId: form.leadId || undefined };
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, leadId: form.leadId || undefined }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw data;
-      setNotice("Follow-up created.");
-      setDrawerOpen(false);
-      setForm(emptyForm);
-      setLeadSearch("");
-      setLeadResults([]);
+      setNotice(editingFu ? "Follow-up updated." : "Follow-up created.");
+      closeDrawer();
       await loadFollowUps();
     } catch (caught) {
-      setFormError(getErr(caught, "Failed to create follow-up."));
+      setFormError(getErr(caught, editingFu ? "Failed to update follow-up." : "Failed to create follow-up."));
     } finally {
       setSaving(false);
     }
@@ -232,28 +264,29 @@ export default function FollowUpsPage() {
       {/* Drawer */}
       {drawerOpen && (
         <>
-          <div className="fixed inset-0 z-40 bg-[#0D1F0E]/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+          <div className="fixed inset-0 z-40 bg-[#0D1F0E]/40 backdrop-blur-sm" onClick={closeDrawer} />
           <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[500px] flex-col bg-white shadow-2xl">
             <div className="border-b border-slate-200 bg-[#0D1F0E] px-6 py-5 text-white">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">New Task</p>
-                  <h2 className="mt-1 text-xl font-bold">Add Follow-Up</h2>
+                  <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">{editingFu ? "Edit Task" : "New Task"}</p>
+                  <h2 className="mt-1 text-xl font-bold">{editingFu ? "Edit Follow-Up" : "Add Follow-Up"}</h2>
+                  {editingFu && <p className="mt-0.5 text-sm text-slate-300">{editingFu.contactName}</p>}
                 </div>
-                <button onClick={() => setDrawerOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 hover:bg-white/20">
+                <button onClick={closeDrawer} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 hover:bg-white/20">
                   <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
-            <form onSubmit={createFollowUp} className="flex flex-1 flex-col min-h-0">
+            <form onSubmit={submitForm} className="flex flex-1 flex-col min-h-0">
               <div className="flex-1 overflow-y-auto space-y-4 p-6">
                 {formError && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
                     {formError}
                   </div>
                 )}
-                {/* Lead search picker */}
-                <div className="relative">
+                {/* Lead search picker — only shown when creating */}
+                {!editingFu && <div className="relative">
                   <F label="Search existing lead (optional — auto-fills details)">
                     <div className="relative">
                       <input
@@ -286,7 +319,7 @@ export default function FollowUpsPage() {
                   {form.leadId && (
                     <p className="mt-1 text-xs text-[#2E7D32] font-semibold">✓ Linked to lead — details auto-filled below</p>
                   )}
-                </div>
+                </div>}
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <F label="Contact name *">
@@ -311,16 +344,21 @@ export default function FollowUpsPage() {
                   <F label="Assigned to">
                     <input value={form.assignedTo} onChange={(e) => setForm((f) => ({ ...f, assignedTo: e.target.value }))} className={inp} placeholder="Staff name" />
                   </F>
+                  <F label="Status">
+                    <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as FollowUpStatus }))} className={inp}>
+                      {followUpStatuses.map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                  </F>
                 </div>
                 <F label="Notes / What to say">
                   <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={3} className={inp} placeholder="Script, key points, context..." />
                 </F>
               </div>
               <div className="flex gap-3 border-t border-slate-200 bg-slate-50 p-5">
-                <button type="button" onClick={() => setDrawerOpen(false)} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+                <button type="button" onClick={closeDrawer} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
                 <button type="submit" disabled={saving} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Create Follow-Up
+                  {editingFu ? "Save Changes" : "Create Follow-Up"}
                 </button>
               </div>
             </form>
@@ -340,7 +378,7 @@ export default function FollowUpsPage() {
               </p>
             </div>
             <button
-              onClick={() => setDrawerOpen(true)}
+              onClick={() => { setEditingFu(null); setForm(emptyForm); setLeadSearch(""); setLeadResults([]); setFormError(""); setDrawerOpen(true); }}
               className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white shadow transition hover:bg-[#1B5E20]"
             >
               <Plus className="h-4 w-4" />
@@ -497,6 +535,13 @@ export default function FollowUpsPage() {
                           <MessageCircle className="h-4 w-4" />
                         </a>
                       )}
+                      <button
+                        onClick={() => openEdit(f)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100"
+                        title="Edit"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
                       {f.status !== "Done" && (
                         <button
                           onClick={() => void markDone(f.id)}
