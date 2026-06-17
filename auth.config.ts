@@ -11,11 +11,16 @@ export const authConfig = {
   callbacks: {
     // 👇 FIXED REDIRECTS: Force all absolute variations to stay locked on the subdomain
     async redirect({ url, baseUrl }) {
-      if (url.includes("nitaqacademy.com") && !url.includes("app.nitaqacademy.com")) {
-        return "https://nitaqacademy.com"; //  Now properly pointing to the subdomain login
-      }
+      // Allow relative redirects
       if (url.startsWith("/")) return `${baseUrl}${url}`;
-      return "https://nitaqacademy.com";
+      // Allow same-origin redirects
+      try {
+        const target = new URL(url);
+        const base = new URL(baseUrl);
+        if (target.origin === base.origin) return url;
+      } catch { /* ignore */ }
+      // Everything else → login
+      return `${baseUrl}/login`;
     },
     
     jwt({ token, user }) {
