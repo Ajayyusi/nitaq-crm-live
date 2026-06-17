@@ -19,6 +19,7 @@ export function serializeLead(l: any) {
       by: n.by ?? "",
       at: n.at ? new Date(n.at).toISOString() : "",
     })),
+    customCourse: l.customCourse ?? "",
     createdAt: l.createdAt?.toISOString() ?? "",
     updatedAt: l.updatedAt?.toISOString() ?? "",
   };

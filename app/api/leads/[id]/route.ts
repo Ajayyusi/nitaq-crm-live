@@ -13,6 +13,7 @@ type LeadUpdatePayload = Partial<
     | "phone"
     | "email"
     | "course"
+    | "customCourse"
     | "source"
     | "stage"
     | "notes"
@@ -41,6 +42,10 @@ function buildUpdate(body: LeadUpdatePayload) {
     "assignedTo",
   ] as const) {
     if (field in body) update[field] = cleanText(body[field]) || undefined;
+  }
+
+  if ("customCourse" in body) {
+    update.customCourse = cleanText(body.customCourse) || undefined;
   }
 
   if ("course" in body) {

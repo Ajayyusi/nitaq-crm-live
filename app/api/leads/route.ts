@@ -11,6 +11,7 @@ type LeadPayload = {
   phone?: string;
   email?: string;
   course?: string;
+  customCourse?: string;
   source?: string;
   stage?: string;
   notes?: string;
@@ -44,8 +45,8 @@ function buildLeadPayload(body: LeadPayload) {
   const notes = cleanText(body.notes);
   const assignedTo = cleanText(body.assignedTo);
   const nextFollowUpDate = cleanText(body.nextFollowUpDate);
-
   const createdBy = cleanText(body.createdBy);
+  const customCourse = cleanText(body.customCourse);
 
   return {
     fullName,
@@ -57,6 +58,7 @@ function buildLeadPayload(body: LeadPayload) {
     notes: notes || undefined,
     assignedTo: assignedTo || undefined,
     createdBy: createdBy || undefined,
+    customCourse: course === "Other" && customCourse ? customCourse : undefined,
     nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : undefined,
   };
 }

@@ -55,6 +55,7 @@ type Lead = {
   stage: LeadStage;
   notes: string;
   noteLog: NoteEntry[];
+  customCourse: string;
   nextFollowUpDate: string;
   assignedTo: string;
   createdBy: string;
@@ -77,6 +78,7 @@ type LeadFormState = {
   phone: string;
   email: string;
   course: CourseOption;
+  customCourse: string;
   source: LeadSource;
   stage: LeadStage;
   nextFollowUpDate: string;
@@ -97,6 +99,7 @@ const emptyForm: LeadFormState = {
   phone: "",
   email: "",
   course: "Other",
+  customCourse: "",
   source: "WhatsApp",
   stage: "Lead",
   nextFollowUpDate: "",
@@ -157,6 +160,7 @@ function asLeadForm(lead: Lead): LeadFormState {
     phone: lead.phone,
     email: lead.email,
     course: lead.course,
+    customCourse: lead.customCourse ?? "",
     source: lead.source,
     stage: lead.stage,
     nextFollowUpDate: lead.nextFollowUpDate,
@@ -950,7 +954,7 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-sm font-medium text-slate-700">{lead.course}</td>
+                        <td className="px-4 py-4 text-sm font-medium text-slate-700">{lead.course === "Other" && lead.customCourse ? lead.customCourse : lead.course}</td>
                         <td className="px-4 py-4">
                           <Badge className={sourceConfig[lead.source]}>{lead.source}</Badge>
                         </td>
@@ -1186,7 +1190,7 @@ function LeadDetailPanel({
               <span className="text-sm font-semibold text-slate-800">{lead.email || "—"}</span>
             </InfoRow>
             <InfoRow label="Course Interest">
-              <span className="text-sm font-semibold text-slate-800">{lead.course}</span>
+              <span className="text-sm font-semibold text-slate-800">{lead.course === "Other" && lead.customCourse ? lead.customCourse : lead.course}</span>
             </InfoRow>
             <InfoRow label="Source">
               <Badge className={sourceConfig[lead.source]}>{lead.source}</Badge>
@@ -1384,7 +1388,18 @@ function LeadDrawer({
               <DrawerField label="Full name" required value={form.fullName} onChange={(v) => updateForm("fullName", v)} placeholder="Student or parent name" />
               <DrawerField label="WhatsApp / Phone" required value={form.phone} onChange={(v) => updateForm("phone", v)} placeholder="+971..." />
               <DrawerField label="Email" type="email" value={form.email} onChange={(v) => updateForm("email", v)} placeholder="name@email.com" />
-              <DrawerSelect label="Course interest" value={form.course} options={courseList} onChange={(v) => updateForm("course", v)} />
+              <div className={form.course === "Other" ? "sm:col-span-2" : ""}>
+                <DrawerSelect label="Course interest" value={form.course} options={courseList} onChange={(v) => { updateForm("course", v); if (v !== "Other") updateForm("customCourse", ""); }} />
+                {form.course === "Other" && (
+                  <input
+                    className="mt-2 h-10 w-full rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
+                    placeholder="Type the course name…"
+                    value={form.customCourse}
+                    onChange={(e) => updateForm("customCourse", e.target.value)}
+                    maxLength={120}
+                  />
+                )}
+              </div>
               <DrawerSelect label="Lead source" value={form.source} options={leadSources} onChange={(v) => updateForm("source", v)} />
               <DrawerSelect label="Stage" value={form.stage} options={leadStages} onChange={(v) => updateForm("stage", v)} />
               <DrawerField label="Next follow-up date" type="date" value={form.nextFollowUpDate} onChange={(v) => updateForm("nextFollowUpDate", v)} />

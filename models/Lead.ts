@@ -25,6 +25,7 @@ export interface ILead extends Document {
   stage: LeadStage;
   notes?: string;
   noteLog?: NoteEntry[];
+  customCourse?: string;
   nextFollowUpDate?: Date;
   assignedTo?: string;
   createdBy?: string;
@@ -101,6 +102,11 @@ const LeadSchema = new Schema<ILead>(
         _id: false,
       },
     ],
+    customCourse: {
+      type: String,
+      trim: true,
+      maxlength: [120, "Custom course name cannot exceed 120 characters"],
+    },
   },
   { timestamps: true },
 );
