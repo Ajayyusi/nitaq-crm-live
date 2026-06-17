@@ -535,6 +535,53 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
     }
   }
 
+  // ── Bulk follow-up ───────────────────────────────────────────────────────────
+  const [bulkFuOpen, setBulkFuOpen] = useState(false);
+  const [bulkFuDate, setBulkFuDate] = useState(new Date().toISOString().slice(0, 10));
+  const [bulkFuType, setBulkFuType] = useState("WhatsApp Message");
+  const [bulkFuNotes, setBulkFuNotes] = useState("");
+  const [bulkFuSaving, setBulkFuSaving] = useState(false);
+  const [bulkFuError, setBulkFuError] = useState("");
+
+  async function bulkFollowUp() {
+    if (selected.size === 0 || !bulkFuDate) return;
+    setBulkFuSaving(true);
+    setBulkFuError("");
+    const selectedLeads = leads.filter((l) => selected.has(l.id));
+    try {
+      const results = await Promise.allSettled(
+        selectedLeads.map((lead) =>
+          fetch("/api/follow-ups", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contactName: lead.fullName,
+              phone: lead.phone,
+              course: lead.course === "Other" && lead.customCourse ? lead.customCourse : lead.course,
+              followUpDate: bulkFuDate,
+              type: bulkFuType,
+              notes: bulkFuNotes,
+              status: "Pending",
+            }),
+          })
+        )
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        setBulkFuError(`${failed} follow-up(s) failed to create.`);
+      } else {
+        setNotice(`Created ${selected.size} follow-up${selected.size > 1 ? "s" : ""} for ${bulkFuDate}.`);
+        setBulkFuOpen(false);
+        setBulkFuNotes("");
+        setSelected(new Set());
+      }
+    } catch {
+      setBulkFuError("Failed to create follow-ups. Please try again.");
+    } finally {
+      setBulkFuSaving(false);
+    }
+  }
+
   async function exportLeads() {
     setError("");
     setNotice("");
@@ -589,6 +636,75 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
 
   return (
     <>
+      {/* Bulk follow-up modal */}
+      {bulkFuOpen && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={() => setBulkFuOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between rounded-t-2xl bg-[#0D1F0E] px-6 py-5 text-white">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-amber-300">Bulk Action</p>
+                  <h2 className="mt-0.5 text-lg font-bold">Add Follow-Up for {selected.size} Lead{selected.size > 1 ? "s" : ""}</h2>
+                </div>
+                <button onClick={() => setBulkFuOpen(false)} className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20" type="button">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                {bulkFuError && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{bulkFuError}</div>
+                )}
+                <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  One follow-up will be created for each of the <strong>{selected.size}</strong> selected leads using the settings below.
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">Follow-up date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={bulkFuDate}
+                    onChange={(e) => setBulkFuDate(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">Type</label>
+                  <select
+                    value={bulkFuType}
+                    onChange={(e) => setBulkFuType(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
+                  >
+                    {followUpTypes.map((t) => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">Notes / script</label>
+                  <textarea
+                    value={bulkFuNotes}
+                    onChange={(e) => setBulkFuNotes(e.target.value)}
+                    rows={3}
+                    placeholder="What to say, key points, context…"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
+                  />
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button type="button" onClick={() => setBulkFuOpen(false)}
+                    className="h-10 flex-1 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={() => void bulkFollowUp()} disabled={bulkFuSaving || !bulkFuDate}
+                    className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-500 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-60">
+                    {bulkFuSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+                    Create {selected.size} Follow-Up{selected.size > 1 ? "s" : ""}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Lead detail panel */}
       <LeadDetailPanel
         lead={viewLead}
@@ -827,21 +943,35 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
                 {loading ? "Loading..." : `${leads.length} result${leads.length === 1 ? "" : "s"}${selected.size > 0 ? ` · ${selected.size} selected` : ""}`}
               </p>
             </div>
-            {/* Bulk assignment bar — admin/manager only */}
-            {!isSales && selected.size > 0 && (
+            {/* Bulk action bar — shows when any leads are selected */}
+            {selected.size > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={bulkAssignTo}
-                  onChange={(e) => setBulkAssignTo(e.target.value)}
-                  className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2E7D32]"
+                {/* Bulk assign — admin/manager only */}
+                {!isSales && (
+                  <>
+                    <select
+                      value={bulkAssignTo}
+                      onChange={(e) => setBulkAssignTo(e.target.value)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2E7D32]"
+                    >
+                      <option value="">Assign {selected.size} lead{selected.size > 1 ? "s" : ""} to…</option>
+                      {salesUsers.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                    </select>
+                    <button onClick={() => void bulkAssign()} disabled={!bulkAssignTo || bulkSaving} type="button"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2E7D32] px-4 text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-50">
+                      {bulkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+                      Assign
+                    </button>
+                  </>
+                )}
+                {/* Bulk follow-up — all roles */}
+                <button
+                  onClick={() => { setBulkFuOpen(true); setBulkFuError(""); }}
+                  type="button"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-bold text-amber-700 hover:bg-amber-100"
                 >
-                  <option value="">Assign {selected.size} lead{selected.size > 1 ? "s" : ""} to…</option>
-                  {salesUsers.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
-                </select>
-                <button onClick={() => void bulkAssign()} disabled={!bulkAssignTo || bulkSaving} type="button"
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#2E7D32] px-4 text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-50">
-                  {bulkSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
-                  Assign
+                  <BellRing className="h-3.5 w-3.5" />
+                  Follow-Up {selected.size}
                 </button>
                 <button onClick={() => setSelected(new Set())} type="button"
                   className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-600 hover:bg-slate-50">
