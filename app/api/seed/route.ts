@@ -7,8 +7,6 @@ import { Payment, Expense } from "@/models/Financial";
 import FollowUp from "@/models/FollowUp";
 import User from "@/models/User";
 import { getNextSequence } from "@/models/Counter";
-import bcrypt from "bcryptjs";
-
 const today = () => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -30,43 +28,16 @@ export async function POST() {
     await connectDB();
 
     // ── Migrate legacy "staff" role → "sales" ─────────────────────────────
-    // The old role enum had "staff". New enum has sales/finance/trainer.
-    // This is safe to run multiple times (no-op if no "staff" users remain).
     const migrated = await User.updateMany(
       { role: "staff" },
       { $set: { role: "sales" } }
     );
 
-    // ── Always upsert the three core demo accounts ──────────────────────────
-    // Uses findOneAndUpdate + upsert so stale/broken records are always fixed.
-    const staffAccounts = [
-      { name: "Admin",            email: "admin@nitaqacademy.com",    password: "NitaqAdmin2026!",   role: "admin"   as const },
-      { name: "Muzzamil Al Farsi",email: "muzzamil@nitaqacademy.com", password: "NitaqManager2026!", role: "manager" as const },
-      { name: "Sara Al Mansoori", email: "staff@nitaqacademy.com",    password: "NitaqStaff2026!",   role: "sales"   as const },
-    ];
-
-    for (const acc of staffAccounts) {
-      const hashed = await bcrypt.hash(acc.password, 12);
-      await User.findOneAndUpdate(
-        { email: acc.email },
-        {
-          $set: {
-            name:     acc.name,
-            email:    acc.email,
-            password: hashed,
-            role:     acc.role,
-            active:   true,
-          },
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-    }
-
     // ── Skip sample data if it already exists ──────────────────────────────
     const leadCount = await Lead.countDocuments();
     if (leadCount > 0) {
       return NextResponse.json({
-        message: `Accounts refreshed. ${migrated.modifiedCount} legacy "staff" user(s) migrated to "sales". Sample data already exists.`,
+        message: `${migrated.modifiedCount} legacy "staff" user(s) migrated to "sales". Sample data already exists — skipping.`,
       });
     }
 

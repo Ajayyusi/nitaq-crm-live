@@ -1,9 +1,6 @@
 import { notFound } from "next/navigation";
-import SetupClient from "./SetupClient";
 
+// Setup page permanently disabled — initial configuration is complete.
 export default function SetupPage() {
-  if (process.env.ENABLE_SETUP !== "true") {
-    notFound();
-  }
-  return <SetupClient />;
+  notFound();
 }
