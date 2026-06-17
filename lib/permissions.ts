@@ -33,6 +33,8 @@ export const PAGE_PERMISSIONS: { path: string; roles: AppRole[] }[] = [
   { path: "/teachers", roles: ["admin", "manager"] },
   // Import/Export — trainers cannot access
   { path: "/import-export", roles: ["admin", "manager", "sales", "finance"] },
+  // Activity log — admin and manager only
+  { path: "/activity", roles: ["admin", "manager"] },
   // Dashboard — everyone
   { path: "/dashboard", roles: ["admin", "manager", "sales", "finance", "trainer"] },
 ];
@@ -52,6 +54,7 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   "/finance":       ["admin", "manager", "finance"],
   "/expenses":      ["admin", "manager", "finance"],
   "/reports":       ["admin", "manager", "finance"],
+  "/activity":      ["admin", "manager"],
   "/import-export": ["admin", "manager", "sales", "finance"],
   "/settings":      ["admin"],
 };

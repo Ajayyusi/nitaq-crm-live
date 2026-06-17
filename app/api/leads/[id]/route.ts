@@ -5,6 +5,7 @@ import Lead from "@/models/Lead";
 import { leadSources, leadStages, courseList } from "@/constants/leads";
 import { serializeLead } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 type RouteContext = { params: Promise<{ id: string }> };
 type LeadUpdatePayload = Partial<
@@ -135,6 +136,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       runValidators: true,
     });
     if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
+
+    // Build a human-readable detail of what changed
+    const changes: string[] = [];
+    const $set = (updateOps.$set as Record<string, unknown>) ?? {};
+    if ("stage" in $set && existing.stage !== $set.stage) changes.push(`Stage: ${existing.stage} → ${String($set.stage)}`);
+    if ("assignedTo" in $set) changes.push(`Assigned to: ${String($set.assignedTo ?? "—")}`);
+    if ("nextFollowUpDate" in $set) changes.push("Follow-up date updated");
+    if (appendNote) changes.push("Note added");
+    if (changes.length === 0 && Object.keys($set).length > 0) changes.push("Details updated");
+    logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Lead", entityId: id, entityLabel: lead.fullName, detail: changes.join(" · ") });
+
     return NextResponse.json({ lead: serializeLead(lead) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update lead.";
@@ -153,5 +165,6 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   await connectDB();
   const lead = await Lead.findByIdAndDelete(id);
   if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
+  logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "Lead", entityId: id, entityLabel: lead.fullName });
   return NextResponse.json({ message: "Lead deleted." });
 }

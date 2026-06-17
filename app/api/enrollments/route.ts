@@ -6,6 +6,7 @@ import { Payment, paymentMethods } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 const allowedPaymentMethods = new Set<string>(paymentMethods);
 
@@ -133,6 +134,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    logAudit({ userName: authed.name, userRole: authed.role, action: "created", entity: "Enrollment", entityId: enrollment._id.toString(), entityLabel: enrollment.fullName, detail: `${enrollment.course} · ${enrollment.enrollmentId}` });
     return NextResponse.json({ enrollment: serializeEnrollment(enrollment) }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create enrollment.";

@@ -7,6 +7,7 @@ import { Payment, paymentMethods } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 const allowedPaymentMethods = new Set<string>(paymentMethods);
 
@@ -119,6 +120,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         notes: `Auto-recorded from enrollment ${enrollment.enrollmentId}`,
       });
     }
+
+    const changes: string[] = [];
+    if ("status" in update && existing.status !== update.status) changes.push(`Status: ${existing.status} → ${String(update.status)}`);
+    if ("paymentStatus" in update) changes.push(`Payment: ${String(update.paymentStatus)}`);
+    if (delta > 0) changes.push(`Payment recorded: AED ${delta}`);
+    if (changes.length === 0) changes.push("Details updated");
+    logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Enrollment", entityId: id, entityLabel: enrollment.fullName, detail: changes.join(" · ") });
 
     return NextResponse.json({ enrollment: serializeEnrollment(enrollment) });
   } catch (error) {

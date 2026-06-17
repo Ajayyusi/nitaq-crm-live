@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   ArrowUpDown,
   BarChart3,
   BookOpen,
@@ -55,7 +56,8 @@ const navGroups = [
   {
     label: "System",
     items: [
-      { label: "Import / Export", href: "/import-export", icon: ArrowUpDown },
+      { label: "Activity Log",    href: "/activity",       icon: Activity },
+      { label: "Import / Export", href: "/import-export",  icon: ArrowUpDown },
       { label: "Settings",        href: "/settings",       icon: Settings },
     ],
   },

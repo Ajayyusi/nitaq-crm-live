@@ -5,6 +5,7 @@ import { getNextSequence } from "@/models/Counter";
 import { leadSources, leadStages, courseList } from "@/constants/leads";
 import { serializeLead } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 type LeadPayload = {
   fullName?: string;
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest) {
     const seq = await getNextSequence("lead");
     const leadId = `L-${String(seq).padStart(3, "0")}`;
     const lead = await Lead.create({ ...payload, leadId });
+    logAudit({ userName: authed.name, userRole: authed.role, action: "created", entity: "Lead", entityId: lead._id.toString(), entityLabel: lead.fullName, detail: `${lead.course} · via ${lead.source}` });
     return NextResponse.json({ lead: serializeLead(lead) }, { status: 201 });
   } catch (error) {
     const message =

@@ -5,6 +5,7 @@ import FollowUp from "@/models/FollowUp";
 import { followUpTypes, followUpStatuses } from "@/models/FollowUp";
 import { serializeFollowUp } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -65,6 +66,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!followUp) {
       return NextResponse.json({ message: "Follow-up not found." }, { status: 404 });
     }
+    const detail = "status" in update ? `Status → ${String(update.status)}` : "Details updated";
+    logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "FollowUp", entityId: id, entityLabel: followUp.contactName, detail });
     return NextResponse.json({ followUp: serializeFollowUp(followUp) });
   } catch (error) {
     const message =
@@ -87,5 +90,6 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   if (!followUp) {
     return NextResponse.json({ message: "Follow-up not found." }, { status: 404 });
   }
+  logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "FollowUp", entityId: id, entityLabel: followUp.contactName });
   return NextResponse.json({ message: "Follow-up deleted." });
 }

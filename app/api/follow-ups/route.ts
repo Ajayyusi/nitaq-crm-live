@@ -4,6 +4,7 @@ import FollowUp from "@/models/FollowUp";
 import { followUpTypes, followUpStatuses } from "@/models/FollowUp";
 import { serializeFollowUp } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 const allowedTypes = new Set<string>(followUpTypes);
 const allowedStatuses = new Set<string>(followUpStatuses);
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest) {
       leadId: body.leadId || undefined,
     });
 
+    logAudit({ userName: authed.name, userRole: authed.role, action: "created", entity: "FollowUp", entityId: followUp._id.toString(), entityLabel: followUp.contactName, detail: `${followUp.type} · ${new Date(followUp.followUpDate).toLocaleDateString("en-GB")}` });
     return NextResponse.json({ followUp: serializeFollowUp(followUp) }, { status: 201 });
   } catch (error) {
     const message =
