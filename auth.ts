@@ -18,6 +18,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   
   // 👇 CRITICAL: Force NextAuth runtime to lock onto your exact subdomain and ignore fallback headers
   trustHost: true,
+  basePath: "/api/auth",
   
   providers: [
     Credentials({
