@@ -1,9 +1,10 @@
 import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 
-// Force NextAuth to trust the Vercel subdomain header at the Edge Middleware level
+// Deep force the Edge Runtime instance to anchor directly onto the custom subdomain paths
 export const proxy = NextAuth({
   ...authConfig,
+  basePath: "/api/auth",
   trustHost: true,
 }).auth;
 
