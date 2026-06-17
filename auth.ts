@@ -15,6 +15,10 @@ class DBConnectionError extends CredentialsSignin {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,  // includes jwt, session, and authorized callbacks
+  
+  // 👇 CRITICAL: Force NextAuth runtime to lock onto your exact subdomain and ignore fallback headers
+  trustHost: true,
+  
   providers: [
     Credentials({
       credentials: {
