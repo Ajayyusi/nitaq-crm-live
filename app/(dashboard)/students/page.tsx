@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { GraduationCap, Award, MessageCircle, Search } from "lucide-react";
+import { GraduationCap, Award, MessageCircle, Search, Loader2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 
@@ -12,15 +12,47 @@ type Enrollment = {
   startDate: string; endDate: string; format: string; email: string;
 };
 
+const STATUSES = ["Active", "Completed", "On Hold", "Dropped"] as const;
+
 const statusColor: Record<string, string> = {
-  Active: "bg-[#E8F5E9] text-[#1B5E20]",
-  Completed: "bg-teal-50 text-teal-700",
-  Dropped: "bg-red-50 text-red-700",
-  "On Hold": "bg-amber-50 text-amber-700",
+  Active:     "bg-[#E8F5E9] text-[#1B5E20]",
+  Completed:  "bg-teal-50 text-teal-700",
+  Dropped:    "bg-red-50 text-red-700",
+  "On Hold":  "bg-amber-50 text-amber-700",
 };
 
 const fmt = (n: number) =>
   "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+function StatusCell({ enrollment, onUpdated }: { enrollment: Enrollment; onUpdated: (id: string, status: string) => void }) {
+  const [saving, setSaving] = useState(false);
+
+  async function change(newStatus: string) {
+    if (newStatus === enrollment.status) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/enrollments/${enrollment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) onUpdated(enrollment.id, newStatus);
+    } catch { /* ignore */ }
+    finally { setSaving(false); }
+  }
+
+  if (saving) return <Loader2 className="h-4 w-4 animate-spin text-slate-400" />;
+
+  return (
+    <select
+      value={enrollment.status}
+      onChange={(e) => void change(e.target.value)}
+      className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 outline-none cursor-pointer ${statusColor[enrollment.status] ?? "bg-slate-100 text-slate-600"}`}
+    >
+      {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+    </select>
+  );
+}
 
 export default function StudentsPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -49,8 +81,12 @@ export default function StudentsPage() {
 
   useEffect(() => { fetchEnrollments(); }, [fetchEnrollments]);
 
-  // A student is certificate-eligible when they have no balance due
-  // (attendance >= 80% check will come once attendance module populates data)
+  function handleStatusUpdate(id: string, newStatus: string) {
+    setEnrollments((prev) =>
+      prev.map((e) => e.id === id ? { ...e, status: newStatus } : e)
+    );
+  }
+
   const eligible = enrollments.filter(
     (e) => e.status === "Completed" && e.balanceDue === 0
   );
@@ -64,7 +100,6 @@ export default function StudentsPage() {
         subtitle="Enrolled students across all courses"
       />
 
-      {/* Certificate eligibility banner */}
       {eligible.length > 0 && (
         <div className="mx-6 mt-4 p-3 bg-[#E8F5E9] border border-[#2E7D32]/30 rounded-xl flex items-start gap-3">
           <Award className="w-4 h-4 text-[#2E7D32] mt-0.5 flex-shrink-0" />
@@ -76,7 +111,6 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Status tabs */}
       <div className="px-6 pt-4 pb-2 flex gap-2 flex-wrap">
         {tabs.map((t) => (
           <button
@@ -93,7 +127,6 @@ export default function StudentsPage() {
         ))}
       </div>
 
-      {/* Search */}
       <div className="px-6 pb-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -113,7 +146,6 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Table */}
       <div className="flex-1 px-6 pb-8 overflow-auto">
         {loading ? (
           <div className="space-y-2">
@@ -166,9 +198,7 @@ export default function StudentsPage() {
                         {e.batchName && <div className="text-xs text-slate-400">{e.batchName}</div>}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor[e.status] ?? "bg-slate-100 text-slate-600"}`}>
-                          {e.status}
-                        </span>
+                        <StatusCell enrollment={e} onUpdated={handleStatusUpdate} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-xs text-slate-600">{e.paymentStatus}</div>
