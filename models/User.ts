@@ -1,6 +1,9 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export const userRoles = ["admin", "manager", "sales", "finance", "trainer"] as const;
+export const userRoles = [
+  "admin", "manager", "sales", "finance", "trainer",
+  "assessor", "iqa", "eqa",
+] as const;
 export type UserRole = (typeof userRoles)[number];
 
 export interface IUser extends Document {

@@ -201,3 +201,120 @@ export function serializeSession(s: any) {
     createdAt: s.createdAt?.toISOString() ?? "",
   };
 }
+
+// ── Centre Management System serializers ─────────────────────────────────────
+
+export function serializeLearnerProfile(p: any) {
+  const docs = (p.documents ?? []).map((d: any) => ({
+    docType:    d.docType ?? "",
+    label:      d.label ?? "",
+    status:     d.status ?? "Missing",
+    expiryDate: d.expiryDate ? new Date(d.expiryDate).toISOString().slice(0, 10) : "",
+    uploadRef:  d.uploadRef ?? "",
+    verifiedBy: d.verifiedBy ?? "",
+    verifiedAt: d.verifiedAt ? new Date(d.verifiedAt).toISOString() : "",
+    notes:      d.notes ?? "",
+  }));
+  const commsLog = (p.commsLog ?? []).map((c: any) => ({
+    note: c.note ?? "",
+    by:   c.by ?? "",
+    at:   c.at ? new Date(c.at).toISOString() : "",
+  }));
+  // Compute required doc completion
+  const required = ["Emirates ID", "Passport", "Visa", "Photo"];
+  const docMap = new Map(docs.map((d: any) => [d.docType, d.status]));
+  const presentCount = required.filter(
+    (t) => t === "Photo" ? p.photoOnFile : docMap.get(t) === "Present"
+  ).length;
+  const docCompletionPct = Math.round((presentCount / required.length) * 100);
+
+  return {
+    id:                       p._id.toString(),
+    enrollmentId:             p.enrollmentId?.toString() ?? "",
+    fullName:                 p.fullName ?? "",
+    phone:                    p.phone ?? "",
+    email:                    p.email ?? "",
+    emiratesId:               p.emiratesId ?? "",
+    emiratesIdExpiry:         p.emiratesIdExpiry ? new Date(p.emiratesIdExpiry).toISOString().slice(0, 10) : "",
+    passportNumber:           p.passportNumber ?? "",
+    passportExpiry:           p.passportExpiry ? new Date(p.passportExpiry).toISOString().slice(0, 10) : "",
+    visaNumber:               p.visaNumber ?? "",
+    visaExpiry:               p.visaExpiry ? new Date(p.visaExpiry).toISOString().slice(0, 10) : "",
+    photoOnFile:              p.photoOnFile ?? false,
+    nationality:              p.nationality ?? "",
+    dateOfBirth:              p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().slice(0, 10) : "",
+    emergencyContactName:     p.emergencyContactName ?? "",
+    emergencyContactPhone:    p.emergencyContactPhone ?? "",
+    emergencyContactRelation: p.emergencyContactRelation ?? "",
+    documents:                docs,
+    riskStatus:               p.riskStatus ?? "Low",
+    riskNotes:                p.riskNotes ?? "",
+    commsLog,
+    qualificationIds:         (p.qualificationIds ?? []).map((id: any) => id.toString()),
+    isActive:                 p.isActive ?? true,
+    docCompletionPct,
+    missingRequiredDocs:      required.filter(
+      (t) => t === "Photo" ? !p.photoOnFile : docMap.get(t) !== "Present"
+    ),
+    createdAt: p.createdAt?.toISOString() ?? "",
+    updatedAt: p.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeQualification(q: any) {
+  const units = (q.units ?? []).map((u: any) => ({
+    unitCode:           u.unitCode ?? "",
+    unitTitle:          u.unitTitle ?? "",
+    level:              u.level ?? "",
+    credits:            u.credits ?? null,
+    glh:                u.glh ?? null,
+    learningOutcomes:   u.learningOutcomes ?? "",
+    assessmentCriteria: u.assessmentCriteria ?? "",
+    isMandatory:        u.isMandatory ?? true,
+  }));
+  return {
+    id:                q._id.toString(),
+    title:             q.title ?? "",
+    awardingBody:      q.awardingBody ?? "",
+    level:             q.level ?? "",
+    qualificationCode: q.qualificationCode ?? "",
+    credits:           q.credits ?? null,
+    glh:               q.glh ?? null,
+    tqt:               q.tqt ?? null,
+    units,
+    tutorId:           q.tutorId?.toString() ?? "",
+    assessorId:        q.assessorId?.toString() ?? "",
+    iqaId:             q.iqaId?.toString() ?? "",
+    status:            q.status ?? "Active",
+    createdAt:         q.createdAt?.toISOString() ?? "",
+    updatedAt:         q.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeLearnerAssessment(a: any) {
+  const resubmissions = (a.resubmissions ?? []).map((r: any) => ({
+    submittedAt: r.submittedAt ? new Date(r.submittedAt).toISOString() : "",
+    feedback:    r.feedback ?? "",
+    grade:       r.grade ?? "",
+    by:          r.by ?? "",
+  }));
+  return {
+    id:               a._id.toString(),
+    learnerProfileId: a.learnerProfileId?.toString() ?? "",
+    qualificationId:  a.qualificationId?.toString() ?? "",
+    unitCode:         a.unitCode ?? "",
+    unitTitle:        a.unitTitle ?? "",
+    assignmentBrief:  a.assignmentBrief ?? "",
+    dueDate:          a.dueDate ? new Date(a.dueDate).toISOString().slice(0, 10) : "",
+    submittedAt:      a.submittedAt ? new Date(a.submittedAt).toISOString().slice(0, 10) : "",
+    markingDeadline:  a.markingDeadline ? new Date(a.markingDeadline).toISOString().slice(0, 10) : "",
+    status:           a.status ?? "Not Submitted",
+    assessorId:       a.assessorId?.toString() ?? "",
+    assessorFeedback: a.assessorFeedback ?? "",
+    grade:            a.grade ?? "",
+    resubmissions,
+    fileRef:          a.fileRef ?? "",
+    createdAt:        a.createdAt?.toISOString() ?? "",
+    updatedAt:        a.updatedAt?.toISOString() ?? "",
+  };
+}

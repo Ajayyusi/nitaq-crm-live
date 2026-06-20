@@ -16,8 +16,10 @@ import {
   LogOut,
   ReceiptText,
   Settings,
+  ShieldCheck,
   TrendingUp,
   UserCheck,
+  Users,
   WalletCards,
   BellRing,
   X,
@@ -51,6 +53,13 @@ const navGroups = [
       { label: "Finance",     href: "/finance",      icon: WalletCards },
       { label: "Expenses",    href: "/expenses",     icon: ReceiptText },
       { label: "Reports",     href: "/reports",      icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Centre Management",
+    items: [
+      { label: "Compliance",       href: "/compliance",       icon: ShieldCheck },
+      { label: "Learner Profiles", href: "/learner-profiles", icon: Users },
     ],
   },
   {
