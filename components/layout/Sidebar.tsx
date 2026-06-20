@@ -8,8 +8,10 @@ import {
   Activity,
   ArrowUpDown,
   BarChart3,
+  BookMarked,
   BookOpen,
   CalendarDays,
+  ClipboardCheck,
   ClipboardList,
   GraduationCap,
   LayoutDashboard,
@@ -58,8 +60,10 @@ const navGroups = [
   {
     label: "Centre Management",
     items: [
-      { label: "Compliance",       href: "/compliance",       icon: ShieldCheck },
-      { label: "Learner Profiles", href: "/learner-profiles", icon: Users },
+      { label: "Compliance",        href: "/compliance",        icon: ShieldCheck },
+      { label: "Learner Profiles",  href: "/learner-profiles",  icon: Users },
+      { label: "Qualifications",    href: "/qualifications",    icon: BookMarked },
+      { label: "Assessments",       href: "/assessments",       icon: ClipboardCheck },
     ],
   },
   {
