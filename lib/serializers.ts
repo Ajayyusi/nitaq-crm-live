@@ -318,3 +318,62 @@ export function serializeLearnerAssessment(a: any) {
     updatedAt:        a.updatedAt?.toISOString() ?? "",
   };
 }
+
+export function serializeIQASample(s: any) {
+  return {
+    id:               s._id.toString(),
+    assessmentId:     s.assessmentId?.toString() ?? "",
+    learnerProfileId: s.learnerProfileId?.toString() ?? "",
+    qualificationId:  s.qualificationId?.toString() ?? "",
+    unitCode:         s.unitCode ?? "",
+    sampledBy:        s.sampledBy ?? "",
+    sampledAt:        s.sampledAt ? new Date(s.sampledAt).toISOString().slice(0, 10) : "",
+    status:           s.status ?? "Planned",
+    outcome:          s.outcome ?? null,
+    feedback:         s.feedback ?? "",
+    actionRequired:   s.actionRequired ?? "",
+    actionDueDate:    s.actionDueDate ? new Date(s.actionDueDate).toISOString().slice(0, 10) : "",
+    actionCompleted:  s.actionCompleted ?? false,
+    createdAt:        s.createdAt?.toISOString() ?? "",
+    updatedAt:        s.updatedAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeStaffCompliance(sc: any) {
+  const docs = (sc.documents ?? []).map((d: any) => ({
+    docType:    d.docType ?? "",
+    status:     d.status ?? "Missing",
+    issueDate:  d.issueDate ? new Date(d.issueDate).toISOString().slice(0, 10) : "",
+    expiryDate: d.expiryDate ? new Date(d.expiryDate).toISOString().slice(0, 10) : "",
+    reference:  d.reference ?? "",
+    notes:      d.notes ?? "",
+  }));
+
+  const requiredDocs = ["DBS Check", "Right to Work", "Teaching Qualification"];
+  const docMap = new Map(docs.map((d: any) => [d.docType, d.status]));
+  const missingCount = requiredDocs.filter((t) => docMap.get(t) !== "Valid").length;
+
+  // Check for expiring within 30 days
+  const expiringDocs = docs.filter((d: any) => {
+    if (!d.expiryDate || d.status !== "Valid") return false;
+    const diff = (new Date(d.expiryDate).getTime() - Date.now()) / 86400000;
+    return diff >= 0 && diff <= 30;
+  }).map((d: any) => d.docType);
+
+  return {
+    id:           sc._id.toString(),
+    userId:       sc.userId?.toString() ?? "",
+    staffName:    sc.staffName ?? "",
+    staffRole:    sc.staffRole ?? "",
+    email:        sc.email ?? "",
+    phone:        sc.phone ?? "",
+    documents:    docs,
+    notes:        sc.notes ?? "",
+    isActive:     sc.isActive ?? true,
+    missingRequiredDocs: requiredDocs.filter((t) => docMap.get(t) !== "Valid"),
+    missingCount,
+    expiringDocs,
+    createdAt:    sc.createdAt?.toISOString() ?? "",
+    updatedAt:    sc.updatedAt?.toISOString() ?? "",
+  };
+}

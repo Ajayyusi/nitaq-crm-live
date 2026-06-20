@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   TrendingUp,
   UserCheck,
+  UserCog,
   Users,
   WalletCards,
   BellRing,
@@ -64,6 +65,8 @@ const navGroups = [
       { label: "Learner Profiles",  href: "/learner-profiles",  icon: Users },
       { label: "Qualifications",    href: "/qualifications",    icon: BookMarked },
       { label: "Assessments",       href: "/assessments",       icon: ClipboardCheck },
+      { label: "IQA Sampling",      href: "/iqa",               icon: ClipboardList },
+      { label: "Staff Compliance",  href: "/staff-compliance",  icon: UserCog },
     ],
   },
   {
