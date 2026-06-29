@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
+import Enrollment from "@/models/Enrollment";
+import { getNextSequence } from "@/models/Counter";
 import { leadSources, leadStages, courseList } from "@/constants/leads";
 import { serializeLead } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
@@ -147,7 +149,41 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (changes.length === 0 && Object.keys($set).length > 0) changes.push("Details updated");
     logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Lead", entityId: id, entityLabel: lead.fullName, detail: changes.join(" · ") });
 
-    return NextResponse.json({ lead: serializeLead(lead) });
+    // Auto-create enrollment when stage transitions to Enrolled
+    let enrollmentId: string | undefined;
+    const newStage = ($set as Record<string, unknown>).stage;
+    if (newStage === "Enrolled" && existing.stage !== "Enrolled") {
+      const alreadyEnrolled = await Enrollment.findOne({ leadId: id }).lean();
+      if (!alreadyEnrolled) {
+        const seq = await getNextSequence("enrollment");
+        const enrollmentIdStr = `E-${String(seq).padStart(3, "0")}`;
+        const course = lead.course === "Other" && lead.customCourse ? lead.customCourse : lead.course;
+        const enrollment = await Enrollment.create({
+          enrollmentId: enrollmentIdStr,
+          leadId:       lead._id,
+          fullName:     lead.fullName,
+          phone:        lead.phone,
+          email:        lead.email || undefined,
+          course,
+          status:       "Active",
+          paymentStatus:"Instalment 1 Paid",
+          totalFee:     0,
+          amountPaid:   0,
+          registrationDate: new Date(),
+        });
+        enrollmentId = enrollment._id.toString();
+        logAudit({
+          userName: authed.name, userRole: authed.role,
+          action: "created", entity: "Enrollment",
+          entityId: enrollmentId, entityLabel: lead.fullName,
+          detail: `Auto-created from lead · ${enrollmentIdStr} · ${course}`,
+        });
+      } else {
+        enrollmentId = alreadyEnrolled._id.toString();
+      }
+    }
+
+    return NextResponse.json({ lead: serializeLead(lead), enrollmentId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update lead.";
     return NextResponse.json({ message }, { status: 400 });

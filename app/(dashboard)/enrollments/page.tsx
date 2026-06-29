@@ -72,23 +72,43 @@ export default function EnrollmentsPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  // Pre-fill from lead conversion query params
+  // Handle lead conversion redirect: ?new=<enrollmentMongoId>
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+    const newId = params.get("new");
     const name = params.get("name");
-    if (!name) return;
-    setForm({
-      ...emptyForm,
-      fullName: name,
-      phone: params.get("phone") ?? "",
-      email: params.get("email") ?? "",
-      course: params.get("course") ?? "Other",
-    });
-    setEditingEnrollment(null);
-    setFormError("");
-    setDrawerOpen(true);
-    window.history.replaceState({}, "", "/enrollments");
+
+    if (newId) {
+      // Auto-created enrollment — fetch it and open edit drawer
+      fetch(`/api/enrollments/${newId}`)
+        .then((r) => r.json())
+        .then((d) => {
+          const e = d.enrollment;
+          if (!e) return;
+          setEditingEnrollment(e);
+          setForm({
+            fullName: e.fullName, phone: e.phone, email: e.email, emiratesId: "", nationality: "",
+            course: e.course, batchName: e.batchName ?? "", startDate: e.startDate ?? "",
+            endDate: e.endDate ?? "", schedule: e.schedule ?? "", format: e.format ?? "In-Person",
+            status: e.status, paymentStatus: e.paymentStatus,
+            totalFee: String(e.totalFee), amountPaid: String(e.amountPaid),
+            paymentMethod: "Cash", notes: e.notes ?? "",
+          });
+          setFormError("");
+          setDrawerOpen(true);
+          setNotice("Enrollment auto-created from lead. Please complete the details below.");
+        })
+        .catch(() => {});
+      window.history.replaceState({}, "", "/enrollments");
+    } else if (name) {
+      // Legacy pre-fill path
+      setForm({ ...emptyForm, fullName: name, phone: params.get("phone") ?? "", email: params.get("email") ?? "", course: params.get("course") ?? "Other" });
+      setEditingEnrollment(null);
+      setFormError("");
+      setDrawerOpen(true);
+      window.history.replaceState({}, "", "/enrollments");
+    }
   }, []);
 
   async function load() {

@@ -501,19 +501,18 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
     setConverting(lead.id);
     setError("");
     try {
-      await fetch(`/api/leads/${lead.id}`, {
+      const res = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stage: "Enrolled" }),
       });
+      const data = await res.json();
       await loadLeads();
-      const params = new URLSearchParams({
-        name: lead.fullName,
-        phone: lead.phone,
-        ...(lead.email ? { email: lead.email } : {}),
-        course: lead.course,
-      });
-      router.push(`/enrollments?${params.toString()}`);
+      if (data.enrollmentId) {
+        router.push(`/enrollments?new=${data.enrollmentId}`);
+      } else {
+        router.push("/enrollments");
+      }
     } catch {
       setError("Could not start conversion. Please try again.");
     } finally {
