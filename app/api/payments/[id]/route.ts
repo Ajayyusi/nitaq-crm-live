@@ -5,6 +5,7 @@ import { Payment } from "@/models/Financial";
 import { paymentMethods, paymentTypes, txStatuses } from "@/models/Financial";
 import { serializePayment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { logAudit } from "@/lib/audit";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -45,7 +46,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body = await request.json();
     const update: Record<string, unknown> = {};
 
-    for (const f of ["studentName", "studentPhone", "course", "receiptRef", "notes", "recordedBy"] as const) {
+    for (const f of ["studentName", "studentPhone", "course", "receiptRef", "notes"] as const) {
       if (f in body) update[f] = clean(body[f]) || undefined;
     }
     if ("studentName" in update && !update.studentName) throw new Error("Student name is required.");
@@ -84,6 +85,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const payment = await Payment.findByIdAndUpdate(id, update, { new: true, runValidators: true });
     if (!payment) return NextResponse.json({ message: "Payment not found." }, { status: 404 });
+    logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Payment", entityId: id, entityLabel: payment.studentName, detail: `${payment.paymentId} · AED ${payment.amount}` });
     return NextResponse.json({ payment: serializePayment(payment) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update payment.";
@@ -91,10 +93,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
+// Payment deletion is admin-only by policy.
 export async function DELETE(_req: NextRequest, context: RouteContext) {
-  const authed = await requireAuth(["admin", "manager", "finance"]);
+  const authed = await requireAuth(["admin"]);
   if (authed instanceof NextResponse) return authed;
-
 
   const { id } = await context.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -103,5 +105,6 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   await connectDB();
   const payment = await Payment.findByIdAndDelete(id);
   if (!payment) return NextResponse.json({ message: "Payment not found." }, { status: 404 });
+  logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "Payment", entityId: id, entityLabel: payment.studentName, detail: `${payment.paymentId} · AED ${payment.amount}` });
   return NextResponse.json({ message: "Payment deleted." });
 }

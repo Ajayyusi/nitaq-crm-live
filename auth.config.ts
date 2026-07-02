@@ -40,8 +40,7 @@ export const authConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const pathname = nextUrl.pathname;
-      const publicPaths = process.env.ENABLE_SETUP === "true" ? ["/login", "/api/auth", "/setup"] : ["/login", "/api/auth"];
-      if (publicPaths.some((p) => pathname.startsWith(p))) return true;
+      if (BASE_PUBLIC_PATHS.some((p) => pathname.startsWith(p))) return true;
       if (!isLoggedIn) return false;
       if (pathname.startsWith("/api/") || pathname.startsWith("/access-denied")) return true;
       const rawRole = (auth?.user as { role?: string })?.role;

@@ -22,7 +22,8 @@ const UserSchema = new Schema<IUser>(
   {
     name:         { type: String, required: true, trim: true },
     email:        { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password:     { type: String, required: true },
+    // select:false — hash never leaves the DB unless explicitly requested with .select("+password")
+    password:     { type: String, required: true, select: false },
     role:         { type: String, enum: [...userRoles], default: "sales" },
     active:       { type: Boolean, default: true },
     mobileNumber: { type: String, trim: true },

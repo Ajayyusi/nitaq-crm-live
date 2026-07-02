@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
-import Qualification from "@/models/Qualification";
+import Qualification, { qualificationStatuses } from "@/models/Qualification";
 import { requireAuth } from "@/lib/api-auth";
 import { serializeQualification } from "@/lib/serializers";
 import { logAudit } from "@/lib/audit";
+import { sanitizeUnits } from "@/lib/qualification-utils";
+
+const allowedQualStatuses = new Set<string>(qualificationStatuses);
 
 export async function GET(_request: NextRequest) {
   const authed = await requireAuth(["admin", "manager", "iqa", "eqa", "assessor", "trainer"]);
@@ -33,8 +36,8 @@ export async function POST(request: NextRequest) {
       tutorId:           body.tutorId || undefined,
       assessorId:        body.assessorId || undefined,
       iqaId:             body.iqaId || undefined,
-      status:            body.status ?? "Active",
-      units:             Array.isArray(body.units) ? body.units : [],
+      status:            allowedQualStatuses.has(body.status) ? body.status : "Active",
+      units:             sanitizeUnits(body.units),
     });
 
     logAudit({

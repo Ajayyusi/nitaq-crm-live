@@ -62,6 +62,8 @@ export const PAGE_PERMISSIONS: { path: string; roles: AppRole[] }[] = [
   // ── System ────────────────────────────────────────────────────────────
   { path: "/activity",      roles: ["admin", "manager"] },
   { path: "/import-export", roles: ["admin", "manager", "sales", "finance"] },
+  { path: "/users",         roles: ["admin"] },
+  { path: "/allocations",   roles: ["admin", "manager"] },
 
   // ── Dashboard — everyone ───────────────────────────────────────────────
   { path: "/dashboard",

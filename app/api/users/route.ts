@@ -16,10 +16,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const roleFilter = searchParams.get("role")?.trim();
 
-    // Non-admins can only query role-filtered lists (e.g. ?role=sales for assignment dropdowns)
+    // Non-admins can only query role-filtered lists (e.g. ?role=sales for
+    // assignment dropdowns) and never privileged roles.
     const filter: Record<string, unknown> = {};
-    if (roleFilter) filter.role = roleFilter;
-    else if (authed.role !== "admin") {
+    if (roleFilter) {
+      if (!allowedRoles.has(roleFilter)) {
+        return NextResponse.json({ error: "Invalid role filter." }, { status: 400 });
+      }
+      if (authed.role !== "admin" && (roleFilter === "admin" || roleFilter === "manager")) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+      filter.role = roleFilter;
+    } else if (authed.role !== "admin") {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 

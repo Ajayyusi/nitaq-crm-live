@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authed = await requireAuth(["admin", "manager", "sales"]);
+  const authed = await requireAuth(["admin", "manager"]);
   if (authed instanceof NextResponse) return authed;
 
 

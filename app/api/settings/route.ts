@@ -60,7 +60,26 @@ export async function PATCH(request: NextRequest) {
       { upsert: true, new: true }
     );
 
-    return NextResponse.json({ success: true, settings: s });
+    // Return the same whitelisted shape as GET — never the raw document
+    return NextResponse.json({
+      success: true,
+      settings: {
+        academyNameEn:  s.academyNameEn,
+        academyNameAr:  s.academyNameAr,
+        phone:          s.phone,
+        whatsappNumber: s.whatsappNumber,
+        email:          s.email,
+        website:        s.website,
+        address:        s.address,
+        city:           s.city,
+        logoBase64:     s.logoBase64 ?? "",
+        currency:       s.currency,
+        vatEnabled:     s.vatEnabled,
+        vatRate:        s.vatRate,
+        vatNumber:      s.vatNumber,
+        receiptPrefix:  s.receiptPrefix,
+      },
+    });
   } catch {
     return NextResponse.json({ error: "Failed to save settings." }, { status: 500 });
   }

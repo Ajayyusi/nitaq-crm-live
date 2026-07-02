@@ -85,7 +85,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
           stage,
           notes: str(r.notes) || undefined,
           nextFollowUpDate: r.nextFollowUpDate ? new Date(r.nextFollowUpDate) : undefined,
-          assignedTo: str(r.assignedTo) || undefined,
+          // Sales imports are always self-assigned (same rule as POST /api/leads)
+          assignedTo: authed.role === "sales" ? authed.name : (str(r.assignedTo) || undefined),
         });
         success++;
       } catch (e: unknown) {

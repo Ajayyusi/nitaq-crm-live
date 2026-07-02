@@ -1,8 +1,9 @@
 /**
- * Seed script — creates the first Super Admin user
- * Run: npx tsx scripts/seed.ts
+ * Seed script — creates the first admin user.
+ * Run: SEED_ADMIN_EMAIL=you@example.com SEED_ADMIN_PASSWORD='strong-password' npx tsx scripts/seed.ts
  *
  * Set MONGODB_URI in .env.local before running.
+ * Credentials are taken from environment variables only — never hardcode them.
  */
 
 import mongoose from "mongoose";
@@ -15,6 +16,19 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
   console.error("❌  MONGODB_URI not set in .env.local");
+  process.exit(1);
+}
+
+const email = process.env.SEED_ADMIN_EMAIL?.toLowerCase().trim();
+const password = process.env.SEED_ADMIN_PASSWORD;
+const name = process.env.SEED_ADMIN_NAME || "Administrator";
+
+if (!email || !password) {
+  console.error("❌  Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD environment variables.");
+  process.exit(1);
+}
+if (password.length < 12) {
+  console.error("❌  SEED_ADMIN_PASSWORD must be at least 12 characters.");
   process.exit(1);
 }
 
@@ -33,30 +47,17 @@ async function seed() {
   await mongoose.connect(MONGODB_URI!);
   console.log("✅  Connected to MongoDB");
 
-  const email = "admin@nitaq.com";
   const existing = await User.findOne({ email });
-
   if (existing) {
     console.log(`ℹ️   User ${email} already exists. Skipping.`);
     await mongoose.disconnect();
     return;
   }
 
-  const hashed = await bcrypt.hash("Nitaq@2024!", 12);
-  await User.create({
-    name: "Super Admin",
-    email,
-    password: hashed,
-    role: "super_admin",
-    active: true,
-    phone: "+971500000000",
-  });
+  const hashed = await bcrypt.hash(password!, 12);
+  await User.create({ name, email, password: hashed, role: "admin", active: true });
 
-  console.log("✅  Super Admin created:");
-  console.log("   Email:    admin@nitaq.com");
-  console.log("   Password: Nitaq@2024!");
-  console.log("   ⚠️  Change the password immediately after first login.");
-
+  console.log(`✅  Admin user created: ${email}`);
   await mongoose.disconnect();
 }
 

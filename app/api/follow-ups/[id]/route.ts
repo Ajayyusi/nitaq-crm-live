@@ -16,6 +16,19 @@ function clean(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+// Sales users may only touch follow-ups assigned to them or created by them.
+function canAccessFollowUp(
+  authed: { role: string; name: string },
+  fu: { assignedTo?: string; createdBy?: string }
+) {
+  if (authed.role !== "sales") return true;
+  const n = authed.name.toLowerCase();
+  return (
+    (fu.assignedTo ?? "").toLowerCase() === n ||
+    (fu.createdBy ?? "").toLowerCase() === n
+  );
+}
+
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const authed = await requireAuth(["admin", "manager", "sales"]);
   if (authed instanceof NextResponse) return authed;
@@ -27,7 +40,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
     }
     await connectDB();
+    const existing = await FollowUp.findById(id).lean();
+    if (!existing) return NextResponse.json({ message: "Follow-up not found." }, { status: 404 });
+    if (!canAccessFollowUp(authed, existing)) {
+      return NextResponse.json({ message: "Access denied." }, { status: 403 });
+    }
     const body = await request.json();
+    // Sales cannot reassign follow-ups to others
+    if (authed.role === "sales") delete body.assignedTo;
     const update: Record<string, unknown> = {};
 
     if ("contactName" in body) {
@@ -86,6 +106,13 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
   }
   await connectDB();
+  const existing = await FollowUp.findById(id).lean();
+  if (!existing) {
+    return NextResponse.json({ message: "Follow-up not found." }, { status: 404 });
+  }
+  if (!canAccessFollowUp(authed, existing)) {
+    return NextResponse.json({ message: "Access denied." }, { status: 403 });
+  }
   const followUp = await FollowUp.findByIdAndDelete(id);
   if (!followUp) {
     return NextResponse.json({ message: "Follow-up not found." }, { status: 404 });

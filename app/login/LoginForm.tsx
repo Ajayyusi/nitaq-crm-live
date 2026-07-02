@@ -7,11 +7,12 @@ import { Eye, EyeOff, Loader2, Lock, Mail, AlertCircle, Database } from "lucide-
 
 const ERRORS: Record<string, { msg: string; isDB?: boolean }> = {
   db_error: {
-    msg: "Cannot connect to the database. Your IP may not be whitelisted in MongoDB Atlas.",
+    msg: "Service temporarily unavailable. Please try again in a moment.",
     isDB: true,
   },
   CredentialsSignin:    { msg: "Invalid email or password. Please try again." },
   invalid_credentials:  { msg: "Invalid email or password. Please try again." },
+  too_many_attempts:    { msg: "Too many login attempts. Please wait 15 minutes and try again." },
   default:              { msg: "Something went wrong. Please try again." },
 };
 

@@ -47,7 +47,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const authed = await requireAuth(["admin", "manager", "sales"]);
+  const authed = await requireAuth(["admin", "manager"]);
   if (authed instanceof NextResponse) return authed;
 
 
@@ -136,9 +136,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_req: NextRequest, context: RouteContext) {
-  const authed = await requireAuth(["admin", "manager", "sales"]);
+  const authed = await requireAuth(["admin", "manager"]);
   if (authed instanceof NextResponse) return authed;
-
 
   const { id } = await context.params;
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -147,5 +146,6 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   await connectDB();
   const enrollment = await Enrollment.findByIdAndDelete(id);
   if (!enrollment) return NextResponse.json({ message: "Enrollment not found." }, { status: 404 });
+  logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "Enrollment", entityId: id, entityLabel: enrollment.fullName, detail: enrollment.enrollmentId });
   return NextResponse.json({ message: "Enrollment deleted." });
 }

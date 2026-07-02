@@ -120,7 +120,7 @@ export async function POST() {
     }
 
     return NextResponse.json({
-      message: `Seed complete: 3 staff accounts, ${leadsData.length} leads, ${enrollmentsData.length} enrollments, ${paymentsData.length} payments, ${followUpsData.length} follow-ups, ${expensesData.length} expenses.`,
+      message: `Seed complete: ${leadsData.length} leads, ${enrollmentsData.length} enrollments, ${paymentsData.length} payments, ${followUpsData.length} follow-ups, ${expensesData.length} expenses.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Seed failed.";

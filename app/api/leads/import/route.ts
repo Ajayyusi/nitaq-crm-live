@@ -100,7 +100,8 @@ export async function POST(request: NextRequest) {
         source,
         stage,
         nextFollowUpDate: data.nextFollowUpDate ? new Date(data.nextFollowUpDate) : undefined,
-        assignedTo: data.assignedTo || undefined,
+        // Sales imports are always self-assigned (same rule as POST /api/leads)
+        assignedTo: authed.role === "sales" ? authed.name : (data.assignedTo || undefined),
         notes: data.notes || undefined,
       });
       created++;

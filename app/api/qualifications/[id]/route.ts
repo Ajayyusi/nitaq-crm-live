@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import connectDB from "@/lib/db";
-import Qualification from "@/models/Qualification";
+import Qualification, { qualificationStatuses } from "@/models/Qualification";
 import { requireAuth } from "@/lib/api-auth";
 import { serializeQualification } from "@/lib/serializers";
 import { logAudit } from "@/lib/audit";
+import { sanitizeUnits } from "@/lib/qualification-utils";
+
+const allowedQualStatuses = new Set<string>(qualificationStatuses);
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -45,8 +48,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if ("tutorId" in body) update.tutorId = body.tutorId || undefined;
     if ("assessorId" in body) update.assessorId = body.assessorId || undefined;
     if ("iqaId" in body) update.iqaId = body.iqaId || undefined;
-    if ("status" in body) update.status = body.status;
-    if ("units" in body && Array.isArray(body.units)) update.units = body.units;
+    if ("status" in body) {
+      if (!allowedQualStatuses.has(body.status)) throw new Error("Invalid status.");
+      update.status = body.status;
+    }
+    if ("units" in body && Array.isArray(body.units)) update.units = sanitizeUnits(body.units);
 
     const qual = await Qualification.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true });
     if (!qual) return NextResponse.json({ message: "Not found." }, { status: 404 });

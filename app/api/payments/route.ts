@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
       receiptRef: clean(body.receiptRef) || undefined,
       notes: clean(body.notes) || undefined,
-      recordedBy: clean(body.recordedBy) || undefined,
+      recordedBy: authed.name || undefined,
       enrollmentId: body.enrollmentId || undefined,
       installmentNumber: installmentNumber && installmentNumber >= 1 ? installmentNumber : undefined,
       totalInstallments: totalInstallments && totalInstallments >= 1 ? totalInstallments : undefined,

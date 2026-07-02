@@ -508,7 +508,11 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
       });
       const data = await res.json();
       await loadLeads();
-      if (data.enrollmentId) {
+      if (isSales) {
+        // Sales don't have access to the enrollments page — the enrollment
+        // record was created server-side; admin/manager completes the details.
+        setError("");
+      } else if (data.enrollmentId) {
         router.push(`/enrollments?new=${data.enrollmentId}`);
       } else {
         router.push("/enrollments");
