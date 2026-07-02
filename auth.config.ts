@@ -41,7 +41,16 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
       const pathname = nextUrl.pathname;
       if (BASE_PUBLIC_PATHS.some((p) => pathname.startsWith(p))) return true;
-      if (!isLoggedIn) return false;
+      if (!isLoggedIn) {
+        // Redirect to /login on the SAME host the request came in on.
+        // Returning `false` would let NextAuth build the login URL from
+        // AUTH_URL, which sends users to the wrong domain if that env var
+        // is ever misconfigured (e.g. www./apex instead of app.).
+        const login = new URL("/login", nextUrl);
+        const callback = pathname + nextUrl.search;
+        if (callback && callback !== "/") login.searchParams.set("callbackUrl", callback);
+        return NextResponse.redirect(login);
+      }
       if (pathname.startsWith("/api/") || pathname.startsWith("/access-denied")) return true;
       const rawRole = (auth?.user as { role?: string })?.role;
       const role = (rawRole === "staff" ? "sales" : rawRole) as AppRole | undefined;
