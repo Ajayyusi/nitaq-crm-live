@@ -8,7 +8,8 @@
  */
 
 import { getAccountingSettings } from "@/models/accounting/AccountingSettings";
-import { createJournalEntry } from "./engine";
+import JournalEntry from "@/models/accounting/JournalEntry";
+import { createJournalEntry, reverseJournalEntry } from "./engine";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -72,29 +73,51 @@ export async function postStudentInvoice(params: {
 /**
  * Customer receipt:
  *   Dr Cash/Bank/POS/Tabby/Tamara   amount
- *     Cr Accounts Receivable          amount
+ *     Cr Accounts Receivable          amount   (payment linked to an enrollment/invoice)
+ *     Cr Fees Advance                 amount   (unmatched payment — no invoice exists)
+ *
+ * Crediting A/R for a receipt with no invoice would push receivables
+ * negative, so standalone payments credit Fees Received in Advance instead.
  */
 export async function postCustomerReceipt(params: {
   sourceId: string; sourceNumber: string; date: Date | string;
   studentName: string; course?: string; amount: number; paymentMethod: string; createdBy: string;
+  /** true when the payment is NOT linked to an invoice/enrollment */
+  asAdvance?: boolean;
 }) {
   if (params.amount <= 0) return null;
   const s = await getAccountingSettings();
   if (!s.autoPostPayments) return null;
   const moneyAccount = await resolvePaymentAccount(params.paymentMethod);
+  const creditAccount = params.asAdvance ? s.feesAdvanceAccount : s.accountsReceivable;
 
   return createJournalEntry({
     date: params.date,
     sourceType: "Receipt",
     sourceId: params.sourceId,
     sourceNumber: params.sourceNumber,
-    description: `Receipt — ${params.studentName}${params.course ? ` · ${params.course}` : ""} (${params.paymentMethod})`,
+    description: `Receipt — ${params.studentName}${params.course ? ` · ${params.course}` : ""} (${params.paymentMethod})${params.asAdvance ? " [advance]" : ""}`,
     lines: [
       { accountCode: moneyAccount, debit: params.amount, studentRef: params.studentName, courseRef: params.course },
-      { accountCode: s.accountsReceivable, credit: params.amount, studentRef: params.studentName, courseRef: params.course },
+      { accountCode: creditAccount, credit: params.amount, studentRef: params.studentName, courseRef: params.course },
     ],
     createdBy: params.createdBy,
   });
+}
+
+/**
+ * Reverse the active posted entry for a CRM source document, if one exists.
+ * Used when a CRM record is deleted or its amounts are edited (reverse + repost).
+ */
+export async function reverseEntryForSource(
+  sourceType: string,
+  sourceId: string,
+  reversedBy: string,
+  reason: string
+) {
+  const entry = await JournalEntry.findOne({ sourceType, sourceId, status: "Posted" }).lean();
+  if (!entry) return null;
+  return reverseJournalEntry(entry._id.toString(), reversedBy, reason);
 }
 
 /**

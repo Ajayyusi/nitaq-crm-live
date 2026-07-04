@@ -12,6 +12,7 @@ import JournalEntry, {
   type IJournalEntry,
   type JournalSourceType,
 } from "@/models/accounting/JournalEntry";
+import { getAccountingSettings } from "@/models/accounting/AccountingSettings";
 import { getNextSequence } from "@/models/Counter";
 
 export interface JournalLineInput {
@@ -46,6 +47,20 @@ export class AccountingError extends Error {
   }
 }
 
+// One-time migration: drop the legacy unique (sourceType, sourceId) index if
+// it exists — uniqueness is enforced in code so reversed entries can be
+// reposted under the same source document.
+let indexChecked = false;
+async function ensureNonUniqueSourceIndex() {
+  if (indexChecked) return;
+  indexChecked = true;
+  try {
+    const indexes = await JournalEntry.collection.indexes();
+    const legacy = indexes.find((i) => i.unique && i.key?.sourceType === 1 && i.key?.sourceId === 1);
+    if (legacy?.name) await JournalEntry.collection.dropIndex(legacy.name);
+  } catch { /* collection may not exist yet — fine */ }
+}
+
 /**
  * Validates and creates a journal entry.
  *
@@ -56,6 +71,7 @@ export class AccountingError extends Error {
  *  - Posted entries are immutable (edits blocked at the API layer; reversals only)
  */
 export async function createJournalEntry(input: CreateJournalEntryInput): Promise<IJournalEntry> {
+  await ensureNonUniqueSourceIndex();
   const { lines } = input;
   if (!lines || lines.length < 2) {
     throw new AccountingError("A journal entry needs at least two lines.");
@@ -90,12 +106,20 @@ export async function createJournalEntry(input: CreateJournalEntryInput): Promis
     if (!acc.isActive) throw new AccountingError(`Account ${code} (${acc.name}) is inactive.`);
   }
 
-  // Duplicate-source guard
+  // Period lock: no posting on or before the books lock date
+  const settings = await getAccountingSettings();
+  if (settings.lockDate && new Date(input.date) <= settings.lockDate) {
+    throw new AccountingError(
+      `Books are locked up to ${settings.lockDate.toISOString().slice(0, 10)} — cannot post into a locked period.`
+    );
+  }
+
+  // Duplicate-source guard (Reversed/Cancelled entries don't block a repost)
   if (input.sourceId) {
     const dup = await JournalEntry.findOne({
       sourceType: input.sourceType,
       sourceId: input.sourceId,
-      status: { $ne: "Cancelled" },
+      status: { $nin: ["Cancelled", "Reversed"] },
     }).lean();
     if (dup) {
       throw new AccountingError(

@@ -8,7 +8,7 @@ import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
-import { postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
+import { postCustomerReceipt, postStudentInvoice, postSafely, reverseEntryForSource } from "@/lib/accounting/postings";
 
 const allowedPaymentMethods = new Set<string>(paymentMethods);
 
@@ -137,6 +137,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
+    // If the fee changed, reverse the old invoice entry and post a new one
+    const newTotalFee = enrollment.totalFee ?? 0;
+    if ("totalFee" in update && (existing.totalFee ?? 0) !== newTotalFee) {
+      await postSafely(() => reverseEntryForSource("Invoice", id, authed.name, "Enrollment fee changed"));
+      if (newTotalFee > 0) {
+        await postSafely(() => postStudentInvoice({
+          sourceId: id,
+          sourceNumber: enrollment.enrollmentId ?? id,
+          date: enrollment.registrationDate ?? new Date(),
+          studentName: enrollment.fullName,
+          course: enrollment.course ?? "",
+          totalFee: newTotalFee,
+          createdBy: authed.name,
+        }));
+      }
+    }
+
     const changes: string[] = [];
     if ("status" in update && existing.status !== update.status) changes.push(`Status: ${existing.status} → ${String(update.status)}`);
     if ("paymentStatus" in update) changes.push(`Payment: ${String(update.paymentStatus)}`);
@@ -162,6 +179,8 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   await connectDB();
   const enrollment = await Enrollment.findByIdAndDelete(id);
   if (!enrollment) return NextResponse.json({ message: "Enrollment not found." }, { status: 404 });
+  // Keep the books in sync: reverse this enrollment's invoice entry
+  await postSafely(() => reverseEntryForSource("Invoice", id, authed.name, "Enrollment deleted in CRM"));
   logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "Enrollment", entityId: id, entityLabel: enrollment.fullName, detail: enrollment.enrollmentId });
   return NextResponse.json({ message: "Enrollment deleted." });
 }

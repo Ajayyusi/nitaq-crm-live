@@ -20,6 +20,7 @@ interface Totals {
 export default function TrialBalancePage() {
   const [rows, setRows] = useState<TbRow[]>([]);
   const [totals, setTotals] = useState<Totals | null>(null);
+  const [openingImbalance, setOpeningImbalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -33,7 +34,7 @@ export default function TrialBalancePage() {
     if (typeFilter) params.set("type", typeFilter);
     fetch(`/api/accounting/trial-balance?${params}`)
       .then((r) => r.json())
-      .then((d) => { setRows(d.rows ?? []); setTotals(d.totals ?? null); })
+      .then((d) => { setRows(d.rows ?? []); setTotals(d.totals ?? null); setOpeningImbalance(d.openingImbalance ?? 0); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [from, to, typeFilter]);
@@ -68,6 +69,13 @@ export default function TrialBalancePage() {
           </button>
         </div>
       </div>
+
+      {openingImbalance !== 0 && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-400">
+          ⚠ Opening balances entered on the Chart of Accounts don&apos;t balance (off by {fmtNum(Math.abs(openingImbalance))}).
+          Fix the opening debit/credit figures in the COA, or enter openings through a balanced Journal Voucher instead.
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />

@@ -67,6 +67,7 @@ export async function POST() {
         course: p.course,
         amount: p.amount,
         paymentMethod: p.paymentMethod ?? "Cash",
+        asAdvance: !p.enrollmentId,
         createdBy: `${authed.name} (backfill)`,
       });
       if (entry) await Payment.updateOne({ _id: p._id }, { $set: { journalEntryId: entry._id } });

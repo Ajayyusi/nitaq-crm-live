@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Loader2, Save } from "lucide-react";
+import DatePicker from "@/components/shared/DatePicker";
 import { AccountSelect, usePostingAccounts } from "@/components/accounting/shared";
 
 const MAPPINGS: { key: string; label: string; hint?: string }[] = [
@@ -100,6 +101,19 @@ export default function AccountingSettingsPage() {
               <span className="text-gray-700 dark:text-gray-300">{label}</span>
             </label>
           ))}
+        </div>
+      </section>
+
+      {/* Period lock */}
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">Books Lock Date</h2>
+        <p className="mb-3 text-xs text-gray-400">No journal entries can be posted on or before this date — set it after closing a period so nobody can change closed months.</p>
+        <div className="max-w-xs">
+          <DatePicker
+            value={String(settings.lockDate ?? "")}
+            onChange={(v) => setSettings((s) => ({ ...s!, lockDate: v }))}
+            placeholder="No lock — all periods open"
+          />
         </div>
       </section>
 

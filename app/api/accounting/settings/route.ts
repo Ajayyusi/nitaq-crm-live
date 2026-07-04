@@ -26,6 +26,7 @@ function serialize(input: unknown) {
     autoPostPayments: obj.autoPostPayments !== false,
     autoPostExpenses: obj.autoPostExpenses !== false,
     autoPostInvoices: obj.autoPostInvoices !== false,
+    lockDate: obj.lockDate ? new Date(obj.lockDate as string).toISOString().slice(0, 10) : "",
   };
 }
 
@@ -64,6 +65,9 @@ export async function PATCH(request: NextRequest) {
     if ("autoPostInvoices" in body) settings.autoPostInvoices = !!body.autoPostInvoices;
     if ("courseRevenueMap" in body && body.courseRevenueMap && typeof body.courseRevenueMap === "object") {
       settings.courseRevenueMap = body.courseRevenueMap;
+    }
+    if ("lockDate" in body) {
+      settings.lockDate = body.lockDate ? new Date(body.lockDate) : null;
     }
 
     await settings.save();

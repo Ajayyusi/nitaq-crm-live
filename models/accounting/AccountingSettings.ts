@@ -34,6 +34,8 @@ export interface IAccountingSettings extends Document {
   autoPostPayments: boolean;
   autoPostExpenses: boolean;
   autoPostInvoices: boolean;
+  // Books lock: no journal entries can be posted on or before this date
+  lockDate?: Date | null;
   updatedAt: Date;
 }
 
@@ -61,6 +63,7 @@ const AccountingSettingsSchema = new Schema<IAccountingSettings>(
     autoPostPayments:    { type: Boolean, default: true },
     autoPostExpenses:    { type: Boolean, default: true },
     autoPostInvoices:    { type: Boolean, default: true },
+    lockDate:            { type: Date, default: null },
   },
   { timestamps: true }
 );

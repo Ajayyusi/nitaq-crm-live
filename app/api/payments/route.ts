@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       totalInstallments: totalInstallments && totalInstallments >= 1 ? totalInstallments : undefined,
     });
 
-    // Auto double-entry: Dr Cash/Bank/POS / Cr Accounts Receivable
+    // Auto double-entry: Dr money account / Cr A/R (invoiced) or Fees Advance (standalone)
     if (status === "Received") {
       const entry = await postSafely(() => postCustomerReceipt({
         sourceId: payment._id.toString(),
@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
         course: payment.course,
         amount: payment.amount,
         paymentMethod,
+        asAdvance: !payment.enrollmentId,
         createdBy: authed.name,
       }));
       if (entry) {

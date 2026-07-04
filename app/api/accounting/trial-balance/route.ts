@@ -61,6 +61,13 @@ export async function GET(request: NextRequest) {
     totCloseD += r.closingDebit; totCloseC += r.closingCredit;
   }
 
+  // Warn when manually-entered COA opening balances don't net to zero —
+  // that makes the whole TB permanently unbalanced regardless of postings.
+  const allAccounts = type ? await ChartOfAccount.find({ isPosting: true }).select("openingDebit openingCredit").lean() : accounts;
+  const openingImbalance = round2(
+    allAccounts.reduce((s, a) => s + (a.openingDebit ?? 0) - (a.openingCredit ?? 0), 0)
+  );
+
   return NextResponse.json({
     rows,
     totals: {
@@ -69,5 +76,6 @@ export async function GET(request: NextRequest) {
       closingDebit: round2(totCloseD), closingCredit: round2(totCloseC),
       balanced: round2(totPerD) === round2(totPerC),
     },
+    openingImbalance,
   });
 }

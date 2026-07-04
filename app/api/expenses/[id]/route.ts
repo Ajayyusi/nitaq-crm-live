@@ -4,6 +4,7 @@ import connectDB from "@/lib/db";
 import { Expense, expenseCategories, expensePaymentMethods } from "@/models/Financial";
 import { serializeExpense } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { postExpensePaid, postSafely, reverseEntryForSource } from "@/lib/accounting/postings";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -62,8 +63,48 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (f in body) update[f] = clean(body[f]) || undefined;
     }
 
+    // Books must follow the CRM: reverse the old entry when money facts change
+    const existing = await Expense.findById(id).lean();
+    if (!existing) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
+    const affectsEntry =
+      ("amount" in update && update.amount !== existing.amount) ||
+      ("category" in update && update.category !== existing.category) ||
+      ("paymentMethod" in update && update.paymentMethod !== existing.paymentMethod) ||
+      ("expenseDate" in update);
+    if (affectsEntry && existing.journalEntryId) {
+      await postSafely(() => reverseEntryForSource("Expense", id, authed.name, "Expense edited in CRM"));
+      update.journalEntryId = undefined;
+      // recompute VAT split on the new amount (keeps prior vatRate)
+      const total = Number(update.amount ?? existing.amount) || 0;
+      const vatRate = existing.vatRate ?? 0;
+      const vatAmount = vatRate > 0 ? Math.round(total * vatRate / (100 + vatRate) * 100) / 100 : 0;
+      update.vatAmount = vatAmount;
+      update.amountBeforeVAT = Math.round((total - vatAmount) * 100) / 100;
+    }
+
     const expense = await Expense.findByIdAndUpdate(id, update, { new: true, runValidators: true });
     if (!expense) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
+
+    // Re-post if the active entry was reversed above
+    if (affectsEntry && !expense.journalEntryId) {
+      const entry = await postSafely(() => postExpensePaid({
+        sourceId: id,
+        sourceNumber: expense.expenseId,
+        date: expense.expenseDate ?? new Date(),
+        expenseAccountCode: expense.expenseAccountCode,
+        category: expense.category,
+        description: expense.description ?? "",
+        amountBeforeVAT: expense.amountBeforeVAT ?? expense.amount,
+        vatAmount: expense.vatAmount ?? 0,
+        paymentMethod: expense.paymentMethod ?? "Cash",
+        createdBy: authed.name,
+      }));
+      if (entry) {
+        expense.journalEntryId = entry._id as never;
+        await expense.save();
+      }
+    }
+
     return NextResponse.json({ expense: serializeExpense(expense) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update expense.";
@@ -83,5 +124,7 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   await connectDB();
   const expense = await Expense.findByIdAndDelete(id);
   if (!expense) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
+  // Keep the books in sync: reverse this expense's journal entry
+  await postSafely(() => reverseEntryForSource("Expense", id, authed.name, "Expense deleted in CRM"));
   return NextResponse.json({ message: "Expense deleted." });
 }

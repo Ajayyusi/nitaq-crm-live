@@ -87,11 +87,10 @@ const JournalEntrySchema = new Schema<IJournalEntry>(
 
 JournalEntrySchema.index({ date: -1, status: 1 });
 JournalEntrySchema.index({ "lines.accountCode": 1, date: 1 });
-// One journal entry per CRM source document (JVs excluded — sourceId empty)
-JournalEntrySchema.index(
-  { sourceType: 1, sourceId: 1 },
-  { unique: true, partialFilterExpression: { sourceId: { $type: "string" } } }
-);
+// One ACTIVE journal entry per CRM source document is enforced in the engine
+// (Reversed/Cancelled entries may share a sourceId with their repost, so this
+// index is intentionally NOT unique).
+JournalEntrySchema.index({ sourceType: 1, sourceId: 1 });
 
 export default (mongoose.models.JournalEntry as mongoose.Model<IJournalEntry>) ||
   mongoose.model<IJournalEntry>("JournalEntry", JournalEntrySchema);

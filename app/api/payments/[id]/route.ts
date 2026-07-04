@@ -6,7 +6,7 @@ import { paymentMethods, paymentTypes, txStatuses } from "@/models/Financial";
 import { serializePayment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
-import { postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
+import { postCustomerReceipt, postSafely, reverseEntryForSource } from "@/lib/accounting/postings";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -84,11 +84,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       update.totalInstallments = n >= 1 ? n : undefined;
     }
 
+    // Books must follow the CRM: if a posted payment's amount, method or date
+    // changes, reverse the old entry so a fresh one is posted below.
+    const existing = await Payment.findById(id).lean();
+    if (!existing) return NextResponse.json({ message: "Payment not found." }, { status: 404 });
+    const affectsEntry =
+      ("amount" in update && update.amount !== existing.amount) ||
+      ("paymentMethod" in update && update.paymentMethod !== existing.paymentMethod) ||
+      ("datePaid" in update) ||
+      ("status" in update && update.status !== "Received" && existing.status === "Received");
+    if (affectsEntry && existing.journalEntryId) {
+      await postSafely(() => reverseEntryForSource("Receipt", id, authed.name, "Payment edited in CRM"));
+      update.journalEntryId = undefined;
+    }
+
     const payment = await Payment.findByIdAndUpdate(id, update, { new: true, runValidators: true });
     if (!payment) return NextResponse.json({ message: "Payment not found." }, { status: 404 });
     logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Payment", entityId: id, entityLabel: payment.studentName, detail: `${payment.paymentId} · AED ${payment.amount}` });
 
-    // If the payment just became "Received" and has no journal entry yet, post the receipt
+    // Post (or re-post) the receipt whenever it's Received with no active entry
     if (payment.status === "Received" && !payment.journalEntryId) {
       const entry = await postSafely(() => postCustomerReceipt({
         sourceId: payment._id.toString(),
@@ -98,6 +112,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         course: payment.course,
         amount: payment.amount,
         paymentMethod: payment.paymentMethod ?? "Cash",
+        asAdvance: !payment.enrollmentId,
         createdBy: authed.name,
       }));
       if (entry) {
@@ -125,6 +140,8 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   await connectDB();
   const payment = await Payment.findByIdAndDelete(id);
   if (!payment) return NextResponse.json({ message: "Payment not found." }, { status: 404 });
+  // Keep the books in sync: reverse the receipt entry for this payment
+  await postSafely(() => reverseEntryForSource("Receipt", id, authed.name, "Payment deleted in CRM"));
   logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "Payment", entityId: id, entityLabel: payment.studentName, detail: `${payment.paymentId} · AED ${payment.amount}` });
   return NextResponse.json({ message: "Payment deleted." });
 }
