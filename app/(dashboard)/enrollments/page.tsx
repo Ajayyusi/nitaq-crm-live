@@ -7,6 +7,7 @@ import {
 import { enrollmentStatuses, paymentMethods, paymentStatuses, scheduleFormats } from "@/constants/modelConstants";
 import { courseList } from "@/constants/leads";
 import DateRangePicker from "@/components/shared/DateRangePicker";
+import DatePicker from "@/components/shared/DatePicker";
 import { thisMonthRange } from "@/lib/dateRange";
 
 type Enrollment = {
@@ -206,8 +207,8 @@ export default function EnrollmentsPage() {
                     </select>
                   </div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Batch</label><input value={form.batchName} onChange={(e) => set("batchName", e.target.value)} className={inp} placeholder="AI-Batch-1" /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Start date</label><input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">End date</label><input type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} className={inp} /></div>
+                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Start date</label><DatePicker value={form.startDate} onChange={(v) => set("startDate", v)} max={form.endDate || undefined} /></div>
+                  <div><label className="block text-sm font-bold text-slate-700 mb-1">End date</label><DatePicker value={form.endDate} onChange={(v) => set("endDate", v)} min={form.startDate || undefined} /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Schedule</label><input value={form.schedule} onChange={(e) => set("schedule", e.target.value)} className={inp} placeholder="Sun/Tue 7pm" /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Format</label><select value={form.format} onChange={(e) => set("format", e.target.value)} className={inp}>{scheduleFormats.map((f) => <option key={f}>{f}</option>)}</select></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Status</label><select value={form.status} onChange={(e) => set("status", e.target.value)} className={inp}>{enrollmentStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>

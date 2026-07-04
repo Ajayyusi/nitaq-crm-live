@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import DatePicker from "@/components/shared/DatePicker";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import { courseList } from "@/constants/leads";
 import {
@@ -567,21 +568,17 @@ export default function PaymentsPage() {
               </div>
 
               <Field label="Date Paid">
-                <input
-                  className={cls}
-                  type="date"
+                <DatePicker
                   value={form.datePaid}
-                  onChange={(e) => setForm((f) => ({ ...f, datePaid: e.target.value }))}
+                  onChange={(v) => setForm((f) => ({ ...f, datePaid: v }))}
                 />
               </Field>
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Due Date">
-                  <input
-                    className={cls}
-                    type="date"
+                  <DatePicker
                     value={form.dueDate}
-                    onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, dueDate: v }))}
                   />
                 </Field>
                 <Field label="Receipt Ref">

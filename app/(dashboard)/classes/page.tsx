@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, BookOpen, Users, CheckCircle2, X, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import DatePicker from "@/components/shared/DatePicker";
 import { courseList } from "@/constants/leads";
 import { attendanceStatuses } from "@/constants/modelConstants";
 
@@ -396,11 +397,10 @@ export default function ClassesPage() {
                   />
                 </Field>
                 <Field label="Session Date *">
-                  <input
-                    className={cls}
-                    type="date"
+                  <DatePicker
                     value={form.sessionDate}
-                    onChange={(e) => setForm((f) => ({ ...f, sessionDate: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, sessionDate: v }))}
+                    required
                   />
                 </Field>
                 <Field label="Trainer">

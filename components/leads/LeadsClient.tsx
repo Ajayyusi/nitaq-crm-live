@@ -38,6 +38,7 @@ import {
 } from "@/constants/leads";
 import { followUpTypes, followUpStatuses } from "@/constants/modelConstants";
 import DateRangePicker from "@/components/shared/DateRangePicker";
+import DatePicker from "@/components/shared/DatePicker";
 import { thisMonthRange } from "@/lib/dateRange";
 
 type SortOrder = "newest" | "oldest";
@@ -711,13 +712,7 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-bold text-slate-700">Follow-up date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={bulkFuDate}
-                    onChange={(e) => setBulkFuDate(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]"
-                  />
+                  <DatePicker required value={bulkFuDate} onChange={setBulkFuDate} />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-bold text-slate-700">Type</label>
@@ -824,11 +819,12 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
                   <p><span className="font-bold text-slate-600">Phone:</span> <span className="text-slate-900">{erLead.phone}</span></p>
                   <p><span className="font-bold text-slate-600">Course:</span> <span className="text-slate-900">{erLead.course}</span></p>
                 </div>
-                <label className="block">
+                <div>
                   <span className="text-sm font-bold text-slate-700">Expected start date (optional)</span>
-                  <input type="date" value={erStartDate} onChange={(e) => setErStartDate(e.target.value)}
-                    className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]" />
-                </label>
+                  <div className="mt-1.5">
+                    <DatePicker value={erStartDate} onChange={setErStartDate} placeholder="Select start date" />
+                  </div>
+                </div>
                 <label className="block">
                   <span className="text-sm font-bold text-slate-700">Notes for Admin / Manager</span>
                   <textarea value={erNotes} onChange={(e) => setErNotes(e.target.value)} rows={3}
@@ -1856,6 +1852,16 @@ function FollowUpDrawer({
 function DrawerField({ label, value, onChange, required = false, type = "text", placeholder = "" }: {
   label: string; value: string; onChange: (v: string) => void; required?: boolean; type?: string; placeholder?: string;
 }) {
+  if (type === "date") {
+    return (
+      <div>
+        <span className="text-sm font-bold text-slate-700">{label}{required ? " *" : ""}</span>
+        <div className="mt-1.5">
+          <DatePicker value={value} onChange={onChange} required={required} placeholder={placeholder || "Select date"} />
+        </div>
+      </div>
+    );
+  }
   return (
     <label className="block">
       <span className="text-sm font-bold text-slate-700">{label}{required ? " *" : ""}</span>

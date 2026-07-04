@@ -20,6 +20,7 @@ import {
 } from "@/constants/modelConstants";
 import { courseList } from "@/constants/leads";
 import DateRangePicker from "@/components/shared/DateRangePicker";
+import DatePicker from "@/components/shared/DatePicker";
 import { getPresetRange } from "@/lib/dateRange";
 
 type FollowUp = {
@@ -334,7 +335,7 @@ export default function FollowUpsPage() {
                     </select>
                   </F>
                   <F label="Follow-up date *">
-                    <input required type="date" value={form.followUpDate} onChange={(e) => setForm((f) => ({ ...f, followUpDate: e.target.value }))} className={inp} />
+                    <DatePicker required value={form.followUpDate} onChange={(v) => setForm((f) => ({ ...f, followUpDate: v }))} />
                   </F>
                   <F label="Type">
                     <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as FollowUpType }))} className={inp}>

@@ -5,6 +5,7 @@ import {
   AlertTriangle, Edit3, Loader2, MessageCircle, Plus, Search, Trash2, UserCheck, X,
 } from "lucide-react";
 import { trainerStatuses, tamamStatuses, contractStatuses, trainerPaymentTypes as paymentTypes } from "@/constants/modelConstants";
+import DatePicker from "@/components/shared/DatePicker";
 
 type Trainer = {
   id: string; fullName: string; fullNameAr: string; phone: string; email: string;
@@ -147,8 +148,8 @@ export default function TrainersPage() {
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Tamam number</label><input value={form.tamamNumber} onChange={(e) => set("tamamNumber", e.target.value)} className={inp} /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract status</label><select value={form.contractStatus} onChange={(e) => set("contractStatus", e.target.value)} className={inp}>{contractStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Status</label><select value={form.status} onChange={(e) => set("status", e.target.value)} className={inp}>{trainerStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract start</label><input type="date" value={form.contractStartDate} onChange={(e) => set("contractStartDate", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract end</label><input type="date" value={form.contractEndDate} onChange={(e) => set("contractEndDate", e.target.value)} className={inp} /></div>
+                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract start</label><DatePicker value={form.contractStartDate} onChange={(v) => set("contractStartDate", v)} max={form.contractEndDate || undefined} /></div>
+                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract end</label><DatePicker value={form.contractEndDate} onChange={(v) => set("contractEndDate", v)} min={form.contractStartDate || undefined} /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Payment rate (AED)</label><input type="number" min="0" value={form.paymentRate} onChange={(e) => set("paymentRate", e.target.value)} className={inp} /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Payment type</label><select value={form.paymentType} onChange={(e) => set("paymentType", e.target.value)} className={inp}>{paymentTypes.map((p) => <option key={p}>{p}</option>)}</select></div>
                 </div>

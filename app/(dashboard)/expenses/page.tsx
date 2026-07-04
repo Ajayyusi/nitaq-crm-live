@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Receipt, TrendingDown, X, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import DatePicker from "@/components/shared/DatePicker";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import { expenseCategories, expensePaymentMethods } from "@/constants/modelConstants";
 import { thisMonthRange, describeRange } from "@/lib/dateRange";
@@ -328,11 +329,10 @@ export default function ExpensesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Date *">
-                  <input
-                    className={cls}
-                    type="date"
+                  <DatePicker
                     value={form.expenseDate}
-                    onChange={(e) => setForm((f) => ({ ...f, expenseDate: e.target.value }))}
+                    onChange={(v) => setForm((f) => ({ ...f, expenseDate: v }))}
+                    required
                   />
                 </Field>
                 <Field label="Payment Method">

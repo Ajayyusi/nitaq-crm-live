@@ -14,6 +14,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import DatePicker from "@/components/shared/DatePicker";
 import { isReadOnlyRole } from "@/lib/permissions";
 import type { AppRole } from "@/lib/permissions";
 
@@ -268,24 +269,22 @@ export default function StaffCompliancePage() {
                                 >
                                   {DOC_STATUSES.map((s) => <option key={s}>{s}</option>)}
                                 </select>
-                                <input
-                                  type="date"
-                                  value={existing?.expiryDate ?? ""}
+                                <DatePicker
+                                  compact
                                   placeholder="Expiry"
-                                  title="Expiry date"
-                                  onChange={(e) => {
+                                  value={existing?.expiryDate ?? ""}
+                                  onChange={(v) => {
                                     setEditingDocs((prev) => {
                                       const list = [...(prev[record.id] ?? record.documents)];
                                       const idx = list.findIndex((d) => d.docType === docType);
                                       if (idx >= 0) {
-                                        list[idx] = { ...list[idx], expiryDate: e.target.value };
+                                        list[idx] = { ...list[idx], expiryDate: v };
                                       } else {
-                                        list.push({ ...emptyDoc(), docType, expiryDate: e.target.value });
+                                        list.push({ ...emptyDoc(), docType, expiryDate: v });
                                       }
                                       return { ...prev, [record.id]: list };
                                     });
                                   }}
-                                  className="h-7 rounded border border-gray-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-white/5 dark:text-white"
                                 />
                               </>
                             )}
