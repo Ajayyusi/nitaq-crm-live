@@ -5,6 +5,7 @@ import { paymentMethods, paymentTypes, txStatuses } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
 import { serializePayment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
 
 const allowedMethods = new Set<string>(paymentMethods);
 const allowedTypes = new Set<string>(paymentTypes);
@@ -99,6 +100,24 @@ export async function POST(request: NextRequest) {
       installmentNumber: installmentNumber && installmentNumber >= 1 ? installmentNumber : undefined,
       totalInstallments: totalInstallments && totalInstallments >= 1 ? totalInstallments : undefined,
     });
+
+    // Auto double-entry: Dr Cash/Bank/POS / Cr Accounts Receivable
+    if (status === "Received") {
+      const entry = await postSafely(() => postCustomerReceipt({
+        sourceId: payment._id.toString(),
+        sourceNumber: paymentId,
+        date: payment.datePaid ?? new Date(),
+        studentName,
+        course: payment.course,
+        amount: payment.amount,
+        paymentMethod,
+        createdBy: authed.name,
+      }));
+      if (entry) {
+        payment.journalEntryId = entry._id as never;
+        await payment.save();
+      }
+    }
 
     return NextResponse.json({ payment: serializePayment(payment) }, { status: 201 });
   } catch (error) {

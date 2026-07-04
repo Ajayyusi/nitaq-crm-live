@@ -67,6 +67,7 @@ export interface IPayment extends Document {
   recordedBy?: string;
   installmentNumber?: number;
   totalInstallments?: number;
+  journalEntryId?: mongoose.Types.ObjectId;   // link to auto-generated accounting entry
   createdAt: Date;
   updatedAt: Date;
 }
@@ -104,6 +105,7 @@ const PaymentSchema = new Schema<IPayment>(
     recordedBy: { type: String, trim: true },
     installmentNumber: { type: Number, min: 1 },
     totalInstallments: { type: Number, min: 1 },
+    journalEntryId: { type: Schema.Types.ObjectId, ref: "JournalEntry" },
   },
   { timestamps: true },
 );
@@ -125,6 +127,12 @@ export interface IExpense extends Document {
   paymentMethod?: ExpensePaymentMethod;
   description?: string;
   notes?: string;
+  vatRate?: number;                            // 0 = non-vatable
+  vatAmount?: number;
+  amountBeforeVAT?: number;
+  expenseAccountCode?: string;                 // COA posting account (5xxx)
+  supplierId?: mongoose.Types.ObjectId;
+  journalEntryId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -139,6 +147,12 @@ const ExpenseSchema = new Schema<IExpense>(
     paymentMethod: { type: String, enum: [...expensePaymentMethods], trim: true },
     description: { type: String, trim: true, maxlength: 500 },
     notes: { type: String, trim: true, maxlength: 1000 },
+    vatRate: { type: Number, min: 0, default: 0 },
+    vatAmount: { type: Number, min: 0, default: 0 },
+    amountBeforeVAT: { type: Number, min: 0 },
+    expenseAccountCode: { type: String, trim: true },
+    supplierId: { type: Schema.Types.ObjectId, ref: "Supplier" },
+    journalEntryId: { type: Schema.Types.ObjectId, ref: "JournalEntry" },
   },
   { timestamps: true },
 );

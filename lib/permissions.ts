@@ -7,7 +7,7 @@
 
 export const ALL_ROLES = [
   "admin", "manager", "sales", "finance", "trainer",
-  "assessor", "iqa", "eqa",
+  "assessor", "iqa", "eqa", "accountant",
 ] as const;
 export type AppRole = (typeof ALL_ROLES)[number];
 
@@ -59,6 +59,9 @@ export const PAGE_PERMISSIONS: { path: string; roles: AppRole[] }[] = [
   { path: "/document-control",
     roles: ["admin", "manager", "iqa", "eqa", "assessor"] },
 
+  // ── Accounting — admin + accountant full, manager read (enforced at API) ─
+  { path: "/accounting",    roles: ["admin", "accountant", "manager"] },
+
   // ── System ────────────────────────────────────────────────────────────
   { path: "/activity",      roles: ["admin", "manager"] },
   { path: "/import-export", roles: ["admin", "manager", "sales", "finance"] },
@@ -67,13 +70,13 @@ export const PAGE_PERMISSIONS: { path: string; roles: AppRole[] }[] = [
 
   // ── Dashboard — everyone ───────────────────────────────────────────────
   { path: "/dashboard",
-    roles: ["admin", "manager", "sales", "finance", "trainer", "assessor", "iqa", "eqa"] },
+    roles: ["admin", "manager", "sales", "finance", "trainer", "assessor", "iqa", "eqa", "accountant"] },
 ];
 
 // ── Sidebar navigation visibility ──────────────────────────────────────────
 export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   // CRM Workspace
-  "/dashboard":            ["admin", "manager", "sales", "finance", "trainer", "assessor", "iqa", "eqa"],
+  "/dashboard":            ["admin", "manager", "sales", "finance", "trainer", "assessor", "iqa", "eqa", "accountant"],
   "/leads":                ["admin", "manager", "sales"],
   "/follow-ups":           ["admin", "manager", "sales"],
   "/students":             ["admin", "manager"],
@@ -93,6 +96,8 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   "/iqa":                  ["admin", "manager", "iqa", "eqa"],
   "/staff-compliance":     ["admin", "manager", "iqa", "eqa"],
   "/document-control":     ["admin", "manager", "iqa", "eqa", "assessor"],
+  // Accounting
+  "/accounting":           ["admin", "accountant", "manager"],
   // System
   "/activity":             ["admin", "manager"],
   "/import-export":        ["admin", "manager", "sales", "finance"],
@@ -115,7 +120,7 @@ export const API_PERMISSIONS: Record<string, { read: AppRole[]; write: AppRole[]
   expenses:             { read: ["admin", "manager", "finance"],           write: ["admin", "manager", "finance"] },
   users:                { read: ["admin"],                                  write: ["admin"] },
   seed:                 { read: ["admin"],                                  write: ["admin"] },
-  dashboard:            { read: ["admin", "manager", "sales", "finance", "trainer", "assessor", "iqa", "eqa"], write: [] },
+  dashboard:            { read: ["admin", "manager", "sales", "finance", "trainer", "assessor", "iqa", "eqa", "accountant"], write: [] },
   allocations:          { read: ["admin", "manager"],                       write: ["admin", "manager"] },
   subjects:             { read: ["admin", "manager", "trainer"],           write: ["admin", "manager"] },
   // Centre Management System (new)
@@ -126,6 +131,20 @@ export const API_PERMISSIONS: Record<string, { read: AppRole[]; write: AppRole[]
   "staff-compliance":   { read: ["admin", "manager", "iqa", "eqa"],       write: ["admin", "manager"] },
   "document-control":   { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: ["admin", "manager", "iqa"] },
   compliance:           { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: [] },
+  // Accounting: admin + accountant post; manager is read-only
+  accounting:           { read: ["admin", "accountant", "manager"],  write: ["admin", "accountant"] },
+};
+
+// ── Accounting sub-permissions ─────────────────────────────────────────────
+export const ACCOUNTING_PERMISSIONS: Record<string, AppRole[]> = {
+  view:            ["admin", "accountant", "manager"],
+  manageCoa:       ["admin", "accountant"],
+  createJv:        ["admin", "accountant"],
+  postJv:          ["admin", "accountant"],
+  manageSuppliers: ["admin", "accountant"],
+  viewReports:     ["admin", "accountant", "manager"],
+  exportReports:   ["admin", "accountant", "manager"],
+  manageSettings:  ["admin", "accountant"],
 };
 
 // ── Import/Export permissions per entity ───────────────────────────────────
@@ -150,6 +169,7 @@ export const userRoleLabels: Record<AppRole, string> = {
   assessor: "Assessor",
   iqa:      "IQA",
   eqa:      "EQA",
+  accountant: "Accountant",
 };
 
 // ── EQA read-only check ────────────────────────────────────────────────────

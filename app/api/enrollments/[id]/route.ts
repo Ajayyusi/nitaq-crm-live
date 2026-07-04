@@ -8,6 +8,7 @@ import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
+import { postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
 
 const allowedPaymentMethods = new Set<string>(paymentMethods);
 
@@ -106,7 +107,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       const paymentMethod = allowedPaymentMethods.has(rawMethod) ? rawMethod : "Cash";
       const seq = await getNextSequence("payment");
       const paymentId = `P-${String(seq).padStart(3, "0")}`;
-      await Payment.create({
+      const payment = await Payment.create({
         paymentId,
         enrollmentId: enrollment._id,
         studentName: enrollment.fullName,
@@ -119,6 +120,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         datePaid: new Date(),
         notes: `Auto-recorded from enrollment ${enrollment.enrollmentId}`,
       });
+      // Accounting: receipt entry — Dr Cash/Bank, Cr A/R
+      const jEntry = await postSafely(() => postCustomerReceipt({
+        sourceId: payment._id.toString(),
+        sourceNumber: paymentId,
+        date: new Date(),
+        studentName: enrollment.fullName,
+        course: enrollment.course,
+        amount: delta,
+        paymentMethod,
+        createdBy: authed.name,
+      }));
+      if (jEntry) {
+        payment.journalEntryId = jEntry._id as never;
+        await payment.save();
+      }
     }
 
     const changes: string[] = [];

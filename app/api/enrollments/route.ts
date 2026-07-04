@@ -7,6 +7,7 @@ import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
+import { postStudentInvoice, postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
 
 const allowedPaymentMethods = new Set<string>(paymentMethods);
 
@@ -112,6 +113,19 @@ export async function POST(request: NextRequest) {
       leadId: body.leadId || undefined,
     });
 
+    // Accounting: invoice entry — Dr A/R, Cr Course Revenue (+ Cr Output VAT)
+    if ((Number(body.totalFee) || 0) > 0) {
+      await postSafely(() => postStudentInvoice({
+        sourceId: enrollment._id.toString(),
+        sourceNumber: enrollmentId,
+        date: enrollment.registrationDate ?? new Date(),
+        studentName: fullName,
+        course,
+        totalFee: Number(body.totalFee) || 0,
+        createdBy: authed.name,
+      }));
+    }
+
     const amountPaid = Number(body.amountPaid) || 0;
     if (amountPaid > 0) {
       const paymentType = derivePaymentType(paymentStatus, true);
@@ -119,7 +133,7 @@ export async function POST(request: NextRequest) {
       const paymentMethod = allowedPaymentMethods.has(rawMethod) ? rawMethod : "Cash";
       const seq = await getNextSequence("payment");
       const paymentId = `P-${String(seq).padStart(3, "0")}`;
-      await Payment.create({
+      const payment = await Payment.create({
         paymentId,
         enrollmentId: enrollment._id,
         studentName: fullName,
@@ -132,6 +146,21 @@ export async function POST(request: NextRequest) {
         datePaid: new Date(),
         notes: `Auto-recorded from enrollment ${enrollment.enrollmentId}`,
       });
+      // Accounting: receipt entry — Dr Cash/Bank, Cr A/R
+      const entry = await postSafely(() => postCustomerReceipt({
+        sourceId: payment._id.toString(),
+        sourceNumber: paymentId,
+        date: new Date(),
+        studentName: fullName,
+        course,
+        amount: amountPaid,
+        paymentMethod,
+        createdBy: authed.name,
+      }));
+      if (entry) {
+        payment.journalEntryId = entry._id as never;
+        await payment.save();
+      }
     }
 
     logAudit({ userName: authed.name, userRole: authed.role, action: "created", entity: "Enrollment", entityId: enrollment._id.toString(), entityLabel: enrollment.fullName, detail: `${enrollment.course} · ${enrollment.enrollmentId}` });

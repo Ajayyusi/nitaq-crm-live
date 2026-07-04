@@ -10,6 +10,7 @@ import {
   BarChart3,
   BookMarked,
   BookOpen,
+  Calculator,
   CalendarDays,
   ClipboardCheck,
   ClipboardList,
@@ -56,6 +57,7 @@ const navGroups = [
       { label: "Finance",     href: "/finance",      icon: WalletCards },
       { label: "Expenses",    href: "/expenses",     icon: ReceiptText },
       { label: "Reports",     href: "/reports",      icon: BarChart3 },
+      { label: "Accounting",  href: "/accounting",   icon: Calculator },
     ],
   },
   {

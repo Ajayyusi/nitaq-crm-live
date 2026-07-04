@@ -4,6 +4,7 @@ import { Expense, expenseCategories, expensePaymentMethods } from "@/models/Fina
 import { getNextSequence } from "@/models/Counter";
 import { serializeExpense } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { postExpensePaid, postSafely } from "@/lib/accounting/postings";
 
 const allowedCategories = new Set<string>(expenseCategories);
 const allowedExpenseMethods = new Set<string>(expensePaymentMethods);
@@ -66,16 +67,41 @@ export async function POST(request: NextRequest) {
     const expenseId = `EXP-${String(seq).padStart(3, "0")}`;
 
     const paymentMethod = clean(body.paymentMethod);
+    const total = Math.round(Number(body.amount) * 100) / 100;
+    // VAT breakdown: amount is VAT-inclusive when a vatRate is supplied
+    const vatRate = Math.max(0, Number(body.vatRate) || 0);
+    const vatAmount = vatRate > 0 ? Math.round(total * vatRate / (100 + vatRate) * 100) / 100 : 0;
+    const amountBeforeVAT = Math.round((total - vatAmount) * 100) / 100;
+
     const expense = await Expense.create({
       expenseId,
       category,
-      amount: Number(body.amount),
+      amount: total,
       expenseDate: body.expenseDate ? new Date(body.expenseDate) : new Date(),
       payee: clean(body.payee) || undefined,
       paymentMethod: allowedExpenseMethods.has(paymentMethod) ? paymentMethod : undefined,
       description: clean(body.description) || undefined,
       notes: clean(body.notes) || undefined,
+      vatRate, vatAmount, amountBeforeVAT,
+      expenseAccountCode: clean(body.expenseAccountCode) || undefined,
     });
+
+    // Auto double-entry: Dr Expense (+ Dr Input VAT) / Cr Cash-Bank-Petty
+    const entry = await postSafely(() => postExpensePaid({
+      sourceId: expense._id.toString(),
+      sourceNumber: expenseId,
+      date: expense.expenseDate,
+      expenseAccountCode: expense.expenseAccountCode,
+      category,
+      description: expense.description ?? "",
+      amountBeforeVAT, vatAmount,
+      paymentMethod: paymentMethod || "Cash",
+      createdBy: authed.name,
+    }));
+    if (entry) {
+      expense.journalEntryId = entry._id as never;
+      await expense.save();
+    }
 
     return NextResponse.json({ expense: serializeExpense(expense) }, { status: 201 });
   } catch (error) {

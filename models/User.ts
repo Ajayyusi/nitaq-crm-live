@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export const userRoles = [
   "admin", "manager", "sales", "finance", "trainer",
-  "assessor", "iqa", "eqa",
+  "assessor", "iqa", "eqa", "accountant",
 ] as const;
 export type UserRole = (typeof userRoles)[number];
 
