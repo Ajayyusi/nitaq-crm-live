@@ -6,6 +6,7 @@ import { paymentMethods, paymentTypes, txStatuses } from "@/models/Financial";
 import { serializePayment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
+import { postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -86,6 +87,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const payment = await Payment.findByIdAndUpdate(id, update, { new: true, runValidators: true });
     if (!payment) return NextResponse.json({ message: "Payment not found." }, { status: 404 });
     logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Payment", entityId: id, entityLabel: payment.studentName, detail: `${payment.paymentId} · AED ${payment.amount}` });
+
+    // If the payment just became "Received" and has no journal entry yet, post the receipt
+    if (payment.status === "Received" && !payment.journalEntryId) {
+      const entry = await postSafely(() => postCustomerReceipt({
+        sourceId: payment._id.toString(),
+        sourceNumber: payment.paymentId,
+        date: payment.datePaid ?? new Date(),
+        studentName: payment.studentName,
+        course: payment.course,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod ?? "Cash",
+        createdBy: authed.name,
+      }));
+      if (entry) {
+        payment.journalEntryId = entry._id as never;
+        await payment.save();
+      }
+    }
+
     return NextResponse.json({ payment: serializePayment(payment) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update payment.";

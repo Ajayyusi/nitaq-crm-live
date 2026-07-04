@@ -29,18 +29,23 @@ export default function AccountingDashboardPage() {
   const [data, setData] = useState<Dash | null>(null);
   const [loading, setLoading] = useState(true);
   const [coaCount, setCoaCount] = useState<number | null>(null);
+  const [entryCount, setEntryCount] = useState<number | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState("");
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       fetch("/api/accounting/dashboard").then((r) => r.json()),
       fetch("/api/accounting/accounts").then((r) => r.json()),
+      fetch("/api/accounting/journal-entries?limit=1").then((r) => r.json()),
     ])
-      .then(([dash, coa]) => {
+      .then(([dash, coa, jv]) => {
         setData(dash);
         setCoaCount((coa.accounts ?? []).length);
+        setEntryCount((jv.entries ?? []).length);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -60,6 +65,21 @@ export default function AccountingDashboardPage() {
       setSeedMsg("Seeding failed.");
     } finally {
       setSeeding(false);
+    }
+  };
+
+  const backfill = async () => {
+    setBackfilling(true);
+    setBackfillMsg("");
+    try {
+      const res = await fetch("/api/accounting/backfill", { method: "POST" });
+      const d = await res.json();
+      setBackfillMsg(d.message ?? "Done.");
+      load();
+    } catch {
+      setBackfillMsg("Backfill failed.");
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -111,6 +131,36 @@ export default function AccountingDashboardPage() {
           </div>
           {seedMsg && <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-400">{seedMsg}</p>}
         </div>
+      )}
+
+      {/* COA seeded but no entries yet: offer CRM history backfill */}
+      {coaCount !== null && coaCount > 0 && entryCount === 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800/40 dark:bg-blue-950/20">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Database className="h-6 w-6 text-blue-600" />
+              <div>
+                <p className="font-semibold text-blue-900 dark:text-blue-300">No journal entries yet</p>
+                <p className="text-sm text-blue-700 dark:text-blue-400">
+                  Import your existing CRM history — every enrollment, payment and expense
+                  gets its double-entry journal entry. Safe to run more than once.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={backfill}
+              disabled={backfilling}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {backfilling ? "Importing…" : "Import CRM History"}
+            </button>
+          </div>
+          {backfillMsg && <p className="mt-2 text-sm font-medium text-blue-800 dark:text-blue-400">{backfillMsg}</p>}
+        </div>
+      )}
+      {/* Show result even after entries exist */}
+      {backfillMsg && entryCount !== 0 && (
+        <p className="rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-800 dark:bg-green-950/30 dark:text-green-400">{backfillMsg}</p>
       )}
 
       {/* KPI cards */}
