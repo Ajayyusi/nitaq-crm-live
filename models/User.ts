@@ -14,6 +14,9 @@ export interface IUser extends Document {
   active: boolean;
   mobileNumber?: string;
   lastLogin?: Date;
+  twoFactorEnabled: boolean;
+  twoFactorSecret?: string;         // base32 TOTP secret (select:false)
+  twoFactorPendingSecret?: string;  // secret awaiting first-code verification
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +31,9 @@ const UserSchema = new Schema<IUser>(
     active:       { type: Boolean, default: true },
     mobileNumber: { type: String, trim: true },
     lastLogin:    Date,
+    twoFactorEnabled:       { type: Boolean, default: false },
+    twoFactorSecret:        { type: String, select: false },
+    twoFactorPendingSecret: { type: String, select: false },
   },
   { timestamps: true }
 );

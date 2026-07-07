@@ -18,6 +18,16 @@ class TooManyAttempts extends CredentialsSignin {
   code = "too_many_attempts";
 }
 
+// Password OK but a TOTP code is required (or was wrong) — the login form
+// reacts to this code by showing the authenticator-code step.
+class OtpRequired extends CredentialsSignin {
+  code = "otp_required";
+}
+
+class OtpInvalid extends CredentialsSignin {
+  code = "otp_invalid";
+}
+
 // Pre-computed hash of a random string — used to equalize timing when the
 // account doesn't exist, so attackers can't distinguish "no user" from
 // "wrong password" by response time.
@@ -35,6 +45,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email:    { label: "Email",    type: "email"    },
         password: { label: "Password", type: "password" },
+        otp:      { label: "Authenticator code", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -54,7 +65,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new DBConnectionError("Cannot reach database. Check Atlas IP whitelist.");
         }
         try {
-          const user = await User.findOne({ email, active: true }).select("+password").lean();
+          const user = await User.findOne({ email, active: true })
+            .select("+password +twoFactorSecret")
+            .lean();
           // Always run a bcrypt compare (dummy when no user) and return the
           // same generic error, so responses don't reveal whether the
           // account exists.
@@ -63,6 +76,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             user?.password ?? DUMMY_HASH
           );
           if (!user || !valid) throw new InvalidLogin("Invalid email or password.");
+
+          // Second factor: users with 2FA on must supply a valid TOTP code
+          if (user.twoFactorEnabled && user.twoFactorSecret) {
+            const otp = String(credentials.otp ?? "").trim();
+            if (!otp) throw new OtpRequired("Authenticator code required.");
+            const { verifyTotp } = await import("@/lib/totp");
+            if (!verifyTotp(user.twoFactorSecret, otp)) {
+              throw new OtpInvalid("Invalid authenticator code.");
+            }
+          }
+
           await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
           return {
             id:    user._id.toString(),

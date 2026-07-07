@@ -13,6 +13,7 @@ const ERRORS: Record<string, { msg: string; isDB?: boolean }> = {
   CredentialsSignin:    { msg: "Invalid email or password. Please try again." },
   invalid_credentials:  { msg: "Invalid email or password. Please try again." },
   too_many_attempts:    { msg: "Too many login attempts. Please wait 15 minutes and try again." },
+  otp_invalid:          { msg: "Wrong authenticator code. Check your app and try again." },
   default:              { msg: "Something went wrong. Please try again." },
 };
 
@@ -29,6 +30,8 @@ export default function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpStep, setOtpStep] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorCode, setErrorCode] = useState("");
@@ -40,11 +43,19 @@ export default function LoginForm() {
     const result = await signIn("credentials", {
       email: email.trim().toLowerCase(),
       password,
+      ...(otp ? { otp: otp.trim() } : {}),
       redirect: false,
     });
     if (result?.error) {
       const code = result.code ?? result.error;
-      setErrorCode(code);
+      if (code === "otp_required") {
+        // Password was correct — reveal the authenticator-code step
+        setOtpStep(true);
+        setErrorCode("");
+      } else {
+        setErrorCode(code);
+        if (code !== "otp_invalid") { setOtpStep(false); setOtp(""); }
+      }
       setLoading(false);
     } else {
       router.push(callbackUrl);
@@ -106,6 +117,32 @@ export default function LoginForm() {
         </div>
       </div>
 
+      {otpStep && (
+        <div>
+          <label className="block text-sm font-semibold mb-1.5" style={{ color: "#0D1F0E" }}>
+            Authenticator Code
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            required
+            autoFocus
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+            placeholder="6-digit code"
+            className="w-full px-4 py-3 text-center text-lg font-bold tracking-[0.5em] rounded-xl border outline-none transition-all"
+            style={{ border: "1.5px solid #D4E6D4", background: "#F8FAF8", color: "#0D1F0E" }}
+            onFocus={(e) => (e.target.style.borderColor = "#2E7D32")}
+            onBlur={(e) => (e.target.style.borderColor = "#D4E6D4")}
+          />
+          <p className="mt-1.5 text-xs" style={{ color: "#5A7A5B" }}>
+            Open your authenticator app (Google Authenticator, Authy…) and enter the 6-digit code.
+          </p>
+        </div>
+      )}
+
       {err && (
         <div
           className="rounded-xl p-4 text-sm font-medium space-y-2"
@@ -133,7 +170,7 @@ export default function LoginForm() {
         onMouseEnter={(e) => !loading && ((e.target as HTMLButtonElement).style.background = "#1B5E20")}
         onMouseLeave={(e) => !loading && ((e.target as HTMLButtonElement).style.background = "#2E7D32")}
       >
-        {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Signing in…</> : "Sign In"}
+        {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Signing in…</> : otpStep ? "Verify Code" : "Sign In"}
       </button>
     </form>
   );
