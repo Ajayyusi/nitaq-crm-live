@@ -156,6 +156,7 @@ export async function POST(request: NextRequest) {
         amount: amountPaid,
         paymentMethod,
         createdBy: authed.name,
+        enrollmentId: enrollment._id.toString(),
       }));
       if (entry) {
         payment.journalEntryId = entry._id as never;

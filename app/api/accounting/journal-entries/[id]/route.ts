@@ -10,7 +10,7 @@ import { logAudit } from "@/lib/audit";
 type RouteContext = { params: Promise<{ id: string }> };
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   const authed = await requireAuth(["admin", "accountant", "manager"]);
   if (authed instanceof NextResponse) return authed;
 
@@ -18,6 +18,22 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   if (!mongoose.Types.ObjectId.isValid(id))
     return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
   await connectDB();
+
+  // ?attachment=1 → stream the supporting document
+  const { searchParams } = new URL(request.url);
+  if (searchParams.get("attachment") === "1") {
+    const e = await JournalEntry.findById(id).select("+attachment").lean();
+    if (!e?.attachment?.dataBase64) {
+      return NextResponse.json({ message: "No attachment." }, { status: 404 });
+    }
+    return new NextResponse(Buffer.from(e.attachment.dataBase64, "base64"), {
+      headers: {
+        "Content-Type": e.attachment.mimeType || "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${e.attachment.name || "document"}"`,
+      },
+    });
+  }
+
   const e = await JournalEntry.findById(id).lean();
   if (!e) return NextResponse.json({ message: "Not found." }, { status: 404 });
   return NextResponse.json({ entry: { ...e, id: e._id.toString() } });

@@ -113,6 +113,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         amount: payment.amount,
         paymentMethod: payment.paymentMethod ?? "Cash",
         asAdvance: !payment.enrollmentId,
+        enrollmentId: payment.enrollmentId?.toString(),
         createdBy: authed.name,
       }));
       if (entry) {

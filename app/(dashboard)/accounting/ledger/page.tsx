@@ -55,10 +55,16 @@ function LedgerInner() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">General Ledger</h1>
           {accountInfo && <p className="text-sm text-gray-500 dark:text-gray-400">{accountInfo.code} — {accountInfo.name} ({accountInfo.type})</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
+          <a
+            href={`/api/accounting/gl-dump?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
+            className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+          >
+            <Download className="h-4 w-4" /> GL Dump (Excel/CSV)
+          </a>
           <button onClick={doExport} disabled={rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
-            <Download className="h-4 w-4" /> CSV
+            <Download className="h-4 w-4" /> This Account
           </button>
         </div>
       </div>

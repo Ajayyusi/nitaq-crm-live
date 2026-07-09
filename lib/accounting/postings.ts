@@ -8,7 +8,10 @@
  */
 
 import { getAccountingSettings } from "@/models/accounting/AccountingSettings";
+import ChartOfAccount from "@/models/accounting/ChartOfAccount";
 import JournalEntry from "@/models/accounting/JournalEntry";
+import Enrollment from "@/models/Enrollment";
+import { getNextSequence } from "@/models/Counter";
 import { createJournalEntry, reverseJournalEntry } from "./engine";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -36,6 +39,37 @@ export async function resolveRevenueAccount(course: string): Promise<string> {
 }
 
 /**
+ * Ensure the enrollment's student has their own ledger account under
+ * ACCOUNTS RECEIVABLES (10103) — like suppliers under Accounts Payable.
+ * Returns the account code, creating account + linking enrollment if needed.
+ */
+export async function ensureStudentArAccount(enrollmentId: string): Promise<string | null> {
+  const enrollment = await Enrollment.findById(enrollmentId);
+  if (!enrollment) return null;
+  if (enrollment.arAccountCode) {
+    const exists = await ChartOfAccount.findOne({ code: enrollment.arAccountCode }).lean();
+    if (exists) return enrollment.arAccountCode;
+  }
+  const seq = await getNextSequence("student-ar-account");
+  // Seeded placeholder is 1010300001 ("Student-1"), so student accounts continue from -00002
+  const code = `10103${String(seq + 1).padStart(5, "0")}`;
+  await ChartOfAccount.create({
+    code,
+    name: `${enrollment.fullName} (${enrollment.enrollmentId})`,
+    type: "Asset",
+    category: "ASSETS",
+    subCategory: "CURRENT ASSETS",
+    mainAccount: "ACCOUNTS RECEIVABLES",
+    parentCode: "10103",
+    isPosting: true,
+    isSystem: false,
+  });
+  enrollment.arAccountCode = code;
+  await enrollment.save();
+  return code;
+}
+
+/**
  * Student invoice (enrollment fee):
  *   Dr Accounts Receivable        total
  *     Cr Course Revenue             net
@@ -49,12 +83,15 @@ export async function postStudentInvoice(params: {
   const s = await getAccountingSettings();
   if (!s.autoPostInvoices) return null;
   const revenueAccount = await resolveRevenueAccount(params.course);
+  // Per-student receivable account (sourceId is the enrollment id); falls
+  // back to the A/R control account if creation fails.
+  const arAccount = (await ensureStudentArAccount(params.sourceId)) ?? s.accountsReceivable;
 
   const vat = s.vatEnabled ? round2(params.totalFee * s.vatRate / (100 + s.vatRate)) : 0;
   const net = round2(params.totalFee - vat);
 
   const lines = [
-    { accountCode: s.accountsReceivable, debit: params.totalFee, studentRef: params.studentName, courseRef: params.course },
+    { accountCode: arAccount, debit: params.totalFee, studentRef: params.studentName, courseRef: params.course },
     { accountCode: revenueAccount, credit: net, studentRef: params.studentName, courseRef: params.course },
   ];
   if (vat > 0) lines.push({ accountCode: s.outputVatAccount, credit: vat, studentRef: params.studentName, courseRef: params.course });
@@ -84,12 +121,17 @@ export async function postCustomerReceipt(params: {
   studentName: string; course?: string; amount: number; paymentMethod: string; createdBy: string;
   /** true when the payment is NOT linked to an invoice/enrollment */
   asAdvance?: boolean;
+  /** enrollment id — credits that student's own A/R account */
+  enrollmentId?: string;
 }) {
   if (params.amount <= 0) return null;
   const s = await getAccountingSettings();
   if (!s.autoPostPayments) return null;
   const moneyAccount = await resolvePaymentAccount(params.paymentMethod);
-  const creditAccount = params.asAdvance ? s.feesAdvanceAccount : s.accountsReceivable;
+  let creditAccount = params.asAdvance ? s.feesAdvanceAccount : s.accountsReceivable;
+  if (!params.asAdvance && params.enrollmentId) {
+    creditAccount = (await ensureStudentArAccount(params.enrollmentId)) ?? creditAccount;
+  }
 
   return createJournalEntry({
     date: params.date,

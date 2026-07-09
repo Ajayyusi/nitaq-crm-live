@@ -112,6 +112,7 @@ export async function POST(request: NextRequest) {
         amount: payment.amount,
         paymentMethod,
         asAdvance: !payment.enrollmentId,
+        enrollmentId: payment.enrollmentId?.toString(),
         createdBy: authed.name,
       }));
       if (entry) {

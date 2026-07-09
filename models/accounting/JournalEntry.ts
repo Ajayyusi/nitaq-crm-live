@@ -45,6 +45,11 @@ export interface IJournalEntry extends Document {
   postedAt?: Date;
   reversedByEntryId?: Types.ObjectId;  // the reversal JV
   reversesEntryId?: Types.ObjectId;    // set on the reversal itself
+  attachment?: {                        // supporting document (≤1MB, stored inline)
+    name: string;
+    mimeType: string;
+    dataBase64: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -81,6 +86,18 @@ const JournalEntrySchema = new Schema<IJournalEntry>(
     postedAt:     Date,
     reversedByEntryId: { type: Schema.Types.ObjectId, ref: "JournalEntry" },
     reversesEntryId:   { type: Schema.Types.ObjectId, ref: "JournalEntry" },
+    // select:false — attachments are only loaded when explicitly requested
+    attachment: {
+      type: new Schema(
+        {
+          name:       { type: String, trim: true, maxlength: 200 },
+          mimeType:   { type: String, trim: true, maxlength: 100 },
+          dataBase64: { type: String, maxlength: 1_500_000 }, // ~1MB binary
+        },
+        { _id: false }
+      ),
+      select: false,
+    },
   },
   { timestamps: true }
 );

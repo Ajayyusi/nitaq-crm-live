@@ -130,6 +130,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         amount: delta,
         paymentMethod,
         createdBy: authed.name,
+        enrollmentId: id,
       }));
       if (jEntry) {
         payment.journalEntryId = jEntry._id as never;

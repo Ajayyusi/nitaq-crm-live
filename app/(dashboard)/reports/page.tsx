@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Suspense } from "react";
 import ReportFilter from "./ReportFilter";
+import ExportButtons from "./ExportButtons";
 import type { AppRole } from "@/lib/permissions";
 
 const fmt = (n: number) =>
@@ -260,9 +261,14 @@ export default async function ReportsPage({
             {data.isFiltered ? `Filtered: ${periodLabel}` : "All time — use filters to narrow by date"}
           </p>
         </div>
-        <Suspense fallback={null}>
-          <ReportFilter />
-        </Suspense>
+        <div className="flex flex-wrap items-center gap-3">
+          <Suspense fallback={null}>
+            <ReportFilter />
+          </Suspense>
+          <Suspense fallback={null}>
+            <ExportButtons />
+          </Suspense>
+        </div>
       </div>
 
       {/* Financial Summary — admin, manager, finance */}

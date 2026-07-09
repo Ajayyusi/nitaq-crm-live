@@ -34,6 +34,7 @@ export interface IEnrollment extends Document {
   amountPaid: number;
   notes?: string;
   registrationDate: Date;
+  arAccountCode?: string;   // this student's ledger account under Accounts Receivable
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +60,7 @@ const EnrollmentSchema = new Schema<IEnrollment>(
     amountPaid: { type: Number, required: true, min: 0, default: 0 },
     notes: { type: String, trim: true, maxlength: 2000 },
     registrationDate: { type: Date, default: Date.now },
+    arAccountCode: { type: String, trim: true },
   },
   { timestamps: true },
 );

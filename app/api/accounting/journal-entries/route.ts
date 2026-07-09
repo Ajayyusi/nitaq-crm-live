@@ -24,10 +24,15 @@ export async function GET(request: NextRequest) {
   const dateFilter = buildDateFilter(from, to);
   if (dateFilter) query.date = dateFilter;
 
-  const entries = await JournalEntry.find(query).sort({ date: -1, createdAt: -1 }).limit(limit).lean();
+  const entries = await JournalEntry.find(query)
+    .select("+attachment.name") // list only needs the file name, not the data
+    .sort({ date: -1, createdAt: -1 })
+    .limit(limit)
+    .lean();
   return NextResponse.json({
     entries: entries.map((e) => ({
       id: e._id.toString(),
+      attachmentName: e.attachment?.name ?? "",
       jvNumber: e.jvNumber,
       date: e.date.toISOString().slice(0, 10),
       description: e.description,
@@ -60,13 +65,28 @@ export async function POST(request: NextRequest) {
 
     const entry = await createJournalEntry({
       date: body.date || new Date(),
-      sourceType: "JV",
+      sourceType: body.mode === "receipt" ? "Receipt" : body.mode === "invoice" ? "Invoice" : "JV",
       description: String(body.description ?? "").trim() || "Manual journal voucher",
       reference: String(body.reference ?? "").trim() || undefined,
       lines: Array.isArray(body.lines) ? body.lines : [],
       createdBy: authed.name,
       autoPost: body.post === true,
     });
+
+    // Optional supporting document (≤1MB)
+    if (body.attachment?.dataBase64 && typeof body.attachment.dataBase64 === "string") {
+      if (body.attachment.dataBase64.length > 1_500_000) {
+        return NextResponse.json({ message: "Attachment too large — maximum 1 MB." }, { status: 400 });
+      }
+      await JournalEntry.updateOne(
+        { _id: entry._id },
+        { $set: { attachment: {
+          name: String(body.attachment.name ?? "document").slice(0, 200),
+          mimeType: String(body.attachment.mimeType ?? "application/octet-stream").slice(0, 100),
+          dataBase64: body.attachment.dataBase64,
+        } } }
+      );
+    }
 
     logAudit({
       userName: authed.name, userRole: authed.role,
