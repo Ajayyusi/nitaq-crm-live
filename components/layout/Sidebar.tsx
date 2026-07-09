@@ -57,7 +57,9 @@ const navGroups = [
       { label: "Finance",     href: "/finance",      icon: WalletCards },
       { label: "Expenses",    href: "/expenses",     icon: ReceiptText },
       { label: "Reports",     href: "/reports",      icon: BarChart3 },
-      { label: "Accounting",  href: "/accounting",   icon: Calculator },
+      { label: "Accounting",  href: "/accounting",           icon: Calculator },
+      { label: "Receipts",    href: "/accounting/receipts",  icon: WalletCards },
+      { label: "Invoices",    href: "/accounting/invoices",  icon: ReceiptText },
     ],
   },
   {

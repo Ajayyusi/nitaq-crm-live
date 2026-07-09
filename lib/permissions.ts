@@ -98,6 +98,8 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   "/document-control":     ["admin", "manager", "iqa", "eqa", "assessor"],
   // Accounting
   "/accounting":           ["admin", "accountant", "manager"],
+  "/accounting/receipts":  ["admin", "accountant", "manager"],
+  "/accounting/invoices":  ["admin", "accountant", "manager"],
   // System
   "/activity":             ["admin", "manager"],
   "/import-export":        ["admin", "manager", "sales", "finance"],

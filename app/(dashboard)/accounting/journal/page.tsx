@@ -108,6 +108,28 @@ export default function JournalPage() {
     setDrawerOpen(true);
   };
 
+  /** "Edit" a POSTED entry: reverse it, then open a pre-filled copy to fix and repost. */
+  const correctEntry = async (e: Jv) => {
+    if (!confirm(`${e.jvNumber} is posted. Correcting will reverse it and open an editable copy. Continue?`)) return;
+    setActioning(e.id + "reverse");
+    try {
+      const res = await fetch(`/api/accounting/journal-entries/${e.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reverse", reason: "Corrected" }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message);
+      load();
+      // Open a fresh drawer pre-filled with the original lines
+      openEdit({ ...e, id: "" } as Jv);
+      setEditingId(null);
+      setReference(`Correction of ${e.jvNumber}`);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally { setActioning(""); }
+  };
+
   const onFile = (file: File | null) => {
     setAttachError("");
     if (!file) { setAttachment(null); return; }
@@ -300,9 +322,14 @@ export default function JournalPage() {
                         </>
                       )}
                       {canPost && e.status === "Posted" && (
-                        <button onClick={() => action(e.id, "reverse")} disabled={!!actioning} className="rounded-lg border border-amber-300 px-3 py-1 font-semibold text-amber-700 dark:border-amber-700 dark:text-amber-400">
-                          {actioning === e.id + "reverse" ? "…" : "Reverse"}
-                        </button>
+                        <>
+                          <button onClick={() => correctEntry(e)} disabled={!!actioning} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1 font-semibold text-gray-600 dark:border-white/10 dark:text-gray-400">
+                            <Pencil className="h-3 w-3" /> Correct
+                          </button>
+                          <button onClick={() => action(e.id, "reverse")} disabled={!!actioning} className="rounded-lg border border-amber-300 px-3 py-1 font-semibold text-amber-700 dark:border-amber-700 dark:text-amber-400">
+                            {actioning === e.id + "reverse" ? "…" : "Reverse (cancel)"}
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

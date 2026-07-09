@@ -7,7 +7,8 @@ import {
   Building2, ChevronDown, ChevronLeft, ChevronUp, Loader2, Plus, RefreshCw, X,
 } from "lucide-react";
 import DatePicker from "@/components/shared/DatePicker";
-import { AccountSelect, fmtAED, fmtNum, usePostingAccounts } from "@/components/accounting/shared";
+import { Download } from "lucide-react";
+import { AccountSelect, exportCsv, fmtAED, fmtNum, usePostingAccounts } from "@/components/accounting/shared";
 
 interface Supplier {
   id: string; supplierCode: string; name: string; contactPerson: string; phone: string;
@@ -155,8 +156,17 @@ export default function SuppliersPage() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Suppliers</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{suppliers.length} suppliers · total payable {fmtAED(suppliers.reduce((s, x) => s + x.balance, 0))}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
+          <button
+            onClick={() => exportCsv("suppliers.csv",
+              ["Code", "Supplier", "TRN", "VAT Registered", "Opening", "Billed", "Paid", "Balance"],
+              suppliers.map((s) => [s.supplierCode, s.name, s.trn, s.vatRegistered ? "Yes" : "No", s.openingBalance, s.totalBilled, s.totalPaid, s.balance]))}
+            disabled={suppliers.length === 0}
+            className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 disabled:opacity-50 dark:text-green-400 dark:hover:bg-green-900/20"
+          >
+            <Download className="h-4 w-4" /> Excel / CSV
+          </button>
           {canEdit && (
             <button onClick={() => { setDrawer("supplier"); setFormError(""); }} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20]">
               <Plus className="h-4 w-4" /> Add Supplier

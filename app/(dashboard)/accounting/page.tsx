@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowRight, BookOpen, Building2, Calculator, Database, FileSpreadsheet,
-  Landmark, Loader2, Receipt, RefreshCw, Scale, Settings2, Wallet,
+  Landmark, ListChecks, Loader2, Receipt, RefreshCw, Scale, Settings2, Users, Wallet,
 } from "lucide-react";
 import { fmtAED } from "@/components/accounting/shared";
 
@@ -16,13 +16,17 @@ interface Dash {
 }
 
 const MODULES = [
-  { label: "Chart of Accounts", href: "/accounting/coa",           icon: BookOpen,        desc: "Account structure & balances" },
-  { label: "Journal Vouchers",  href: "/accounting/journal",       icon: Calculator,      desc: "Manual entries, post & reverse" },
-  { label: "Suppliers",         href: "/accounting/suppliers",     icon: Building2,       desc: "Bills, payments, statements" },
-  { label: "Trial Balance",     href: "/accounting/trial-balance", icon: Scale,           desc: "Debits = credits check" },
-  { label: "General Ledger",    href: "/accounting/ledger",        icon: FileSpreadsheet, desc: "Per-account transactions" },
-  { label: "VAT Report",        href: "/accounting/vat",           icon: Landmark,        desc: "Input / Output VAT" },
-  { label: "Settings",          href: "/accounting/settings",      icon: Settings2,       desc: "Account mappings" },
+  { label: "Financial Register",  href: "/accounting/register",      icon: ListChecks,      desc: "Every voucher, filterable + export" },
+  { label: "Chart of Accounts",   href: "/accounting/coa",           icon: BookOpen,        desc: "Account structure & balances" },
+  { label: "Journal Vouchers",    href: "/accounting/journal",       icon: Calculator,      desc: "Manual entries, post & reverse" },
+  { label: "Receipts",            href: "/accounting/receipts",      icon: Wallet,          desc: "Money received from students" },
+  { label: "Invoices",            href: "/accounting/invoices",      icon: Receipt,         desc: "Student fee invoices" },
+  { label: "Student Receivables", href: "/accounting/receivables",   icon: Users,           desc: "Per-student balances" },
+  { label: "Suppliers",           href: "/accounting/suppliers",     icon: Building2,       desc: "Bills, payments, statements" },
+  { label: "Trial Balance",       href: "/accounting/trial-balance", icon: Scale,           desc: "Debits = credits check" },
+  { label: "General Ledger",      href: "/accounting/ledger",        icon: FileSpreadsheet, desc: "Per-account transactions" },
+  { label: "VAT Report",          href: "/accounting/vat",           icon: Landmark,        desc: "Input / Output VAT" },
+  { label: "Settings",            href: "/accounting/settings",      icon: Settings2,       desc: "Account mappings" },
 ];
 
 export default function AccountingDashboardPage() {
@@ -88,14 +92,14 @@ export default function AccountingDashboardPage() {
   }
 
   const cards = data ? [
-    { label: "Cash Balance",        value: data.cashBalance,       icon: Wallet,   color: "text-green-600" },
-    { label: "Bank Balance",        value: data.bankBalance,       icon: Landmark, color: "text-blue-600" },
-    { label: "Receivable (A/R)",    value: data.accountsReceivable, icon: Receipt, color: "text-teal-600" },
-    { label: "Payable (A/P)",       value: data.accountsPayable,   icon: Building2, color: "text-amber-600" },
-    { label: "Revenue This Month",  value: data.revenueThisMonth,  icon: Calculator, color: "text-green-600" },
-    { label: "Expenses This Month", value: data.expensesThisMonth, icon: Receipt,  color: "text-red-600" },
-    { label: "VAT Payable",         value: data.vatPayable,        icon: Landmark, color: data.vatPayable > 0 ? "text-red-600" : "text-green-600" },
-    { label: "Net Profit (All)",    value: data.netProfit,         icon: Scale,    color: data.netProfit >= 0 ? "text-green-600" : "text-red-600" },
+    { label: "Cash Balance",        value: data.cashBalance,       icon: Wallet,   color: "text-green-600", href: "/accounting/register?group=cash" },
+    { label: "Bank Balance",        value: data.bankBalance,       icon: Landmark, color: "text-blue-600", href: "/accounting/register?group=bank" },
+    { label: "Receivable (A/R)",    value: data.accountsReceivable, icon: Receipt, color: "text-teal-600", href: "/accounting/receivables" },
+    { label: "Payable (A/P)",       value: data.accountsPayable,   icon: Building2, color: "text-amber-600", href: "/accounting/suppliers" },
+    { label: "Revenue This Month",  value: data.revenueThisMonth,  icon: Calculator, color: "text-green-600", href: "/accounting/invoices" },
+    { label: "Expenses This Month", value: data.expensesThisMonth, icon: Receipt,  color: "text-red-600", href: "/accounting/register?sourceType=Expense" },
+    { label: "VAT Payable",         value: data.vatPayable,        icon: Landmark, color: data.vatPayable > 0 ? "text-red-600" : "text-green-600", href: "/accounting/vat" },
+    { label: "Net Profit (All)",    value: data.netProfit,         icon: Scale,    color: data.netProfit >= 0 ? "text-green-600" : "text-red-600", href: "/accounting/trial-balance" },
   ] : [];
 
   return (
@@ -163,14 +167,18 @@ export default function AccountingDashboardPage() {
         <p className="rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-800 dark:bg-green-950/30 dark:text-green-400">{backfillMsg}</p>
       )}
 
-      {/* KPI cards */}
+      {/* KPI cards — each drills into its register/report */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map((c) => (
-          <div key={c.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-            <c.icon className={`mb-2 h-5 w-5 ${c.color}`} />
+          <Link key={c.label} href={c.href}
+            className="group rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2E7D32]/40 hover:shadow-md dark:border-white/10 dark:bg-white/5">
+            <div className="flex items-start justify-between">
+              <c.icon className={`mb-2 h-5 w-5 ${c.color}`} />
+              <ArrowRight className="h-3.5 w-3.5 text-gray-200 transition group-hover:text-[#2E7D32]" />
+            </div>
             <p className={`text-lg font-extrabold ${c.color}`}>{fmtAED(c.value)}</p>
             <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">{c.label}</p>
-          </div>
+          </Link>
         ))}
       </div>
 
