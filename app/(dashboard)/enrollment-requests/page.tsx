@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock, Loader2, X, MessageCircle, GraduationCap } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { useSession } from "next-auth/react";
 
 type EnrollmentRequest = {
@@ -211,7 +212,7 @@ export default function EnrollmentRequestsPage() {
 }
 
 function RequestRow({ r, isSales, onReview }: { r: EnrollmentRequest; isSales: boolean; onReview: () => void }) {
-  const waUrl = r.leadPhone ? `https://wa.me/${r.leadPhone.replace(/\D/g, "")}` : null;
+  const waUrl = r.leadPhone ? (buildWhatsAppUrl(r.leadPhone) ?? "#") : null;
   return (
     <div className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 flex-1 space-y-1">

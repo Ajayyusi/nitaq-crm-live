@@ -22,6 +22,7 @@ import { courseList } from "@/constants/leads";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import DatePicker from "@/components/shared/DatePicker";
 import { getPresetRange } from "@/lib/dateRange";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 type FollowUp = {
   id: string;
@@ -87,8 +88,8 @@ function formatDate(v: string) {
   });
 }
 
-function whatsappUrl(phone: string) {
-  return `https://wa.me/${phone.replace(/\D/g, "")}`;
+function whatsappUrl(phone: string, text?: string) {
+  return buildWhatsAppUrl(phone, text) ?? "#";
 }
 
 function getErr(v: unknown, fallback: string) {
@@ -527,11 +528,11 @@ export default function FollowUpsPage() {
                     <div className="flex flex-shrink-0 items-center gap-1.5">
                       {f.phone && (
                         <a
-                          href={whatsappUrl(f.phone)}
+                          href={whatsappUrl(f.phone, f.notes?.trim() || undefined)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-green-200 bg-[#E8F5E9] text-[#2E7D32] transition hover:bg-green-100"
-                          title="Open WhatsApp"
+                          title="Open WhatsApp with the follow-up note"
                         >
                           <MessageCircle className="h-4 w-4" />
                         </a>

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { trainerStatuses, tamamStatuses, contractStatuses, trainerPaymentTypes as paymentTypes } from "@/constants/modelConstants";
 import DatePicker from "@/components/shared/DatePicker";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 type Trainer = {
   id: string; fullName: string; fullNameAr: string; phone: string; email: string;
@@ -247,7 +248,7 @@ export default function TrainersPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <a href={`https://wa.me/${t.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-green-200 bg-[#E8F5E9] text-[#2E7D32] hover:bg-green-100"><MessageCircle className="h-4 w-4" /></a>
+                    <a href={(buildWhatsAppUrl(t.phone) ?? "#")} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-green-200 bg-[#E8F5E9] text-[#2E7D32] hover:bg-green-100"><MessageCircle className="h-4 w-4" /></a>
                     <button onClick={() => openEdit(t)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"><Edit3 className="h-4 w-4" /></button>
                     <button onClick={() => void deleteTrainer(t)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>
                   </div>

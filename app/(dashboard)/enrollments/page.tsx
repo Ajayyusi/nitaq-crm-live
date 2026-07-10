@@ -9,6 +9,7 @@ import { courseList } from "@/constants/leads";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import DatePicker from "@/components/shared/DatePicker";
 import { thisMonthRange } from "@/lib/dateRange";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 type Enrollment = {
   id: string; enrollmentId: string; fullName: string; phone: string; email: string;
@@ -327,7 +328,7 @@ export default function EnrollmentsPage() {
                         <p className="font-bold text-[#0D1F0E]">{e.fullName}</p>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500">
                           <span>{e.phone}</span>
-                          <a href={`https://wa.me/${e.phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="text-[#2E7D32] hover:underline"><MessageCircle className="h-3 w-3" /></a>
+                          <a href={(buildWhatsAppUrl(e.phone) ?? "#")} target="_blank" rel="noopener noreferrer" className="text-[#2E7D32] hover:underline"><MessageCircle className="h-3 w-3" /></a>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-700">{e.course}{e.batchName ? ` · ${e.batchName}` : ""}</td>

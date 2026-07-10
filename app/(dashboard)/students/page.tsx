@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { GraduationCap, Award, MessageCircle, Search, Loader2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 type Enrollment = {
   id: string; enrollmentId: string; fullName: string; phone: string;
@@ -217,7 +218,7 @@ export default function StudentsPage() {
                       <td className="px-4 py-3">
                         {e.phone && (
                           <a
-                            href={`https://wa.me/${e.phone.replace(/\D/g, "")}`}
+                            href={(buildWhatsAppUrl(e.phone) ?? "#")}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="p-1.5 text-slate-400 hover:text-[#25D366] hover:bg-green-50 rounded transition inline-flex"

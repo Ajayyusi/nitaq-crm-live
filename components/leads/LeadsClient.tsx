@@ -40,6 +40,7 @@ import { followUpTypes, followUpStatuses } from "@/constants/modelConstants";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import DatePicker from "@/components/shared/DatePicker";
 import { thisMonthRange } from "@/lib/dateRange";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 type SortOrder = "newest" | "oldest";
 type SalesUser = { id: string; name: string; email: string };
@@ -177,10 +178,10 @@ function formatDate(value: string) {
   return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Plain "open chat" link (no message) — normalises the number so UAE local
+// formats like 05xxxxxxxx still resolve to a valid international wa.me link.
 function whatsappUrl(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  if (!digits || digits.length < 7) return null;
-  return `https://wa.me/${digits}`;
+  return buildWhatsAppUrl(phone);
 }
 
 function leadAgeDays(updatedAt: string): number {
@@ -1192,7 +1193,7 @@ export default function LeadsClient({ role = "sales", userName = "" }: { role?: 
                                       ].map((t) => (
                                         <a
                                           key={t.label}
-                                          href={`${waUrl}?text=${encodeURIComponent(t.text)}`}
+                                          href={buildWhatsAppUrl(lead.phone, t.text) ?? "#"}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           onClick={() => setWaMenuId(null)}

@@ -30,6 +30,7 @@ import AttendanceSession from "@/models/Attendance";
 import { auth } from "@/auth";
 import UrlDateFilter from "@/components/shared/UrlDateFilter";
 import { buildDateFilter, describeRange, thisMonthRange } from "@/lib/dateRange";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 // ── Role helpers ─────────────────────────────────────────────────────────────
 const FINANCE_ROLES = new Set(["admin", "manager", "finance"]);
@@ -591,7 +592,7 @@ export default async function DashboardPage({
               <div className="mt-4 space-y-2.5">
                 {data.todayFollowUps.map((f) => {
                   const Icon = followUpTypeIcon[f.type] ?? BellRing;
-                  const waLink = `https://wa.me/${f.phone.replace(/\D/g, "")}`;
+                  const waLink = (buildWhatsAppUrl(f.phone) ?? "#");
                   return (
                     <div key={f.id} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 transition hover:border-[#2E7D32]/30 hover:bg-[#E8F5E9]">
                       <div className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-[#E8F5E9]">
