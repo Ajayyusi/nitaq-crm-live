@@ -2,6 +2,7 @@ export const leadStages = [
   "Lead",
   "Contacted",
   "Interested",
+  "Not Interested",
   "Not Connecting",
   "Not Answering",
   "Invalid Number",

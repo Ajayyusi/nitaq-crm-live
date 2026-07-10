@@ -121,6 +121,7 @@ const stageConfig: Record<LeadStage, { cls: string; dot: string }> = {
   Lead:             { cls: "bg-sky-50 text-sky-700 ring-sky-200",             dot: "bg-sky-400" },
   Contacted:        { cls: "bg-indigo-50 text-indigo-700 ring-indigo-200",    dot: "bg-indigo-400" },
   Interested:       { cls: "bg-[#E8F5E9] text-[#2E7D32] ring-green-200",     dot: "bg-[#2E7D32]" },
+  "Not Interested": { cls: "bg-rose-50 text-rose-700 ring-rose-200",          dot: "bg-rose-400" },
   "Not Connecting": { cls: "bg-orange-50 text-orange-700 ring-orange-200",    dot: "bg-orange-400" },
   "Not Answering":  { cls: "bg-amber-50 text-amber-800 ring-amber-200",       dot: "bg-amber-500" },
   "Invalid Number": { cls: "bg-slate-100 text-slate-600 ring-slate-200",      dot: "bg-slate-400" },
