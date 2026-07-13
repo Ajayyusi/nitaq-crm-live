@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   ChevronDown, ChevronLeft, ChevronUp, Loader2, Paperclip, Pencil,
@@ -28,7 +29,9 @@ const MODE_LABELS: Record<Mode, string> = {
   expense: "Expense",
 };
 
-export default function JournalPage() {
+function JournalInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const role = (session?.user as { role?: string })?.role ?? "";
   const canPost = role === "admin" || role === "accountant";
@@ -180,6 +183,38 @@ export default function JournalPage() {
       alert((err as Error).message);
     } finally { setActioning(""); }
   };
+
+  // Deep-link: open the edit/correct flow when arriving from a voucher page
+  // (/accounting/journal?edit=<id> or ?correct=<id>).
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || !canPost) return;
+    const editId = searchParams.get("edit");
+    const correctId = searchParams.get("correct");
+    if (!editId && !correctId) return;
+    deepLinkHandled.current = true;
+    const id = editId || correctId!;
+    fetch(`/api/accounting/journal-entries/${id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const e = d.entry;
+        if (!e) return;
+        const jv: Jv = {
+          id: e.id ?? e._id,
+          jvNumber: e.jvNumber, date: String(e.date).slice(0, 10),
+          description: e.description, reference: e.reference ?? "",
+          sourceType: e.sourceType, sourceNumber: e.sourceNumber ?? "",
+          status: e.status, totalDebit: e.totalDebit, totalCredit: e.totalCredit,
+          lines: e.lines ?? [], createdBy: e.createdBy ?? "", postedBy: e.postedBy ?? "",
+          reversedByEntryId: "", attachmentName: "",
+        };
+        if (editId && jv.status === "Draft") openEdit(jv);
+        else if (correctId && jv.status === "Posted") correctEntry(jv);
+      })
+      .catch(() => {})
+      .finally(() => router.replace("/accounting/journal"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, canPost]);
 
   const onFile = (file: File | null) => {
     setAttachError("");
@@ -566,5 +601,13 @@ export default function JournalPage() {
 
       <style>{`.label-x { display:block; margin-bottom:0.25rem; font-size:0.75rem; font-weight:600; color:#4B5563; }`}</style>
     </div>
+  );
+}
+
+export default function JournalPage() {
+  return (
+    <Suspense fallback={<div className="flex h-64 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
+      <JournalInner />
+    </Suspense>
   );
 }

@@ -262,11 +262,21 @@ export async function getLedger(params: {
   from?: Date;
   to?: Date;
   sourceType?: string;
+  includeReversed?: boolean;
 }) {
+  // By default show only ACTIVE vouchers: exclude reversed originals
+  // (status Reversed) and their reversal entries (sourceType Reversal).
+  // Both nets to zero, so the running balance is unaffected. includeReversed
+  // brings them back for audit.
   const match: Record<string, unknown> = {
-    status: { $in: ["Posted", "Reversed"] },
     "lines.accountCode": params.accountCode,
   };
+  if (params.includeReversed) {
+    match.status = { $in: ["Posted", "Reversed"] };
+  } else {
+    match.status = "Posted";
+    match.sourceType = { $ne: "Reversal" };
+  }
   if (params.sourceType) match.sourceType = params.sourceType;
   if (params.from || params.to) {
     const d: Record<string, Date> = {};

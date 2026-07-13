@@ -19,12 +19,14 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const sourceType = searchParams.get("sourceType") ?? undefined;
+  const includeReversed = searchParams.get("includeReversed") === "true";
 
   const rows = await getLedger({
     accountCode,
     from: from ? new Date(from) : undefined,
     to: to ? new Date(to + "T23:59:59.999Z") : undefined,
     sourceType: sourceType || undefined,
+    includeReversed,
   });
 
   return NextResponse.json({

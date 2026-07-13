@@ -19,6 +19,7 @@ function LedgerInner() {
   const [from, setFrom] = useState(searchParams.get("from") ?? "");
   const [to, setTo] = useState(searchParams.get("to") ?? "");
   const [sourceType, setSourceType] = useState("");
+  const [includeReversed, setIncludeReversed] = useState(false);
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [accountInfo, setAccountInfo] = useState<{ code: string; name: string; type: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,12 +31,13 @@ function LedgerInner() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (sourceType) params.set("sourceType", sourceType);
+    if (includeReversed) params.set("includeReversed", "true");
     fetch(`/api/accounting/ledger?${params}`)
       .then((r) => r.json())
       .then((d) => { setRows(d.rows ?? []); setAccountInfo(d.account ?? null); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [account, from, to, sourceType]);
+  }, [account, from, to, sourceType, includeReversed]);
 
   useEffect(load, [load]);
 
@@ -78,6 +80,10 @@ function LedgerInner() {
           <option value="">All Sources</option>
           {["JV", "Invoice", "Receipt", "Expense", "SupplierBill", "SupplierPayment", "Refund", "Reversal"].map((s) => <option key={s}>{s}</option>)}
         </select>
+        <label className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
+          <input type="checkbox" checked={includeReversed} onChange={(e) => setIncludeReversed(e.target.checked)} className="h-3.5 w-3.5 accent-[#2E7D32]" />
+          Show reversed
+        </label>
       </div>
 
       {!account ? (
