@@ -226,14 +226,14 @@ export default function PaymentsPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <PageHeader
-        title="Payments"
-        subtitle="Track income, instalments and overdue balances"
+        title="Receipts"
+        subtitle="Receipts from students — income, instalments and overdue balances"
         actions={
           <button
             onClick={openNew}
             className="flex items-center gap-2 px-4 py-2 bg-[#2E7D32] text-white text-sm font-medium rounded-lg hover:bg-[#1B5E20] transition"
           >
-            <Plus className="w-4 h-4" /> Record Payment
+            <Plus className="w-4 h-4" /> Record Receipt
           </button>
         }
       />
@@ -313,11 +313,11 @@ export default function PaymentsPage() {
         ) : payments.length === 0 ? (
           <EmptyState
             icon={CreditCard}
-            title="No payments found"
+            title="No receipts found"
             description="Record your first payment to start tracking revenue."
             action={
               <button onClick={openNew} className="px-4 py-2 bg-[#2E7D32] text-white text-sm rounded-lg">
-                Record Payment
+                Record Receipt
               </button>
             }
           />
@@ -410,7 +410,7 @@ export default function PaymentsPage() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#0D1F0E]">
               <div>
                 <h2 className="text-base font-semibold text-white">
-                  {editTarget ? `Edit ${editTarget.paymentId}` : "Record Payment"}
+                  {editTarget ? `Edit ${editTarget.paymentId}` : "Record Receipt"}
                 </h2>
                 <p className="text-xs text-white/60">
                   {editTarget ? "Update payment details" : "Add a new payment record"}
@@ -618,7 +618,7 @@ export default function PaymentsPage() {
                 disabled={saving}
                 className="flex-1 py-2.5 bg-[#2E7D32] text-white text-sm font-semibold rounded-lg hover:bg-[#1B5E20] transition disabled:opacity-50"
               >
-                {saving ? "Saving…" : editTarget ? "Update Payment" : "Record Payment"}
+                {saving ? "Saving…" : editTarget ? "Update Receipt" : "Record Receipt"}
               </button>
               <button
                 onClick={() => setDrawerOpen(false)}

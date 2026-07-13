@@ -48,6 +48,7 @@ function JournalInner() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [showReversed, setShowReversed] = useState(false);
   // Import
   const [importOpen, setImportOpen] = useState(false);
@@ -295,6 +296,11 @@ function JournalInner() {
 
   const inp = "h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white";
 
+  const q = search.trim().toLowerCase();
+  const visibleEntries = q
+    ? entries.filter((e) => e.jvNumber.toLowerCase().includes(q) || (e.description ?? "").toLowerCase().includes(q) || (e.sourceNumber ?? "").toLowerCase().includes(q))
+    : entries;
+
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -307,15 +313,6 @@ function JournalInner() {
           <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
           {canPost && (
             <>
-              <button onClick={() => openNew("receipt")} className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20">
-                <Plus className="h-4 w-4" /> Receipt
-              </button>
-              <button onClick={() => openNew("invoice")} className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20">
-                <Plus className="h-4 w-4" /> Sales Invoice
-              </button>
-              <button onClick={() => openNew("expense")} className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20">
-                <Plus className="h-4 w-4" /> Expense
-              </button>
               <button onClick={() => { setImportOpen(true); setImportMsg(""); }} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
                 <Upload className="h-4 w-4" /> Import
               </button>
@@ -329,6 +326,12 @@ function JournalInner() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search JV number or description…"
+          className="h-8 w-56 rounded-lg border border-gray-200 bg-white px-3 text-xs outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white"
+        />
         {["", "Draft", "Posted", "Reversed", "Cancelled"].map((s) => (
           <button key={s || "all"} onClick={() => setStatusFilter(s)}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusFilter === s ? "bg-[#2E7D32] text-white" : "border border-gray-200 bg-white text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400"}`}>
@@ -348,11 +351,11 @@ function JournalInner() {
       {/* List */}
       {loading ? (
         <div className="flex h-40 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
-      ) : entries.length === 0 ? (
+      ) : visibleEntries.length === 0 ? (
         <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">No journal entries.</div>
       ) : (
         <div className="space-y-2">
-          {entries.map((e) => {
+          {visibleEntries.map((e) => {
             const open = expanded === e.id;
             return (
               <div key={e.id} className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">

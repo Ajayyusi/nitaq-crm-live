@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   const entries = await JournalEntry.find(query)
     .select("+attachment.name") // list only needs the file name, not the data
-    .sort({ date: -1, createdAt: -1 })
+    .sort({ jvNumber: -1 }) // JV number sequence (newest first)
     .limit(limit)
     .lean();
   return NextResponse.json({

@@ -22,8 +22,11 @@ export async function GET() {
   const arAccounts = await ChartOfAccount.find({ parentCode: "10103" }).sort({ name: 1 }).lean();
   const codes = arAccounts.map((a) => a.code);
 
+  // Active only: exclude reversed originals (status Reversed) and their
+  // reversal entries (sourceType Reversal) so statements show only live
+  // invoices, receipts and outstanding balances.
   const sums = await JournalEntry.aggregate([
-    { $match: { status: { $in: ["Posted", "Reversed"] }, "lines.accountCode": { $in: codes } } },
+    { $match: { status: "Posted", sourceType: { $ne: "Reversal" }, "lines.accountCode": { $in: codes } } },
     { $unwind: "$lines" },
     { $match: { "lines.accountCode": { $in: codes } } },
     { $group: { _id: "$lines.accountCode", invoiced: { $sum: "$lines.debit" }, paid: { $sum: "$lines.credit" } } },

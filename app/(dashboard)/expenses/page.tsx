@@ -154,14 +154,14 @@ export default function ExpensesPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <PageHeader
-        title="Expenses"
-        subtitle="Track operating costs and supplier payments"
+        title="Payments"
+        subtitle="Outgoing payments — expenses and supplier settlements"
         actions={
           <button
             onClick={openNew}
             className="flex items-center gap-2 px-4 py-2 bg-[#2E7D32] text-white text-sm font-medium rounded-lg hover:bg-[#1B5E20] transition"
           >
-            <Plus className="w-4 h-4" /> Add Expense
+            <Plus className="w-4 h-4" /> Add Payment
           </button>
         }
       />
@@ -234,7 +234,7 @@ export default function ExpensesPage() {
             description="Add your first expense to start tracking costs."
             action={
               <button onClick={openNew} className="px-4 py-2 bg-[#2E7D32] text-white text-sm rounded-lg">
-                Add Expense
+                Add Payment
               </button>
             }
           />
@@ -295,7 +295,7 @@ export default function ExpensesPage() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#0D1F0E]">
               <div>
                 <h2 className="text-base font-semibold text-white">
-                  {editTarget ? `Edit ${editTarget.expenseId}` : "Add Expense"}
+                  {editTarget ? `Edit ${editTarget.expenseId}` : "Add Payment"}
                 </h2>
                 <p className="text-xs text-white/60">
                   {editTarget ? "Update expense details" : "Record a new operating cost"}
@@ -405,7 +405,7 @@ export default function ExpensesPage() {
                 disabled={saving}
                 className="flex-1 py-2.5 bg-[#2E7D32] text-white text-sm font-semibold rounded-lg hover:bg-[#1B5E20] transition disabled:opacity-50"
               >
-                {saving ? "Saving…" : editTarget ? "Update Expense" : "Add Expense"}
+                {saving ? "Saving…" : editTarget ? "Update Payment" : "Add Payment"}
               </button>
               <button
                 onClick={() => setDrawerOpen(false)}

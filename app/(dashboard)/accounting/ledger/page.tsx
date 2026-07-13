@@ -86,6 +86,31 @@ function LedgerInner() {
         </label>
       </div>
 
+      {/* Account balance summary */}
+      {account && rows.length > 0 && (() => {
+        const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
+        const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
+        const closing = rows[rows.length - 1].balance;
+        return (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Total Debit</p>
+              <p className="mt-0.5 text-lg font-extrabold tabular-nums text-gray-900 dark:text-white">{fmtNum(totalDebit)}</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Total Credit</p>
+              <p className="mt-0.5 text-lg font-extrabold tabular-nums text-gray-900 dark:text-white">{fmtNum(totalCredit)}</p>
+            </div>
+            <div className={`rounded-xl border p-3 shadow-sm ${closing < 0 ? "border-red-200 dark:border-red-800/40" : "border-[#2E7D32]/30"} bg-white dark:bg-white/5`}>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Current Balance</p>
+              <p className={`mt-0.5 text-lg font-extrabold tabular-nums ${closing < 0 ? "text-red-600 dark:text-red-400" : "text-[#2E7D32] dark:text-green-400"}`}>
+                {fmtNum(Math.abs(closing))} {closing < 0 ? "Cr" : "Dr"}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       {!account ? (
         <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">Choose an account to view its ledger.</div>
       ) : loading ? (

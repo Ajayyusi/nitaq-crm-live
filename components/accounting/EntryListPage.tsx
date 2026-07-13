@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronUp, Download, Loader2, RefreshCw } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { ChevronDown, ChevronLeft, ChevronUp, Download, Loader2, Plus, RefreshCw, X } from "lucide-react";
 import DateRangePicker from "@/components/shared/DateRangePicker";
-import { exportCsv, fmtNum, jvStatusBadge } from "@/components/accounting/shared";
+import DatePicker from "@/components/shared/DatePicker";
+import { AccountSelect, exportCsv, fmtNum, jvStatusBadge, usePostingAccounts } from "@/components/accounting/shared";
 
 interface JvLine { accountCode: string; accountName?: string; debit: number; credit: number; description?: string; studentRef?: string; }
 interface Jv {
@@ -14,19 +16,47 @@ interface Jv {
   createdBy: string; postedBy: string;
 }
 
-/** Shared list page for Receipts / Invoices — journal entries of one source type. */
+/**
+ * Shared list page for Receipts / Invoices — journal entries of one source
+ * type. When createMode is set, a "New Receipt / New Invoice" button opens a
+ * quick posting drawer (money in for receipts, revenue for invoices), so
+ * receipts/invoices can be created directly from their own page.
+ */
 export default function EntryListPage({
-  sourceType, title, subtitle,
+  sourceType, title, subtitle, createMode,
 }: {
   sourceType: "Receipt" | "Invoice";
   title: string;
   subtitle: string;
+  createMode?: "receipt" | "invoice";
 }) {
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string })?.role ?? "";
+  const canPost = role === "admin" || role === "accountant";
+
+  const { accounts } = usePostingAccounts();
+  const currentAssetAccounts = accounts.filter((a) => a.type === "Asset" && a.subCategory === "CURRENT ASSETS");
+  const arAccounts = accounts.filter((a) => a.mainAccount === "ACCOUNTS RECEIVABLES");
+  const revenueAccounts = accounts.filter((a) => a.type === "Revenue");
+  const debitAccounts = createMode === "receipt" ? currentAssetAccounts : arAccounts;
+  const creditAccounts = createMode === "receipt" ? arAccounts : revenueAccounts;
+
   const [entries, setEntries] = useState<Jv[]>([]);
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Create drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [description, setDescription] = useState("");
+  const [reference, setReference] = useState("");
+  const [debitCode, setDebitCode] = useState("");
+  const [creditCode, setCreditCode] = useState("");
+  const [amount, setAmount] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -42,6 +72,38 @@ export default function EntryListPage({
 
   useEffect(load, [load]);
 
+  const openCreate = () => {
+    setDate(new Date().toISOString().slice(0, 10));
+    setDescription(""); setReference(""); setDebitCode(""); setCreditCode(""); setAmount("");
+    setFormError(""); setDrawerOpen(true);
+  };
+
+  const submitCreate = async (post: boolean) => {
+    setSaving(true); setFormError("");
+    try {
+      if (!debitCode || !creditCode || !(Number(amount) > 0)) throw new Error("Fill both accounts and an amount.");
+      const res = await fetch("/api/accounting/journal-entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date, description: description || `${title.slice(0, -1)}`, reference, post,
+          mode: createMode,
+          lines: [
+            { accountCode: debitCode, debit: Number(amount), credit: 0, description: description || undefined },
+            { accountCode: creditCode, debit: 0, credit: Number(amount), description: description || undefined },
+          ],
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message);
+      setDrawerOpen(false);
+      load();
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally { setSaving(false); }
+  };
+
+  // Only active (non-reversed) entries by default; the API already hides reversed.
   const total = entries.filter((e) => e.status === "Posted").reduce((s, e) => s + e.totalDebit, 0);
 
   const doExport = () => {
@@ -57,6 +119,8 @@ export default function EntryListPage({
     );
   };
 
+  const inp = "h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white";
+
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -67,9 +131,14 @@ export default function EntryListPage({
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
-          <button onClick={doExport} disabled={entries.length === 0} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
+          <button onClick={doExport} disabled={entries.length === 0} className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 disabled:opacity-50 dark:text-green-400 dark:hover:bg-green-900/20">
             <Download className="h-4 w-4" /> Excel / CSV
           </button>
+          {createMode && canPost && (
+            <button onClick={openCreate} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20]">
+              <Plus className="h-4 w-4" /> New {title.slice(0, -1)}
+            </button>
+          )}
         </div>
       </div>
 
@@ -113,7 +182,12 @@ export default function EntryListPage({
                         ))}
                       </tbody>
                     </table>
-                    <p className="mt-2 text-xs text-gray-400">JV {e.jvNumber} · by {e.createdBy}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
+                      <span>JV {e.jvNumber}</span>
+                      {e.reference && <span>Ref: {e.reference}</span>}
+                      <span>by {e.createdBy}</span>
+                      <Link href={`/accounting/voucher/${e.id}`} className="font-semibold text-[#2E7D32] hover:underline dark:text-green-400">Open voucher →</Link>
+                    </div>
                   </div>
                 )}
               </div>
@@ -121,6 +195,48 @@ export default function EntryListPage({
           })}
         </div>
       )}
+
+      {/* Create drawer */}
+      {drawerOpen && createMode && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+          <aside className="relative ml-auto flex h-full w-full max-w-md flex-col bg-white shadow-2xl dark:bg-[#0D1F0E]">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/10">
+              <h2 className="font-bold text-gray-900 dark:text-white">New {title.slice(0, -1)}</h2>
+              <button onClick={() => setDrawerOpen(false)} className="rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-4 w-4 text-gray-500" /></button>
+            </div>
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              {formError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-400">{formError}</p>}
+              <p className="rounded-lg bg-[#E8F5E9] px-3 py-2 text-xs text-[#1B5E20] dark:bg-green-900/30 dark:text-green-300">
+                {createMode === "receipt"
+                  ? "Receipt: money in — debit a cash/bank account, credit the student's receivable."
+                  : "Invoice: revenue recognised — debit the student's receivable, credit a revenue account."}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="lbl">Date *</label><DatePicker value={date} onChange={setDate} required /></div>
+                <div><label className="lbl">Reference</label><input value={reference} onChange={(e) => setReference(e.target.value)} className={inp} /></div>
+              </div>
+              <div><label className="lbl">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className={inp} /></div>
+              <div>
+                <label className="lbl">{createMode === "receipt" ? "Debit — received into (cash/bank)" : "Debit — student receivable"} *</label>
+                <AccountSelect value={debitCode} onChange={setDebitCode} accounts={debitAccounts}
+                  placeholder={createMode === "receipt" ? "Cash / Bank / POS…" : "Student account…"} />
+              </div>
+              <div>
+                <label className="lbl">{createMode === "receipt" ? "Credit — student receivable" : "Credit — revenue account"} *</label>
+                <AccountSelect value={creditCode} onChange={setCreditCode} accounts={creditAccounts}
+                  placeholder={createMode === "receipt" ? "Student account…" : "Revenue account…"} />
+              </div>
+              <div><label className="lbl">Amount (AED) *</label><input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={inp} /></div>
+            </div>
+            <div className="flex gap-2 border-t border-gray-200 p-4 dark:border-white/10">
+              <button onClick={() => submitCreate(false)} disabled={saving} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-300">Save Draft</button>
+              <button onClick={() => submitCreate(true)} disabled={saving} className="flex-1 rounded-lg bg-[#2E7D32] py-2.5 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">{saving ? "Saving…" : "Post Now"}</button>
+            </div>
+          </aside>
+        </div>
+      )}
+      <style>{`.lbl { display:block; margin-bottom:0.25rem; font-size:0.75rem; font-weight:600; color:#4B5563; }`}</style>
     </div>
   );
 }
