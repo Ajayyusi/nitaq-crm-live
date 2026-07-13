@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
   const sourceType = searchParams.get("sourceType");
+  const jvNumber = searchParams.get("jvNumber");
+  const showReversed = searchParams.get("showReversed") === "true";
   const from = searchParams.get("from") ?? undefined;
   const to = searchParams.get("to") ?? undefined;
   const limit = Math.min(Number(searchParams.get("limit")) || 100, 500);
@@ -21,8 +23,17 @@ export async function GET(request: NextRequest) {
   const query: Record<string, unknown> = {};
   if (status) query.status = status;
   if (sourceType) query.sourceType = sourceType;
+  if (jvNumber) query.jvNumber = jvNumber;
   const dateFilter = buildDateFilter(from, to);
   if (dateFilter) query.date = dateFilter;
+
+  // By default the JV list hides both sides of a reversal: the reversed
+  // original AND its reversal entry. "Show Reversed" reveals them.
+  // An explicit status filter (e.g. viewing "Reversed") overrides this.
+  if (!showReversed && !status) {
+    query.status = { $nin: ["Reversed"] };
+    query.sourceType = sourceType || { $ne: "Reversal" };
+  }
 
   const entries = await JournalEntry.find(query)
     .select("+attachment.name") // list only needs the file name, not the data
@@ -65,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     const entry = await createJournalEntry({
       date: body.date || new Date(),
-      sourceType: body.mode === "receipt" ? "Receipt" : body.mode === "invoice" ? "Invoice" : "JV",
+      sourceType: body.mode === "receipt" ? "Receipt" : body.mode === "invoice" ? "Invoice" : body.mode === "expense" ? "Expense" : "JV",
       description: String(body.description ?? "").trim() || "Manual journal voucher",
       reference: String(body.reference ?? "").trim() || undefined,
       lines: Array.isArray(body.lines) ? body.lines : [],

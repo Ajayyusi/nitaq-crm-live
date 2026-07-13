@@ -48,7 +48,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const BLANK = {
   category: "Other", amount: "", expenseDate: today,
-  payee: "", paymentMethod: "", description: "", notes: "",
+  payee: "", paymentMethod: "", description: "", notes: "", expenseAccountCode: "",
 };
 
 export default function ExpensesPage() {
@@ -63,6 +63,14 @@ export default function ExpensesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [total, setTotal] = useState(0);
+  // All posting expense accounts from the chart of accounts (for booking to the right ledger)
+  const [coaExpenseAccounts, setCoaExpenseAccounts] = useState<{ code: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/accounting/accounts?posting=true&type=Expense")
+      .then((r) => r.json())
+      .then((d) => setCoaExpenseAccounts((d.accounts ?? []).map((a: { code: string; name: string }) => ({ code: a.code, name: a.name }))))
+      .catch(() => {});
+  }, []);
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
@@ -99,6 +107,7 @@ export default function ExpensesPage() {
       expenseDate: e.expenseDate, payee: e.payee,
       paymentMethod: e.paymentMethod,
       description: e.description, notes: e.notes,
+      expenseAccountCode: "",
     });
     setError("");
     setDrawerOpen(true);
@@ -326,6 +335,20 @@ export default function ExpensesPage() {
                   />
                 </Field>
               </div>
+
+              {/* Post to a specific expense ledger account (from the Chart of Accounts) */}
+              <Field label="Expense Account (ledger)">
+                <select
+                  className={cls}
+                  value={form.expenseAccountCode}
+                  onChange={(e) => setForm((f) => ({ ...f, expenseAccountCode: e.target.value }))}
+                >
+                  <option value="">Auto (use default expense account)</option>
+                  {coaExpenseAccounts.map((a) => (
+                    <option key={a.code} value={a.code}>{a.code} — {a.name}</option>
+                  ))}
+                </select>
+              </Field>
 
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Date *">

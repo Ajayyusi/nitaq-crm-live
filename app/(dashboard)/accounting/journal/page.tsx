@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   ChevronDown, ChevronLeft, ChevronUp, Loader2, Paperclip, Pencil,
-  Plus, RefreshCw, Trash2, X,
+  Plus, RefreshCw, Trash2, Upload, X,
 } from "lucide-react";
 import DatePicker from "@/components/shared/DatePicker";
 import { AccountSelect, fmtNum, jvStatusBadge, usePostingAccounts } from "@/components/accounting/shared";
@@ -19,12 +19,13 @@ interface Jv {
   attachmentName: string;
 }
 
-type Mode = "journal" | "receipt" | "invoice";
+type Mode = "journal" | "receipt" | "invoice" | "expense";
 
 const MODE_LABELS: Record<Mode, string> = {
   journal: "Journal Voucher",
   receipt: "Receipt",
   invoice: "Sales Invoice",
+  expense: "Expense",
 };
 
 export default function JournalPage() {
@@ -37,14 +38,26 @@ export default function JournalPage() {
   const currentAssetAccounts = accounts.filter((a) => a.type === "Asset" && a.subCategory === "CURRENT ASSETS");
   const arAccounts = accounts.filter((a) => a.mainAccount === "ACCOUNTS RECEIVABLES");
   const revenueAccounts = accounts.filter((a) => a.type === "Revenue");
+  // Every expense account from the chart of accounts — shown in Expense mode
+  const expenseAccounts = accounts.filter((a) => a.type === "Expense");
 
   const [entries, setEntries] = useState<Jv[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [showReversed, setShowReversed] = useState(false);
+  // Import
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importPost, setImportPost] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("journal");
+  // Debit / credit account lists per simple (non-journal) mode
+  const debitAccounts = mode === "receipt" ? currentAssetAccounts : mode === "invoice" ? arAccounts : expenseAccounts;
+  const creditAccounts = mode === "receipt" ? arAccounts : mode === "invoice" ? revenueAccounts : currentAssetAccounts;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -71,12 +84,50 @@ export default function JournalPage() {
     const params = new URLSearchParams();
     if (statusFilter) params.set("status", statusFilter);
     if (sourceFilter) params.set("sourceType", sourceFilter);
+    if (showReversed) params.set("showReversed", "true");
     fetch(`/api/accounting/journal-entries?${params}`)
       .then((r) => r.json())
       .then((d) => setEntries(d.entries ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [statusFilter, sourceFilter]);
+  }, [statusFilter, sourceFilter, showReversed]);
+
+  const runImport = async () => {
+    setImporting(true); setImportMsg("");
+    try {
+      // Parse pasted CSV (first line = header)
+      const text = importText.trim();
+      if (!text) throw new Error("Paste CSV rows first.");
+      const linesArr = text.split(/\r?\n/).filter((l) => l.trim());
+      const headers = linesArr[0].split(",").map((h) => h.trim());
+      const rows = linesArr.slice(1).map((line) => {
+        // simple CSV split respecting quotes
+        const cells: string[] = [];
+        let cur = "", inQ = false;
+        for (const ch of line) {
+          if (ch === '"') inQ = !inQ;
+          else if (ch === "," && !inQ) { cells.push(cur); cur = ""; }
+          else cur += ch;
+        }
+        cells.push(cur);
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => { row[h] = (cells[i] ?? "").trim(); });
+        return row;
+      });
+      const res = await fetch("/api/accounting/journal-entries/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows, post: importPost }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message);
+      const failed = (d.results ?? []).filter((r: { error?: string }) => r.error);
+      setImportMsg(d.message + (failed.length ? ` Errors: ${failed.map((f: { voucher: string; error: string }) => `${f.voucher} (${f.error})`).join("; ")}` : ""));
+      if (d.created > 0) load();
+    } catch (err) {
+      setImportMsg((err as Error).message);
+    } finally { setImporting(false); }
+  };
 
   useEffect(load, [load]);
 
@@ -227,6 +278,12 @@ export default function JournalPage() {
               <button onClick={() => openNew("invoice")} className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20">
                 <Plus className="h-4 w-4" /> Sales Invoice
               </button>
+              <button onClick={() => openNew("expense")} className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20">
+                <Plus className="h-4 w-4" /> Expense
+              </button>
+              <button onClick={() => { setImportOpen(true); setImportMsg(""); }} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
+                <Upload className="h-4 w-4" /> Import
+              </button>
               <button onClick={() => openNew("journal")} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20]">
                 <Plus className="h-4 w-4" /> New JV
               </button>
@@ -247,6 +304,10 @@ export default function JournalPage() {
           <option value="">All Sources</option>
           {["JV", "Invoice", "Receipt", "Expense", "SupplierBill", "SupplierPayment", "Reversal"].map((s) => <option key={s}>{s}</option>)}
         </select>
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
+          <input type="checkbox" checked={showReversed} onChange={(e) => setShowReversed(e.target.checked)} className="h-3.5 w-3.5 accent-[#2E7D32]" />
+          Show Reversed
+        </label>
       </div>
 
       {/* List */}
@@ -364,6 +425,11 @@ export default function JournalPage() {
                   <strong>Sales Invoice:</strong> revenue recognised — debit the student&apos;s receivable, credit a revenue account.
                 </p>
               )}
+              {mode === "expense" && !editingId && (
+                <p className="rounded-lg bg-[#E8F5E9] px-3 py-2 text-xs text-[#1B5E20] dark:bg-green-900/30 dark:text-green-300">
+                  <strong>Expense:</strong> debit the expense account, credit the cash/bank paid from. All {expenseAccounts.length} expense accounts are available below.
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label-x">Date *</label><DatePicker value={date} onChange={setDate} required /></div>
@@ -374,19 +440,23 @@ export default function JournalPage() {
               {mode !== "journal" ? (
                 <div className="space-y-3">
                   <div>
-                    <label className="label-x">{mode === "receipt" ? "Debit — received into (current assets)" : "Debit — student receivable"} *</label>
+                    <label className="label-x">
+                      {mode === "receipt" ? "Debit — received into (current assets)" : mode === "invoice" ? "Debit — student receivable" : "Debit — expense account"} *
+                    </label>
                     <AccountSelect
                       value={simpleDebit} onChange={setSimpleDebit}
-                      accounts={mode === "receipt" ? currentAssetAccounts : arAccounts}
-                      placeholder={mode === "receipt" ? "Cash / Bank / POS…" : "Student account…"}
+                      accounts={debitAccounts}
+                      placeholder={mode === "receipt" ? "Cash / Bank / POS…" : mode === "invoice" ? "Student account…" : "Expense account…"}
                     />
                   </div>
                   <div>
-                    <label className="label-x">{mode === "receipt" ? "Credit — student receivable" : "Credit — revenue account"} *</label>
+                    <label className="label-x">
+                      {mode === "receipt" ? "Credit — student receivable" : mode === "invoice" ? "Credit — revenue account" : "Credit — paid from (cash/bank)"} *
+                    </label>
                     <AccountSelect
                       value={simpleCredit} onChange={setSimpleCredit}
-                      accounts={mode === "receipt" ? arAccounts : revenueAccounts}
-                      placeholder={mode === "receipt" ? "Student account…" : "Revenue account…"}
+                      accounts={creditAccounts}
+                      placeholder={mode === "receipt" ? "Student account…" : mode === "invoice" ? "Revenue account…" : "Cash / Bank / Petty Cash…"}
                     />
                   </div>
                   <div>
@@ -456,6 +526,44 @@ export default function JournalPage() {
           </aside>
         </div>
       )}
+
+      {/* Import drawer */}
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setImportOpen(false)} />
+          <aside className="relative ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl dark:bg-[#0D1F0E]">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/10">
+              <h2 className="font-bold text-gray-900 dark:text-white">Import Journal Vouchers</h2>
+              <button onClick={() => setImportOpen(false)} className="rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-4 w-4 text-gray-500" /></button>
+            </div>
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              <div className="rounded-lg bg-gray-50 px-3 py-3 text-xs text-gray-600 dark:bg-white/5 dark:text-gray-400">
+                <p className="mb-1 font-semibold">Paste CSV with a header row. Columns:</p>
+                <code className="block whitespace-pre-wrap break-all text-[11px]">Voucher,Date,Description,AccountCode,Debit,Credit</code>
+                <p className="mt-2">Rows with the same <strong>Voucher</strong> value become one entry. Each voucher must balance (debits = credits). Accounts must exist as active posting accounts.</p>
+              </div>
+              {importMsg && <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-300">{importMsg}</p>}
+              <textarea
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                rows={12}
+                placeholder={"Voucher,Date,Description,AccountCode,Debit,Credit\nV1,2026-01-05,Office rent,5010010035,5000,0\nV1,2026-01-05,Office rent,1010200001,0,5000"}
+                className="w-full rounded-lg border border-slate-200 bg-white p-3 font-mono text-xs outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white"
+              />
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={importPost} onChange={(e) => setImportPost(e.target.checked)} className="h-4 w-4 accent-[#2E7D32]" />
+                <span className="text-gray-700 dark:text-gray-300">Post immediately (otherwise saved as Draft)</span>
+              </label>
+            </div>
+            <div className="border-t border-gray-200 p-4 dark:border-white/10">
+              <button onClick={runImport} disabled={importing || !importText.trim()} className="w-full rounded-lg bg-[#2E7D32] py-2.5 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
+                {importing ? "Importing…" : "Import"}
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <style>{`.label-x { display:block; margin-bottom:0.25rem; font-size:0.75rem; font-weight:600; color:#4B5563; }`}</style>
     </div>
   );

@@ -101,7 +101,12 @@ function LedgerInner() {
                 {rows.map((r, i) => (
                   <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/5">
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">{r.date}</td>
-                    <td className="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-[#2E7D32] dark:text-green-400">{r.jvNumber}</td>
+                    <td className="whitespace-nowrap px-3 py-2">
+                      <Link href={`/accounting/voucher/${r.entryId}`}
+                        className="font-mono text-xs font-semibold text-[#2E7D32] hover:underline dark:text-green-400">
+                        {r.jvNumber}
+                      </Link>
+                    </td>
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">{r.sourceType}{r.sourceNumber ? ` · ${r.sourceNumber}` : ""}</td>
                     <td className="max-w-[280px] truncate px-3 py-2 text-gray-700 dark:text-gray-300">{r.description}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtNum(r.debit)}</td>
