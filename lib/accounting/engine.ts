@@ -230,8 +230,12 @@ export interface AccountBalance {
 
 /** Sum posted debits/credits per account, optionally within a date window. */
 export async function aggregateBalances(fromDate?: Date, toDate?: Date): Promise<AccountBalance[]> {
-  const match: Record<string, unknown> = { status: { $in: ["Posted", "Reversed"] } };
-  // "Reversed" originals still count — their reversal entry offsets them.
+  // Use the SAME "active only" filter as getLedger and the receivables/invoice
+  // reports (status Posted, exclude Reversal entries). A reversed original is
+  // excluded (status Reversed) and so is its reversal (sourceType Reversal),
+  // netting to zero — identical to the ledger, so the Trial Balance always
+  // reconciles with every other module by construction.
+  const match: Record<string, unknown> = { status: "Posted", sourceType: { $ne: "Reversal" } };
   if (fromDate || toDate) {
     const d: Record<string, Date> = {};
     if (fromDate) d.$gte = fromDate;

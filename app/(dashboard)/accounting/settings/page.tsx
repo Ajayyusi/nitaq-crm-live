@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, Loader2, Save } from "lucide-react";
 import DatePicker from "@/components/shared/DatePicker";
 import { AccountSelect, usePostingAccounts } from "@/components/accounting/shared";
+import BackButton from "@/components/shared/BackButton";
 
 const MAPPINGS: { key: string; label: string; hint?: string }[] = [
   { key: "defaultCashAccount",   label: "Default Cash Account" },
@@ -64,7 +65,7 @@ export default function AccountingSettingsPage() {
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-3xl">
       <div>
-        <Link href="/accounting" className="mb-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"><ChevronLeft className="h-3 w-3" /> Accounting</Link>
+        <BackButton />
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">Accounting Settings</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">Map CRM operations to Chart of Accounts — nothing is hardcoded</p>
       </div>

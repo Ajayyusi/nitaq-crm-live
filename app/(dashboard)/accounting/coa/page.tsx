@@ -8,6 +8,7 @@ import {
   Minus, Pencil, Plus, RefreshCw, Search, X,
 } from "lucide-react";
 import { fmtNum, type CoaAccount } from "@/components/accounting/shared";
+import BackButton from "@/components/shared/BackButton";
 
 const typeBadge: Record<string, string> = {
   Asset:     "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
@@ -278,7 +279,7 @@ export default function CoaPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/accounting" className="mb-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"><ChevronLeft className="h-3 w-3" /> Accounting</Link>
+          <BackButton />
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Chart of Accounts</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{accounts.filter((a) => a.isPosting).length} posting accounts in {accounts.filter((a) => !a.isPosting).length} groups</p>
         </div>

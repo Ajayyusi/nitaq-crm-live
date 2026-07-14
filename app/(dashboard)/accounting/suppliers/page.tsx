@@ -9,6 +9,7 @@ import {
 import DatePicker from "@/components/shared/DatePicker";
 import { Download } from "lucide-react";
 import { AccountSelect, exportCsv, fmtAED, fmtNum, usePostingAccounts } from "@/components/accounting/shared";
+import BackButton from "@/components/shared/BackButton";
 
 interface Supplier {
   id: string; supplierCode: string; name: string; contactPerson: string; phone: string;
@@ -152,7 +153,7 @@ export default function SuppliersPage() {
     <div className="space-y-5 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/accounting" className="mb-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"><ChevronLeft className="h-3 w-3" /> Accounting</Link>
+          <BackButton />
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Suppliers</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{suppliers.length} suppliers · total payable {fmtAED(suppliers.reduce((s, x) => s + x.balance, 0))}</p>
         </div>
