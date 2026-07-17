@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronLeft, Loader2, Paperclip, Pencil } from "lucide-react";
+import { ChevronLeft, Loader2, Paperclip, Pencil, Printer } from "lucide-react";
 import { fmtNum, jvStatusBadge } from "@/components/accounting/shared";
 import BackButton from "@/components/shared/BackButton";
 
@@ -61,20 +61,23 @@ export default function VoucherPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="space-y-5 p-4 sm:p-6 max-w-3xl">
       <div>
-        <button onClick={goBack} className="mb-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"><ChevronLeft className="h-3 w-3" /> Back</button>
+        <button onClick={goBack} className="no-print mb-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"><ChevronLeft className="h-3 w-3" /> Back</button>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">{v.jvNumber}</h1>
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${jvStatusBadge[v.status] ?? ""}`}>{v.status}</span>
           <span className="flex-1" />
+          <button onClick={() => window.print()} className="no-print inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300">
+            <Printer className="h-3.5 w-3.5" /> Print
+          </button>
           {canEdit && v.status === "Draft" && (
             <Link href={`/accounting/journal?edit=${v.id}`}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#1B5E20]">
+              className="no-print inline-flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#1B5E20]">
               <Pencil className="h-3.5 w-3.5" /> Edit JV
             </Link>
           )}
           {canEdit && v.status === "Posted" && (
             <Link href={`/accounting/journal?correct=${v.id}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300">
+              className="no-print inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300">
               <Pencil className="h-3.5 w-3.5" /> Edit / Correct
             </Link>
           )}

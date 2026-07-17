@@ -62,6 +62,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     for (const f of ["payee", "description", "notes"] as const) {
       if (f in body) update[f] = clean(body[f]) || undefined;
     }
+    // Expense ledger account (Chart of Accounts) — the account the payment posts to
+    if ("expenseAccountCode" in body) update.expenseAccountCode = clean(body.expenseAccountCode) || undefined;
 
     // Books must follow the CRM: reverse the old entry when money facts change
     const existing = await Expense.findById(id).lean();
@@ -70,6 +72,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       ("amount" in update && update.amount !== existing.amount) ||
       ("category" in update && update.category !== existing.category) ||
       ("paymentMethod" in update && update.paymentMethod !== existing.paymentMethod) ||
+      ("expenseAccountCode" in update && update.expenseAccountCode !== existing.expenseAccountCode) ||
       ("expenseDate" in update);
     if (affectsEntry && existing.journalEntryId) {
       await postSafely(() => reverseEntryForSource("Expense", id, authed.name, "Expense edited in CRM"));

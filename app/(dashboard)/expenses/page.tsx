@@ -12,6 +12,7 @@ import { thisMonthRange, describeRange } from "@/lib/dateRange";
 type Expense = {
   id: string; expenseId: string; category: string; amount: number;
   expenseDate: string; payee: string; paymentMethod: string; description: string; notes: string;
+  expenseAccountCode?: string;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -107,7 +108,7 @@ export default function ExpensesPage() {
       expenseDate: e.expenseDate, payee: e.payee,
       paymentMethod: e.paymentMethod,
       description: e.description, notes: e.notes,
-      expenseAccountCode: "",
+      expenseAccountCode: e.expenseAccountCode ?? "",
     });
     setError("");
     setDrawerOpen(true);

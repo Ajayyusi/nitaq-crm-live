@@ -102,3 +102,12 @@ body {
   50% { opacity: 0.5; }
 }
 .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* ── Print: show only the page content (hide sidebar, header, and controls) ── */
+@media print {
+  aside, header, .no-print { display: none !important; }
+  main { padding: 0 !important; }
+  body { background: #fff !important; }
+  .print-area { box-shadow: none !important; border: none !important; }
+  @page { margin: 12mm; }
+}

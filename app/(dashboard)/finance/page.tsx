@@ -3,13 +3,40 @@ import { Suspense } from "react";
 import connectDB from "@/lib/db";
 import { Payment, Expense } from "@/models/Financial";
 import Enrollment from "@/models/Enrollment";
+import ChartOfAccount from "@/models/accounting/ChartOfAccount";
+import JournalEntry from "@/models/accounting/JournalEntry";
+import { buildDateFilter as _bdf } from "@/lib/dateRange";
+
+/**
+ * Recognised (accrual) revenue = net credits to Revenue-type accounts from
+ * ACTIVE posted journal entries. This is the same figure the Trial Balance
+ * and Invoices module show, so Finance reconciles with accounting.
+ */
+async function accrualRevenue(from?: string, to?: string): Promise<number> {
+  const revAccounts = await ChartOfAccount.find({ type: "Revenue" }).select("code").lean();
+  const codes = revAccounts.map((a) => a.code);
+  if (codes.length === 0) return 0;
+  const match: Record<string, unknown> = {
+    status: "Posted", sourceType: { $ne: "Reversal" },
+    "lines.accountCode": { $in: codes },
+  };
+  const df = _bdf(from, to);
+  if (df) match.date = df;
+  const rows = await JournalEntry.aggregate([
+    { $match: match },
+    { $unwind: "$lines" },
+    { $match: { "lines.accountCode": { $in: codes } } },
+    { $group: { _id: null, credit: { $sum: "$lines.credit" }, debit: { $sum: "$lines.debit" } } },
+  ]);
+  return Math.round(((rows[0]?.credit ?? 0) - (rows[0]?.debit ?? 0)) * 100) / 100;
+}
 import { CreditCard, Receipt, TrendingDown, TrendingUp, ArrowRight, BarChart3, AlertTriangle, Users } from "lucide-react";
 import { RevenueExpensesChart, CourseRevenuePieChart } from "@/components/finance/FinanceCharts";
 import UrlDateFilter from "@/components/shared/UrlDateFilter";
 import { buildDateFilter, describeRange } from "@/lib/dateRange";
 
 const fmt = (n: number) =>
-  "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -34,16 +61,8 @@ async function getFinanceData(from: string, to: string) {
       studentsWithBalance,
       overduePayments,
     ] = await Promise.all([
-      Payment.aggregate([
-        {
-          $match: {
-            status: "Received",
-            paymentType: { $ne: "Refund" },
-            ...(dateFilter ? { datePaid: dateFilter } : {}),
-          },
-        },
-        { $group: { _id: null, total: { $sum: "$amount" } } },
-      ]).then((r) => r[0]?.total ?? 0),
+      // Recognised revenue for the period (accrual — matches TB & Invoices)
+      accrualRevenue(from || undefined, to || undefined),
 
       Payment.aggregate([
         { $match: { status: { $in: ["Pending", "Overdue"] } } },
@@ -55,10 +74,8 @@ async function getFinanceData(from: string, to: string) {
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]).then((r) => r[0]?.total ?? 0),
 
-      Payment.aggregate([
-        { $match: { status: "Received", paymentType: { $ne: "Refund" } } },
-        { $group: { _id: null, total: { $sum: "$amount" } } },
-      ]).then((r) => r[0]?.total ?? 0),
+      // All-time recognised revenue (accrual)
+      accrualRevenue(),
 
       Payment.aggregate([
         { $match: { status: "Received", datePaid: { $gte: sixMonthsAgo } } },

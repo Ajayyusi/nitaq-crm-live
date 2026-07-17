@@ -174,6 +174,8 @@ export function serializeExpense(e: any) {
     paymentMethod: e.paymentMethod ?? "",
     description: e.description ?? "",
     notes: e.notes ?? "",
+    expenseAccountCode: e.expenseAccountCode ?? "",
+    journalEntryId: e.journalEntryId?.toString() ?? "",
     createdAt: e.createdAt?.toISOString() ?? "",
   };
 }
