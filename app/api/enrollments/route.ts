@@ -32,7 +32,7 @@ function clean(v: unknown) {
 
 
 export async function GET(request: NextRequest) {
-  const authed = await requireAuth(["admin", "manager", "sales", "finance"]);
+  const authed = await requireAuth(["admin", "manager", "sales", "finance", "trainer"]);
   if (authed instanceof NextResponse) return authed;
 
 
@@ -59,6 +59,15 @@ export async function GET(request: NextRequest) {
     if (search) {
       const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       query.$or = [{ fullName: regex }, { phone: regex }, { enrollmentId: regex }];
+    }
+
+    // Trainers only ever see registrations assigned to them — never the
+    // whole student body (enforced here, not just in the UI).
+    if (authed.role === "trainer") {
+      const { getTeacherForUser } = await import("@/lib/teacher");
+      const teacher = await getTeacherForUser(authed);
+      if (!teacher) return NextResponse.json({ enrollments: [] });
+      query.teacherId = teacher._id;
     }
 
     const enrollments = await Enrollment.find(query).sort({ createdAt: -1 }).lean();

@@ -33,7 +33,7 @@ function clean(v: unknown) {
 }
 
 export async function GET(_req: NextRequest, context: RouteContext) {
-  const authed = await requireAuth(["admin", "manager", "sales", "finance"]);
+  const authed = await requireAuth(["admin", "manager", "sales", "finance", "trainer"]);
   if (authed instanceof NextResponse) return authed;
 
 
@@ -44,6 +44,16 @@ export async function GET(_req: NextRequest, context: RouteContext) {
   await connectDB();
   const enrollment = await Enrollment.findById(id).lean();
   if (!enrollment) return NextResponse.json({ message: "Enrollment not found." }, { status: 404 });
+
+  // A trainer may only open a registration assigned to them
+  if (authed.role === "trainer") {
+    const { getTeacherForUser } = await import("@/lib/teacher");
+    const teacher = await getTeacherForUser(authed);
+    if (!teacher || enrollment.teacherId?.toString() !== teacher._id.toString()) {
+      return NextResponse.json({ message: "This student is not assigned to you." }, { status: 403 });
+    }
+  }
+
   return NextResponse.json({ enrollment: serializeEnrollment(enrollment) });
 }
 

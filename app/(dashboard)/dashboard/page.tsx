@@ -54,7 +54,7 @@ function formatDate(d: Date) {
 }
 
 // ── Data fetcher — only runs queries the role needs ──────────────────────────
-async function getDashboardData(role: string, from: string, to: string, userName = "") {
+async function getDashboardData(role: string, from: string, to: string, userName = "", userEmail = "") {
   try {
     await connectDB();
 
@@ -77,8 +77,17 @@ async function getDashboardData(role: string, from: string, to: string, userName
       ? { $or: [{ assignedTo: new RegExp(`^${userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, { createdBy: new RegExp(`^${userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }] }
       : {};
 
-    // Always fetched (admin/manager/finance — not sales-only)
-    const activeStudents = isSalesOnly ? 0 : await Enrollment.countDocuments({ status: "Active" });
+    // Active students — trainers only ever count THEIR OWN assigned students
+    let activeStudents = 0;
+    if (role === "trainer") {
+      const Teacher = (await import("@/models/Teacher")).default;
+      const teacher = userEmail ? await Teacher.findOne({ email: userEmail.toLowerCase() }).select("_id").lean() : null;
+      activeStudents = teacher
+        ? await Enrollment.countDocuments({ status: "Active", teacherId: teacher._id })
+        : 0;
+    } else if (!isSalesOnly) {
+      activeStudents = await Enrollment.countDocuments({ status: "Active" });
+    }
 
     // Sales / leads data
     let leadTotal = 0, fresh = 0, interested = 0, enrolled = 0, paid = 0, lost = 0;
@@ -247,7 +256,7 @@ export default async function DashboardPage({
   const to   = rawTo   !== undefined ? rawTo   : defaultRange.to;
   const userName = session?.user?.name ?? "";
 
-  const data = await getDashboardData(role, from, to, userName);
+  const data = await getDashboardData(role, from, to, userName, session?.user?.email ?? "");
 
   if (!data) {
     return (

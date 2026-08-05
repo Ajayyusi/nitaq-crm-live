@@ -35,6 +35,14 @@ export async function GET(request: NextRequest) {
       query.sessionDate = dateQ;
     }
 
+    // Trainers only see their OWN sessions — never other teachers' students
+    if (authed.role === "trainer") {
+      const { getTeacherForUser } = await import("@/lib/teacher");
+      const teacher = await getTeacherForUser(authed);
+      if (!teacher) return NextResponse.json({ sessions: [] });
+      query.trainerName = teacher.fullName;
+    }
+
     const sessions = await AttendanceSession.find(query).sort({ sessionDate: -1 }).lean();
     return NextResponse.json({ sessions: sessions.map(serializeSession) });
   } catch (error) {
@@ -56,16 +64,40 @@ export async function POST(request: NextRequest) {
     if (!course) throw new Error("Course is required.");
     if (!body.sessionDate) throw new Error("Session date is required.");
 
-    // If records not provided, auto-populate from enrolled students for this course
+    // Trainers: force the session onto their own name and restrict students
+    // to enrollments assigned to THEM.
+    let trainerScope: { id: unknown; name: string } | null = null;
+    if (authed.role === "trainer") {
+      const { getTeacherForUser } = await import("@/lib/teacher");
+      const teacher = await getTeacherForUser(authed);
+      if (!teacher) {
+        return NextResponse.json({ message: "No teacher profile is linked to your account." }, { status: 403 });
+      }
+      trainerScope = { id: teacher._id, name: teacher.fullName };
+      body.trainerName = teacher.fullName;
+    }
+
+    // If records not provided, auto-populate from enrolled students for this
+    // course (trainers: only THEIR assigned students)
     let records = body.records;
     if (!records || !Array.isArray(records) || records.length === 0) {
-      const enrollments = await Enrollment.find({ course, status: "Active" }).lean();
+      const enrollQuery: Record<string, unknown> = { course, status: "Active" };
+      if (trainerScope) enrollQuery.teacherId = trainerScope.id;
+      const enrollments = await Enrollment.find(enrollQuery).lean();
       records = enrollments.map((e: any) => ({
         enrollmentId: e._id.toString(),
         studentName: e.fullName,
         status: "Present",
         notes: "",
       }));
+    } else if (trainerScope) {
+      // Trainer supplied explicit records — drop any student not assigned to them
+      const mine = await Enrollment.find({ teacherId: trainerScope.id }).select("_id").lean();
+      const mineIds = new Set(mine.map((e) => e._id.toString()));
+      records = (records as { enrollmentId?: string }[]).filter((r) => r.enrollmentId && mineIds.has(String(r.enrollmentId)));
+      if (records.length === 0) {
+        return NextResponse.json({ message: "None of these students are assigned to you." }, { status: 403 });
+      }
     }
 
     // Validate records
