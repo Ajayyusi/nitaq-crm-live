@@ -27,13 +27,37 @@ export const authConfig = {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role;
+        // Set only by the impersonation provider — keeps the real operator
+        // attached to the session so actions stay attributable.
+        const imp = user as {
+          impersonatedBy?: string; impersonatorEmail?: string; impersonatorId?: string;
+        };
+        if (imp.impersonatedBy) {
+          token.impersonatedBy = imp.impersonatedBy;
+          token.impersonatorEmail = imp.impersonatorEmail;
+          token.impersonatorId = imp.impersonatorId;
+        } else {
+          // A fresh normal sign-in must never inherit impersonation marks.
+          delete token.impersonatedBy;
+          delete token.impersonatorEmail;
+          delete token.impersonatorId;
+        }
       }
       return token;
     },
     session({ session, token }) {
       if (session.user) {
-        (session.user as { id?: string; role?: string }).id = token.id as string;
-        (session.user as { id?: string; role?: string }).role = token.role as string;
+        const u = session.user as {
+          id?: string; role?: string;
+          impersonatedBy?: string; impersonatorEmail?: string; impersonatorId?: string;
+        };
+        u.id = token.id as string;
+        u.role = token.role as string;
+        if (token.impersonatedBy) {
+          u.impersonatedBy = token.impersonatedBy as string;
+          u.impersonatorEmail = token.impersonatorEmail as string;
+          u.impersonatorId = token.impersonatorId as string;
+        }
       }
       return session;
     },

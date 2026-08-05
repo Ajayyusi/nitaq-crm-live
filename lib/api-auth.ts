@@ -73,10 +73,15 @@ export async function requireAuth(
     }
   }
 
+  // When an admin is impersonating, actions are attributed to the account
+  // being used AND the real operator, so the audit trail is never misleading.
+  const impersonatedBy = (session.user as { impersonatedBy?: string }).impersonatedBy;
+  const baseName = session.user.name ?? "";
+
   return {
     id: userId,
     role: role ?? ("sales" as AppRole),
-    name: session.user.name ?? "",
+    name: impersonatedBy ? `${baseName} (via ${impersonatedBy})` : baseName,
     email: session.user.email ?? "",
   };
 }

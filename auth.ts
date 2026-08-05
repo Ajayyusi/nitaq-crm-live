@@ -100,6 +100,66 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       },
     }),
+
+    /**
+     * Admin impersonation ("open as user"). Never accepts a password — only a
+     * single-use ticket minted by /api/admin/impersonate, which itself
+     * requires an admin session. The ticket is consumed here, and the
+     * resulting session records who is really driving it so every action
+     * stays attributable.
+     */
+    Credentials({
+      id: "impersonate",
+      name: "Impersonate",
+      credentials: { token: { label: "Token", type: "text" } },
+      async authorize(credentials) {
+        const raw = String(credentials?.token ?? "").trim();
+        if (!raw) throw new InvalidLogin("Missing impersonation token.");
+        try {
+          await connectDB();
+        } catch {
+          throw new DBConnectionError("Cannot reach database.");
+        }
+
+        const { default: ImpersonationToken } = await import("@/models/ImpersonationToken");
+        // Atomically consume: a token can only ever be redeemed once
+        const ticket = await ImpersonationToken.findOneAndUpdate(
+          { token: raw, usedAt: { $exists: false }, expiresAt: { $gt: new Date() } },
+          { $set: { usedAt: new Date() } },
+          { new: true }
+        );
+        if (!ticket) throw new InvalidLogin("This impersonation link is invalid, already used, or expired.");
+
+        const target = await User.findById(ticket.targetUserId).lean();
+        if (!target || !target.active) throw new InvalidLogin("That account is unavailable.");
+        // Defence in depth: never allow impersonating an admin. The one
+        // exception is a return ticket, which only ever hands an admin back
+        // the account they were already signed in as.
+        if (target.role === "admin" && !ticket.isReturn) {
+          throw new InvalidLogin("Administrator accounts cannot be impersonated.");
+        }
+
+        // A return ticket restores a normal session — no impersonation marks.
+        if (ticket.isReturn) {
+          return {
+            id:    target._id.toString(),
+            name:  target.name,
+            email: target.email,
+            role:  target.role,
+          };
+        }
+
+        return {
+          id:    target._id.toString(),
+          name:  target.name,
+          email: target.email,
+          role:  target.role,
+          impersonatedBy: ticket.createdByName,
+          impersonatorEmail: ticket.createdByEmail,
+          impersonatorId: ticket.createdById.toString(),
+        } as never;
+      },
+    }),
   ],
   session: {
     strategy: "jwt",

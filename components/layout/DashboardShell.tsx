@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import ImpersonationBanner from "./ImpersonationBanner";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -21,6 +22,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="min-h-screen lg:pl-[260px]">
+        <ImpersonationBanner />
         <Header onMenuOpen={() => setSidebarOpen(true)} />
         <main className="mx-auto w-full max-w-[1680px] px-4 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 2xl:px-10">
           {children}

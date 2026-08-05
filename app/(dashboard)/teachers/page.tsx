@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import {
-  AlertTriangle, Edit3, Loader2, MessageCircle, Plus, Search, Trash2, UserCheck, X,
+  AlertTriangle, Edit3, Loader2, LogIn, MessageCircle, Plus, Search, Trash2, UserCheck, X,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { trainerStatuses, tamamStatuses, contractStatuses, trainerPaymentTypes as paymentTypes } from "@/constants/modelConstants";
 import DatePicker from "@/components/shared/DatePicker";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
@@ -38,6 +39,9 @@ function getErr(v: unknown, fb: string) {
 const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]";
 
 export default function TrainersPage() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as { role?: string })?.role === "admin";
+  const [openingAs, setOpeningAs] = useState("");
   const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -107,6 +111,25 @@ export default function TrainersPage() {
       await fetch(`/api/teachers/${t.id}`, { method: "DELETE" });
       setNotice("Trainer deleted."); await load();
     } catch { setError("Failed to delete."); }
+  }
+
+  /** Admin: open the CRM in a new tab as this trainer (audited, single-use link). */
+  async function openAsTrainer(t: Trainer) {
+    setOpeningAs(t.id);
+    try {
+      const res = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacherId: t.id }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message);
+      window.open(d.url, "_blank", "noopener");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setOpeningAs("");
+    }
   }
 
   const alerts = trainers.filter((t) => t.tamamAlert || t.contractAlert || t.contractExpiring);
@@ -249,6 +272,18 @@ export default function TrainersPage() {
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <a href={(buildWhatsAppUrl(t.phone) ?? "#")} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-green-200 bg-[#E8F5E9] text-[#2E7D32] hover:bg-green-100"><MessageCircle className="h-4 w-4" /></a>
+                    {isAdmin && (
+                      <button
+                        onClick={() => void openAsTrainer(t)}
+                        disabled={openingAs === t.id}
+                        title={`Open the CRM as ${t.fullName} in a new tab`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 disabled:opacity-50"
+                      >
+                        {openingAs === t.id
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <LogIn className="h-4 w-4" />}
+                      </button>
+                    )}
                     <button onClick={() => openEdit(t)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"><Edit3 className="h-4 w-4" /></button>
                     <button onClick={() => void deleteTrainer(t)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>
                   </div>
