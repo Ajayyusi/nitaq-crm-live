@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Menu, KeyRound, X, Loader2, ShieldCheck, User } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { NotificationPanel } from "./NotificationPanel";
+import GlobalSearch from "./GlobalSearch";
 import { useSession } from "next-auth/react";
 
 function TwoFactorModal({ onClose }: { onClose: () => void }) {
@@ -262,6 +263,7 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
           <span className="hidden rounded-full border border-green-200 bg-[#E8F5E9] px-3 py-1 text-xs font-semibold text-[#2E7D32] lg:inline-flex dark:border-green-900 dark:bg-[#0c1a0d] dark:text-[#4CAF50]">
             Sharjah
           </span>
+          <GlobalSearch />
           <ThemeToggle />
           <NotificationPanel />
 

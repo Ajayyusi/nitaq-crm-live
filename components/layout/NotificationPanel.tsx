@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, BellOff, Calendar, CheckCircle, CreditCard, X } from "lucide-react";
+import { Bell, BellOff, Calendar, CheckCircle, CreditCard, Sparkles, X } from "lucide-react";
 
 type FollowUpItem = {
   id: string;
@@ -18,10 +18,31 @@ type PaymentItem = {
   dueDate: string;
 };
 
+/** System alert raised by the app (teacher assigned, low hours, record edited…). */
+type SystemItem = {
+  id: string;
+  title: string;
+  body: string;
+  link: string;
+  read: boolean;
+  createdAt: string;
+};
+
 type Data = {
   followUps: FollowUpItem[];
   payments: PaymentItem[];
+  system: SystemItem[];
 };
+
+function timeAgo(iso: string) {
+  if (!iso) return "";
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 const POLL_MS = 5 * 60 * 1000; // 5 minutes
 const MUTE_KEY = "nitaq_notifications_muted";
@@ -48,7 +69,7 @@ function sendBrowserNotification(title: string, body: string) {
 
 export function NotificationPanel() {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<Data>({ followUps: [], payments: [] });
+  const [data, setData] = useState<Data>({ followUps: [], payments: [], system: [] });
   const [loading, setLoading] = useState(false);
   const [muted, setMuted] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -60,9 +81,12 @@ export function NotificationPanel() {
   async function load(notify = false) {
     setLoading(true);
     try {
-      const [fuRes, payRes] = await Promise.all([
-        fetch("/api/follow-ups?view=today&status=Pending").then((r) => r.json()),
-        fetch("/api/payments?status=Overdue").then((r) => r.json()),
+      // Follow-ups / payments are sales+finance only; system alerts are for
+      // every role. Any that the role can't read just come back empty.
+      const [fuRes, payRes, sysRes] = await Promise.all([
+        fetch("/api/follow-ups?view=today&status=Pending").then((r) => r.json()).catch(() => ({})),
+        fetch("/api/payments?status=Overdue").then((r) => r.json()).catch(() => ({})),
+        fetch("/api/notifications").then((r) => r.json()).catch(() => ({})),
       ]);
       const followUps: FollowUpItem[] = (fuRes.followUps ?? []).map((f: Record<string, unknown>) => ({
         id: f.id,
@@ -76,12 +100,18 @@ export function NotificationPanel() {
         amount: p.amount,
         dueDate: p.dueDate,
       }));
-      setData({ followUps, payments });
+      const system: SystemItem[] = (sysRes.notifications ?? []).map((n: Record<string, unknown>) => ({
+        id: n.id, title: n.title, body: n.body, link: n.link,
+        read: n.read, createdAt: n.createdAt,
+      }));
+      setData({ followUps, payments, system });
 
       // Browser notification when new items appear
-      const total = followUps.length + payments.length;
+      const unreadSystem = system.filter((s) => !s.read).length;
+      const total = followUps.length + payments.length + unreadSystem;
       if (notify && !muted && total > prevCountRef.current && total > 0) {
         const parts: string[] = [];
+        if (unreadSystem > 0) parts.push(`${unreadSystem} new alert${unreadSystem > 1 ? "s" : ""}`);
         if (followUps.length > 0) parts.push(`${followUps.length} follow-up${followUps.length > 1 ? "s" : ""} due today`);
         if (payments.length > 0) parts.push(`${payments.length} overdue payment${payments.length > 1 ? "s" : ""}`);
         sendBrowserNotification("Nitaq CRM Reminder", parts.join(" · "));
@@ -137,7 +167,23 @@ export function NotificationPanel() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const total = data.followUps.length + data.payments.length;
+  const unreadSystem = data.system.filter((s) => !s.read).length;
+  const total = data.followUps.length + data.payments.length + unreadSystem;
+
+  /** Mark system alerts read (one, or all). */
+  async function markRead(ids?: string[]) {
+    setData((d) => ({
+      ...d,
+      system: d.system.map((s) => (!ids || ids.includes(s.id) ? { ...s, read: true } : s)),
+    }));
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ids ? { ids } : { all: true }),
+      });
+    } catch { /* optimistic — ignore */ }
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -210,6 +256,46 @@ export function NotificationPanel() {
               </div>
             ) : (
               <>
+                {data.system.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between px-4 pb-1 pt-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Alerts</p>
+                      {unreadSystem > 0 && (
+                        <button onClick={() => markRead()} className="text-[10px] font-bold text-[#2E7D32] hover:underline">
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    {data.system.slice(0, 8).map((n) => {
+                      const Row = (
+                        <>
+                          <div className={`mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-full ${n.read ? "bg-slate-100 text-slate-400 dark:bg-slate-800" : "bg-[#E8F5E9] text-[#2E7D32] dark:bg-green-900/30 dark:text-green-400"}`}>
+                            <Sparkles className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={`truncate text-sm ${n.read ? "font-medium text-slate-500 dark:text-slate-400" : "font-semibold text-[#0D1F0E] dark:text-[#e8f5e9]"}`}>
+                              {n.title}
+                            </p>
+                            {n.body && <p className="truncate text-xs text-slate-500 dark:text-slate-400">{n.body}</p>}
+                            <p className="text-[10px] text-slate-400">{timeAgo(n.createdAt)}</p>
+                          </div>
+                          {!n.read && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-[#2E7D32]" />}
+                        </>
+                      );
+                      const cls = "flex w-full items-start gap-3 px-4 py-2.5 text-left transition hover:bg-[#E8F5E9]/60 dark:hover:bg-[#1a2e1b]";
+                      return n.link ? (
+                        <Link key={n.id} href={n.link} onClick={() => { markRead([n.id]); setOpen(false); }} className={cls}>
+                          {Row}
+                        </Link>
+                      ) : (
+                        <button key={n.id} onClick={() => markRead([n.id])} className={cls}>
+                          {Row}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {data.followUps.length > 0 && (
                   <div>
                     <p className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">

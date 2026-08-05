@@ -12,6 +12,7 @@ import {
   BookOpen,
   Calculator,
   CalendarDays,
+  Coins,
   ClipboardCheck,
   ClipboardList,
   GraduationCap,
@@ -57,6 +58,7 @@ const navGroups = [
     items: [
       { label: "Finance",     href: "/finance",      icon: WalletCards },
       { label: "Payments",    href: "/expenses",     icon: ReceiptText },
+      { label: "Collections", href: "/collections",  icon: Coins },
       { label: "Reports",     href: "/reports",      icon: BarChart3 },
       { label: "Accounting",  href: "/accounting",           icon: Calculator },
       { label: "Receipts",    href: "/accounting/receipts",  icon: WalletCards },
