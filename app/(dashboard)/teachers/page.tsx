@@ -28,8 +28,18 @@ const emptyForm: FormState = {
   fullName: "", fullNameAr: "", phone: "", email: "", emiratesId: "",
   nationality: "", specialisation: "", qualifications: "", tamamStatus: "Not Registered",
   tamamNumber: "", contractStatus: "No Contract", contractStartDate: "", contractEndDate: "",
-  paymentRate: "", paymentType: "Per Session", status: "Active", notes: "",
+  paymentRate: "", paymentType: "Per Hour", status: "Active", notes: "",
 };
+
+/**
+ * Older trainers were saved as "Per Session", which is no longer offered in
+ * the dropdown. Show it as the "Per Class" it has always behaved as, so the
+ * select never renders with nothing selected and silently saves the legacy
+ * value back — that made hourly rates pay out as a single class.
+ */
+function uiPaymentType(v: string) {
+  return v === "Per Session" ? "Per Class" : v;
+}
 
 function getErr(v: unknown, fb: string) {
   if (v && typeof v === "object" && "message" in v && typeof v.message === "string") return v.message;
@@ -82,7 +92,7 @@ export default function TrainersPage() {
       qualifications: t.qualifications, tamamStatus: t.tamamStatus, tamamNumber: t.tamamNumber,
       contractStatus: t.contractStatus, contractStartDate: t.contractStartDate,
       contractEndDate: t.contractEndDate, paymentRate: t.paymentRate?.toString() ?? "",
-      paymentType: t.paymentType, status: t.status, notes: t.notes,
+      paymentType: uiPaymentType(t.paymentType), status: t.status, notes: t.notes,
     });
     setFormError(""); setDrawerOpen(true);
   }
@@ -267,7 +277,7 @@ export default function TrainersPage() {
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
                       <span>{t.phone}</span>
                       {t.specialisation && <><span>·</span><span>{t.specialisation}</span></>}
-                      {t.paymentRate && <><span>·</span><span>AED {t.paymentRate} / {t.paymentType}</span></>}
+                      {t.paymentRate && <><span>·</span><span>AED {t.paymentRate} / {uiPaymentType(t.paymentType)}</span></>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">

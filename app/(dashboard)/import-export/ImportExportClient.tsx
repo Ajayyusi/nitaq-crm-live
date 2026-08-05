@@ -63,7 +63,7 @@ const TEMPLATES: Record<string, { fields: string[]; example: Record<string, stri
       specialisation: "Digital Marketing", qualifications: "MBA, Google Certified",
       tamamStatus: "Registered", tamamNumber: "TAM-12345",
       contractStatus: "Active", contractStartDate: "2026-01-01", contractEndDate: "2026-12-31",
-      paymentRate: "150", paymentType: "Per Session", status: "Active", notes: "",
+      paymentRate: "150", paymentType: "Per Hour", status: "Active", notes: "",
     },
   },
   payments: {

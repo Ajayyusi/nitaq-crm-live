@@ -63,7 +63,7 @@ const TeacherSchema = new Schema<ITeacher>(
     paymentType: {
       type: String,
       enum: [...paymentTypes],
-      default: "Per Session",
+      default: "Per Hour",
     },
     status: { type: String, enum: [...trainerStatuses], default: "Active" },
     notes: { type: String, trim: true, maxlength: 2000 },

@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       paymentRate: body.paymentRate ? Number(body.paymentRate) : undefined,
       paymentType: paymentTypes.includes(clean(body.paymentType) as any)
         ? clean(body.paymentType)
-        : "Per Session",
+        : "Per Hour",
       status: allowedStatuses.has(clean(body.status)) ? clean(body.status) : "Active",
       notes: clean(body.notes) || undefined,
     });

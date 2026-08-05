@@ -202,7 +202,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       if (duplicate) { errors.push({ row: rowNum, error: `Duplicate: a teacher with phone ${phone} already exists` }); continue; }
       const tamamStatus = (tamamStatuses as readonly string[]).includes(r.tamamStatus) ? r.tamamStatus : "Not Registered";
       const contractStatus = (contractStatuses as readonly string[]).includes(r.contractStatus) ? r.contractStatus : "No Contract";
-      const paymentType = (trainerPaymentTypes as readonly string[]).includes(r.paymentType) ? r.paymentType : "Per Session";
+      const paymentType = (trainerPaymentTypes as readonly string[]).includes(r.paymentType) ? r.paymentType : "Per Hour";
       const status = (trainerStatuses as readonly string[]).includes(r.status) ? r.status : "Active";
       try {
         await Teacher.create({

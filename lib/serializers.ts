@@ -104,7 +104,7 @@ export function serializeTrainer(t: any) {
     contractStartDate: t.contractStartDate ? t.contractStartDate.toISOString().slice(0, 10) : "",
     contractEndDate: contractEndDate ? contractEndDate.toISOString().slice(0, 10) : "",
     paymentRate: t.paymentRate ?? null,
-    paymentType: t.paymentType ?? "Per Session",
+    paymentType: t.paymentType ?? "Per Hour",
     notes: t.notes ?? "",
     contractExpiring: contractExpiring ?? false,
     tamamAlert: t.tamamStatus === "Pending",
