@@ -34,6 +34,7 @@ export const PAGE_PERMISSIONS: { path: string; roles: AppRole[] }[] = [
   // ── Academy Ops ────────────────────────────────────────────────────────
   { path: "/courses",   roles: ["admin", "manager", "sales", "trainer", "assessor", "iqa", "eqa"] },
   { path: "/classes",   roles: ["admin", "manager", "trainer"] },
+  { path: "/my-students", roles: ["admin", "manager", "trainer"] },
   { path: "/teachers",  roles: ["admin", "manager"] },
 
   // ── Centre Management System (new) ────────────────────────────────────
@@ -85,6 +86,7 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   "/enrollments":          ["admin", "manager", "finance"],
   "/enrollment-requests":  ["admin", "manager", "sales"],
   "/classes":              ["admin", "manager", "trainer"],
+  "/my-students":          ["admin", "manager", "trainer"],
   "/finance":              ["admin", "manager", "finance"],
   "/expenses":             ["admin", "manager", "finance"],
   "/reports":              ["admin", "manager", "finance"],
@@ -133,6 +135,8 @@ export const API_PERMISSIONS: Record<string, { read: AppRole[]; write: AppRole[]
   "staff-compliance":   { read: ["admin", "manager", "iqa", "eqa"],       write: ["admin", "manager"] },
   "document-control":   { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: ["admin", "manager", "iqa"] },
   compliance:           { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: [] },
+  "class-sessions":     { read: ["admin", "manager", "trainer"],   write: ["admin", "manager", "trainer"] },
+  "hour-adjustments":   { read: ["admin", "manager"],               write: ["admin", "manager"] },
   // Accounting: admin + accountant post; manager is read-only
   accounting:           { read: ["admin", "accountant", "manager"],  write: ["admin", "accountant"] },
 };

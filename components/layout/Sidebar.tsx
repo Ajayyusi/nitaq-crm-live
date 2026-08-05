@@ -49,6 +49,7 @@ const navGroups = [
       { label: "Trainers",    href: "/teachers",     icon: UserCheck },
       { label: "Enrollments", href: "/enrollments",  icon: ClipboardList },
       { label: "Classes",     href: "/classes",      icon: CalendarDays },
+      { label: "My Students", href: "/my-students",  icon: GraduationCap },
     ],
   },
   {

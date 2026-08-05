@@ -95,6 +95,56 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (f in body) update[f] = Number(body[f]) || 0;
     }
 
+    // ── Teacher assignment & hour tracking (admin/manager) ──
+    if ("expectedCompletionDate" in body) {
+      update.expectedCompletionDate = body.expectedCompletionDate ? new Date(body.expectedCompletionDate) : undefined;
+    }
+    if ("totalRegisteredHours" in body) {
+      const h = Number(body.totalRegisteredHours);
+      if (body.totalRegisteredHours !== "" && (isNaN(h) || h < 0)) throw new Error("Registered hours must be zero or more.");
+      update.totalRegisteredHours = body.totalRegisteredHours === "" ? undefined : Math.round(h * 100) / 100;
+    }
+    // Completing a registration with hours remaining requires an explicit admin override
+    {
+      const finalStatus = (update.status as string | undefined) ?? existing.status;
+      const finalTotal = ("totalRegisteredHours" in update ? (update.totalRegisteredHours as number) : existing.totalRegisteredHours) ?? 0;
+      const done = existing.completedHours ?? 0;
+      if (finalStatus === "Completed" && existing.status !== "Completed" && finalTotal > done && body.overrideCompletion !== true) {
+        throw new Error(`Cannot mark Completed: ${Math.round((finalTotal - done) * 100) / 100}h still remain. Use the admin override (with reason) to force completion.`);
+      }
+    }
+    if ("teacherId" in body) {
+      const tid = String(body.teacherId ?? "");
+      if (tid && !mongoose.Types.ObjectId.isValid(tid)) throw new Error("Invalid teacher.");
+      const { default: Teacher } = await import("@/models/Teacher");
+      const newTeacher = tid ? await Teacher.findById(tid).lean() : null;
+      if (tid && !newTeacher) throw new Error("Teacher not found.");
+      update.teacherId = tid || undefined;
+      update.teacherName = newTeacher?.fullName ?? undefined;
+      const oldTid = existing.teacherId?.toString() ?? "";
+      if (tid !== oldTid) {
+        const { notify } = await import("@/lib/notify");
+        if (newTeacher?.email) {
+          notify({
+            userEmail: newTeacher.email,
+            title: `New student assigned: ${existing.fullName}`,
+            body: `${existing.course} — assigned to you by ${authed.name}.`,
+            link: "/my-students",
+          });
+        }
+        if (oldTid) {
+          const oldTeacher = await Teacher.findById(oldTid).lean();
+          if (oldTeacher?.email) {
+            notify({
+              userEmail: oldTeacher.email,
+              title: `Student reassigned: ${existing.fullName}`,
+              body: `${existing.course} is no longer assigned to you.`,
+            });
+          }
+        }
+      }
+    }
+
     const enrollment = await Enrollment.findByIdAndUpdate(id, update, { new: true, runValidators: true });
     if (!enrollment) return NextResponse.json({ message: "Enrollment not found." }, { status: 404 });
 

@@ -61,6 +61,9 @@ export function serializeCourse(c: any) {
     maxStudentsPerBatch: c.maxStudentsPerBatch ?? null,
     status: c.status ?? "Active",
     speaActivity: c.speaActivity ?? "",
+    deliveryMethod: c.deliveryMethod ?? "",
+    assignedTeacherIds: (c.assignedTeacherIds ?? []).map((id: any) => id.toString()),
+    assignedTeacherNames: c.assignedTeacherNames ?? [],
     batches: (c.batches ?? []).map((b: any) => ({
       id: b._id?.toString() ?? "",
       batchId: b.batchId ?? "",
@@ -113,7 +116,26 @@ export function serializeTrainer(t: any) {
 
 export function serializeEnrollment(e: any) {
   const balance = Math.max(0, (e.totalFee ?? 0) - (e.amountPaid ?? 0));
+  const totalHours = e.totalRegisteredHours ?? 0;
+  const completedHours = e.completedHours ?? 0;
+  const remainingHours = Math.max(0, Math.round((totalHours - completedHours) * 100) / 100);
+  // Registration completeness (per upgrade spec §16)
+  const missingFields: string[] = [];
+  if (!e.teacherId) missingFields.push("Assigned Teacher");
+  if (!totalHours) missingFields.push("Registered Hours");
+  if (!e.startDate) missingFields.push("Start Date");
+  if (!e.expectedCompletionDate) missingFields.push("Expected Completion Date");
+  if (!e.status) missingFields.push("Registration Status");
+  if (!e.paymentStatus) missingFields.push("Payment Status");
   return {
+    teacherId: e.teacherId?.toString() ?? "",
+    teacherName: e.teacherName ?? "",
+    totalRegisteredHours: totalHours,
+    completedHours,
+    remainingHours,
+    expectedCompletionDate: e.expectedCompletionDate ? e.expectedCompletionDate.toISOString().slice(0, 10) : "",
+    missingFields,
+    registrationComplete: missingFields.length === 0,
     id: e._id.toString(),
     enrollmentId: e.enrollmentId ?? "",
     leadId: e.leadId?.toString() ?? null,
@@ -200,6 +222,29 @@ export function serializeSession(s: any) {
     presentCount,
     totalCount: records.length,
     attendancePct: records.length > 0 ? Math.round((presentCount / records.length) * 100) : 0,
+    createdAt: s.createdAt?.toISOString() ?? "",
+  };
+}
+
+export function serializeClassSession(s: any) {
+  return {
+    id: s._id.toString(),
+    enrollmentId: s.enrollmentId?.toString() ?? "",
+    studentName: s.studentName ?? "",
+    course: s.course ?? "",
+    teacherId: s.teacherId?.toString() ?? "",
+    teacherName: s.teacherName ?? "",
+    classDate: s.classDate ? s.classDate.toISOString().slice(0, 10) : "",
+    startTime: s.startTime ?? "",
+    endTime: s.endTime ?? "",
+    deliveredHours: s.deliveredHours ?? 0,
+    attendanceStatus: s.attendanceStatus ?? "Present",
+    classStatus: s.classStatus ?? "Completed",
+    isChargeable: s.isChargeable ?? false,
+    lessonTopic: s.lessonTopic ?? "",
+    notes: s.notes ?? "",
+    homework: s.homework ?? "",
+    recordedBy: s.recordedBy ?? "",
     createdAt: s.createdAt?.toISOString() ?? "",
   };
 }

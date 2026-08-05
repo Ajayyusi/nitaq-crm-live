@@ -16,6 +16,10 @@ type Enrollment = {
   course: string; batchName: string; startDate: string; endDate: string; schedule: string;
   format: string; status: string; paymentStatus: string; totalFee: number; amountPaid: number;
   balanceDue: number; notes: string; registrationDate: string;
+  teacherId: string; teacherName: string;
+  totalRegisteredHours: number; completedHours: number; remainingHours: number;
+  expectedCompletionDate: string;
+  registrationComplete: boolean; missingFields: string[];
 };
 
 type FormState = {
@@ -23,13 +27,17 @@ type FormState = {
   course: string; batchName: string; startDate: string; endDate: string; schedule: string;
   format: string; status: string; paymentStatus: string; totalFee: string; amountPaid: string;
   paymentMethod: string; notes: string;
+  teacherId: string; totalRegisteredHours: string; expectedCompletionDate: string;
 };
+
+type TeacherOption = { id: string; fullName: string };
 
 const emptyForm: FormState = {
   fullName: "", phone: "", email: "", emiratesId: "", nationality: "",
   course: "Other", batchName: "", startDate: "", endDate: "", schedule: "",
   format: "In-Person", status: "Active", paymentStatus: "Instalment 1 Paid",
   totalFee: "", amountPaid: "", paymentMethod: "Cash", notes: "",
+  teacherId: "", totalRegisteredHours: "", expectedCompletionDate: "",
 };
 
 function getErr(v: unknown, fb: string) {
@@ -60,6 +68,7 @@ const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-s
 
 export default function EnrollmentsPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -96,6 +105,8 @@ export default function EnrollmentsPage() {
             status: e.status, paymentStatus: e.paymentStatus,
             totalFee: String(e.totalFee), amountPaid: String(e.amountPaid),
             paymentMethod: "Cash", notes: e.notes ?? "",
+            teacherId: e.teacherId ?? "", totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
+            expectedCompletionDate: e.expectedCompletionDate ?? "",
           });
           setFormError("");
           setDrawerOpen(true);
@@ -131,6 +142,13 @@ export default function EnrollmentsPage() {
 
   useEffect(() => { void load(); }, [search, statusFilter, payFilter, dateFrom, dateTo]);
 
+  useEffect(() => {
+    fetch("/api/teachers")
+      .then((r) => r.json())
+      .then((d) => setTeachers((d.trainers ?? []).map((t: { id: string; fullName: string }) => ({ id: t.id, fullName: t.fullName }))))
+      .catch(() => {});
+  }, []);
+
   function set(field: keyof FormState, value: string) { setForm((f) => ({ ...f, [field]: value })); }
 
   function openCreate() { setEditingEnrollment(null); setForm(emptyForm); setFormError(""); setDrawerOpen(true); }
@@ -141,6 +159,8 @@ export default function EnrollmentsPage() {
       course: e.course, batchName: e.batchName, startDate: e.startDate, endDate: e.endDate,
       schedule: e.schedule, format: e.format, status: e.status, paymentStatus: e.paymentStatus,
       totalFee: e.totalFee.toString(), amountPaid: e.amountPaid.toString(), paymentMethod: "Cash", notes: e.notes,
+      teacherId: e.teacherId ?? "", totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
+      expectedCompletionDate: e.expectedCompletionDate ?? "",
     });
     setFormError(""); setDrawerOpen(true);
   }
@@ -192,6 +212,33 @@ export default function EnrollmentsPage() {
             <form onSubmit={save} className="flex flex-1 flex-col min-h-0">
               <div className="flex-1 overflow-y-auto space-y-4 p-6">
                 {formError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{formError}</div>}
+                {/* Registration completion checklist */}
+                {(() => {
+                  const checks: [string, boolean][] = [
+                    ["Student Information", !!form.fullName && !!form.phone],
+                    ["Course Selected", !!form.course],
+                    ["Teacher Assigned", !!form.teacherId],
+                    ["Total Registered Hours", !!form.totalRegisteredHours],
+                    ["Start Date", !!form.startDate],
+                    ["Expected Completion Date", !!form.expectedCompletionDate],
+                    ["Payment Information", !!form.paymentStatus],
+                  ];
+                  const missing = checks.filter(([, ok]) => !ok).length;
+                  return (
+                    <div className={`rounded-xl border px-4 py-3 ${missing ? "border-rose-200 bg-rose-50" : "border-green-200 bg-[#E8F5E9]"}`}>
+                      <p className={`mb-1.5 text-xs font-bold ${missing ? "text-rose-700" : "text-[#2E7D32]"}`}>
+                        {missing ? `Incomplete registration — ${missing} item${missing > 1 ? "s" : ""} missing` : "Registration complete ✓"}
+                      </p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        {checks.map(([label, ok]) => (
+                          <span key={label} className={`text-xs font-medium ${ok ? "text-emerald-700" : "text-rose-600"}`}>
+                            {ok ? "✅" : "❌"} {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Student Details</p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Full name *</label><input required value={form.fullName} onChange={(e) => set("fullName", e.target.value)} className={inp} /></div>
@@ -210,6 +257,21 @@ export default function EnrollmentsPage() {
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Batch</label><input value={form.batchName} onChange={(e) => set("batchName", e.target.value)} className={inp} placeholder="AI-Batch-1" /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Start date</label><DatePicker value={form.startDate} onChange={(v) => set("startDate", v)} max={form.endDate || undefined} /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">End date</label><DatePicker value={form.endDate} onChange={(v) => set("endDate", v)} min={form.startDate || undefined} /></div>
+                  <div className={!form.teacherId ? "rounded-lg ring-2 ring-rose-300 p-1 -m-1" : ""}>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Assigned Teacher {!form.teacherId && <span className="text-rose-500 text-xs">(required)</span>}</label>
+                    <select value={form.teacherId} onChange={(e) => set("teacherId", e.target.value)} className={inp}>
+                      <option value="">— No teacher assigned —</option>
+                      {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                    </select>
+                  </div>
+                  <div className={!form.totalRegisteredHours ? "rounded-lg ring-2 ring-rose-300 p-1 -m-1" : ""}>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Registered Hours {!form.totalRegisteredHours && <span className="text-rose-500 text-xs">(required)</span>}</label>
+                    <input type="number" min="0" step="0.5" value={form.totalRegisteredHours} onChange={(e) => set("totalRegisteredHours", e.target.value)} className={inp} placeholder="e.g. 40" />
+                  </div>
+                  <div className={!form.expectedCompletionDate ? "rounded-lg ring-2 ring-rose-300 p-1 -m-1" : ""}>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Expected Completion {!form.expectedCompletionDate && <span className="text-rose-500 text-xs">(required)</span>}</label>
+                    <DatePicker value={form.expectedCompletionDate} onChange={(v) => set("expectedCompletionDate", v)} min={form.startDate || undefined} />
+                  </div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Schedule</label><input value={form.schedule} onChange={(e) => set("schedule", e.target.value)} className={inp} placeholder="Sun/Tue 7pm" /></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Format</label><select value={form.format} onChange={(e) => set("format", e.target.value)} className={inp}>{scheduleFormats.map((f) => <option key={f}>{f}</option>)}</select></div>
                   <div><label className="block text-sm font-bold text-slate-700 mb-1">Status</label><select value={form.status} onChange={(e) => set("status", e.target.value)} className={inp}>{enrollmentStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>
@@ -272,6 +334,31 @@ export default function EnrollmentsPage() {
           </div>
         )}
 
+        {/* Incomplete registrations widget (admin action required) */}
+        {(() => {
+          const incomplete = enrollments.filter((e) => !e.registrationComplete);
+          if (incomplete.length === 0) return null;
+          const missingTeacher = incomplete.filter((e) => e.missingFields.includes("Assigned Teacher")).length;
+          const missingHours = incomplete.filter((e) => e.missingFields.includes("Registered Hours")).length;
+          const missingStart = incomplete.filter((e) => e.missingFields.includes("Start Date")).length;
+          return (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <p className="text-sm font-bold text-rose-700">⚠ {incomplete.length} incomplete registration{incomplete.length > 1 ? "s" : ""} — action required</p>
+                <span className="text-xs font-medium text-rose-600">{missingTeacher} missing teacher</span>
+                <span className="text-xs font-medium text-rose-600">{missingHours} missing hours</span>
+                <span className="text-xs font-medium text-rose-600">{missingStart} missing start date</span>
+                <button
+                  onClick={() => { const first = incomplete[0]; if (first) openEdit(first); }}
+                  className="ml-auto rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                >
+                  Complete Registration →
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <DateRangePicker
@@ -322,16 +409,29 @@ export default function EnrollmentsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {enrollments.map((e) => (
-                    <tr key={e.id} className={`hover:bg-slate-50 ${e.balanceDue > 0 && e.paymentStatus === "Overdue" ? "bg-rose-50/30" : ""}`}>
+                    <tr key={e.id} className={`hover:bg-slate-50 ${!e.registrationComplete ? "bg-rose-50/60" : e.balanceDue > 0 && e.paymentStatus === "Overdue" ? "bg-rose-50/30" : ""}`}>
                       <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-400">{e.enrollmentId}</td>
                       <td className="px-4 py-3">
-                        <p className="font-bold text-[#0D1F0E]">{e.fullName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-[#0D1F0E]">{e.fullName}</p>
+                          {!e.registrationComplete && (
+                            <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700 ring-1 ring-rose-200" title={`Missing: ${e.missingFields.join(", ")}`}>
+                              ⚠ Incomplete
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500">
                           <span>{e.phone}</span>
                           <a href={(buildWhatsAppUrl(e.phone) ?? "#")} target="_blank" rel="noopener noreferrer" className="text-[#2E7D32] hover:underline"><MessageCircle className="h-3 w-3" /></a>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{e.course}{e.batchName ? ` · ${e.batchName}` : ""}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {e.course}{e.batchName ? ` · ${e.batchName}` : ""}
+                        <p className="text-xs text-slate-400">
+                          {e.teacherName ? `Teacher: ${e.teacherName}` : "No teacher"}
+                          {e.totalRegisteredHours ? ` · ${e.completedHours}/${e.totalRegisteredHours}h` : ""}
+                        </p>
+                      </td>
                       <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${statusColors[e.status] ?? "bg-slate-100 text-slate-600 ring-slate-200"}`}>{e.status}</span></td>
                       <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${payStatusColors[e.paymentStatus] ?? "bg-slate-100 text-slate-600 ring-slate-200"}`}>{e.paymentStatus}</span></td>
                       <td className="px-4 py-3 text-sm font-semibold text-[#2E7D32]">{fmtCurrency(e.amountPaid)}</td>

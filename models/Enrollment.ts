@@ -35,6 +35,12 @@ export interface IEnrollment extends Document {
   notes?: string;
   registrationDate: Date;
   arAccountCode?: string;   // this student's ledger account under Accounts Receivable
+  // ── Teacher assignment & hour tracking (per course registration) ──
+  teacherId?: mongoose.Types.ObjectId;
+  teacherName?: string;                 // denormalized for display
+  totalRegisteredHours?: number;
+  completedHours?: number;              // recalculated from ClassSession records — never edited directly
+  expectedCompletionDate?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,6 +67,11 @@ const EnrollmentSchema = new Schema<IEnrollment>(
     notes: { type: String, trim: true, maxlength: 2000 },
     registrationDate: { type: Date, default: Date.now },
     arAccountCode: { type: String, trim: true },
+    teacherId: { type: Schema.Types.ObjectId, ref: "Teacher" },
+    teacherName: { type: String, trim: true },
+    totalRegisteredHours: { type: Number, min: 0 },
+    completedHours: { type: Number, min: 0, default: 0 },
+    expectedCompletionDate: Date,
   },
   { timestamps: true },
 );

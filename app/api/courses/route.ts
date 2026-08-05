@@ -33,7 +33,20 @@ export async function GET(request: NextRequest) {
     }
 
     const courses = await Course.find(query).sort({ courseName: 1 }).lean();
-    return NextResponse.json({ courses: courses.map(serializeCourse) });
+
+    // Registered students per course (from enrollments)
+    const { default: Enrollment } = await import("@/models/Enrollment");
+    const counts = await Enrollment.aggregate([
+      { $group: { _id: "$course", n: { $sum: 1 } } },
+    ]);
+    const countMap = new Map(counts.map((c) => [c._id as string, c.n as number]));
+
+    return NextResponse.json({
+      courses: courses.map((c) => ({
+        ...serializeCourse(c),
+        registeredStudents: countMap.get(c.courseName) ?? 0,
+      })),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load courses.";
     return NextResponse.json({ message }, { status: 500 });
@@ -70,6 +83,7 @@ export async function POST(request: NextRequest) {
       sessionsPerWeek: body.sessionsPerWeek ? Number(body.sessionsPerWeek) : undefined,
       hoursPerSession: body.hoursPerSession ? Number(body.hoursPerSession) : undefined,
       totalHours: body.totalHours ? Number(body.totalHours) : undefined,
+      deliveryMethod: ["In-Person", "Online", "Hybrid"].includes(clean(body.deliveryMethod)) ? clean(body.deliveryMethod) : undefined,
       priceExVat: body.priceExVat ? Number(body.priceExVat) : 0,
       vatRate: body.vatRate !== undefined ? Number(body.vatRate) : 5,
       maxStudentsPerBatch: body.maxStudentsPerBatch ? Number(body.maxStudentsPerBatch) : undefined,

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Enrollment from "@/models/Enrollment";
@@ -111,7 +112,30 @@ export async function POST(request: NextRequest) {
       amountPaid: Number(body.amountPaid) || 0,
       notes: clean(body.notes) || undefined,
       leadId: body.leadId || undefined,
+      // Teacher assignment & hour tracking
+      teacherId: body.teacherId && mongoose.Types.ObjectId.isValid(body.teacherId) ? body.teacherId : undefined,
+      totalRegisteredHours: body.totalRegisteredHours ? Math.max(0, Number(body.totalRegisteredHours) || 0) : undefined,
+      expectedCompletionDate: body.expectedCompletionDate ? new Date(body.expectedCompletionDate) : undefined,
     });
+
+    // Denormalize teacher name + notify the teacher
+    if (enrollment.teacherId) {
+      const { default: Teacher } = await import("@/models/Teacher");
+      const t = await Teacher.findById(enrollment.teacherId).lean();
+      if (t) {
+        enrollment.teacherName = t.fullName;
+        await enrollment.save();
+        if (t.email) {
+          const { notify } = await import("@/lib/notify");
+          notify({
+            userEmail: t.email,
+            title: `New student assigned: ${enrollment.fullName}`,
+            body: `${enrollment.course} — new registration assigned to you.`,
+            link: "/my-students",
+          });
+        }
+      }
+    }
 
     // Accounting: invoice entry — Dr A/R, Cr Course Revenue (+ Cr Output VAT)
     if ((Number(body.totalFee) || 0) > 0) {

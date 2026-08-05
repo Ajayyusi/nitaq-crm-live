@@ -34,6 +34,9 @@ export interface ICourse extends Document {
   courseName: string;
   category: CourseCategory;
   description?: string;
+  deliveryMethod?: BatchFormat;          // course-level default: Online / In-Person / Hybrid
+  assignedTeacherIds?: mongoose.Types.ObjectId[];
+  assignedTeacherNames?: string[];       // denormalized for display
   durationWeeks?: number;
   totalSessions?: number;
   sessionsPerWeek?: number;
@@ -48,6 +51,12 @@ export interface ICourse extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const CourseTeacherFields = {
+  deliveryMethod:       { type: String, enum: [...batchFormats] },
+  assignedTeacherIds:   [{ type: Schema.Types.ObjectId, ref: "Teacher" }],
+  assignedTeacherNames: [{ type: String, trim: true }],
+};
 
 const BatchSchema = new Schema<IBatch>({
   batchId: { type: String, required: true },
@@ -84,6 +93,7 @@ const CourseSchema = new Schema<ICourse>(
     status: { type: String, enum: [...courseStatuses], default: "Active" },
     speaActivity: { type: String, trim: true },
     batches: { type: [BatchSchema], default: [] },
+    ...CourseTeacherFields,
   },
   { timestamps: true },
 );

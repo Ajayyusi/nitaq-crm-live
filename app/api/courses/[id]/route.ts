@@ -78,6 +78,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         update[f] = Number(body[f]);
       }
     }
+    // Delivery method + assigned teachers
+    if ("deliveryMethod" in body) {
+      const v = clean(body.deliveryMethod);
+      update.deliveryMethod = ["In-Person", "Online", "Hybrid"].includes(v) ? v : undefined;
+    }
+    if ("assignedTeacherIds" in body && Array.isArray(body.assignedTeacherIds)) {
+      const { default: Teacher } = await import("@/models/Teacher");
+      const ids = body.assignedTeacherIds.filter((t: string) => mongoose.Types.ObjectId.isValid(t));
+      const teachers = await Teacher.find({ _id: { $in: ids } }).select("fullName").lean();
+      update.assignedTeacherIds = teachers.map((t) => t._id);
+      update.assignedTeacherNames = teachers.map((t) => t.fullName);
+    }
 
     const course = await Course.findByIdAndUpdate(id, update, {
       new: true,

@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { GraduationCap, Award, MessageCircle, Search, Loader2 } from "lucide-react";
+import { GraduationCap, Award, History, MessageCircle, Search, Loader2 } from "lucide-react";
+import HoursProgress from "@/components/shared/HoursProgress";
+import ClassHistoryDrawer, { type RegistrationInfo } from "@/components/shared/ClassHistoryDrawer";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 type Enrollment = {
+  teacherId: string; teacherName: string;
+  totalRegisteredHours: number; completedHours: number; remainingHours: number;
+  registrationComplete: boolean; missingFields: string[];
   id: string; enrollmentId: string; fullName: string; phone: string;
   course: string; batchName: string; status: string; paymentStatus: string;
   totalFee: number; amountPaid: number; balanceDue: number;
@@ -57,6 +62,7 @@ function StatusCell({ enrollment, onUpdated }: { enrollment: Enrollment; onUpdat
 
 export default function StudentsPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [historyReg, setHistoryReg] = useState<RegistrationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("Active");
   const [search, setSearch] = useState("");
@@ -165,7 +171,7 @@ export default function StudentsPage() {
             <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  {["ID", "Name", "Course", "Status", "Payment", "Balance", "Contact", ""].map((h) => (
+                  {["ID", "Name", "Course", "Teacher & Hours", "Status", "Payment", "Balance", "Contact", ""].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                       {h}
                     </th>
@@ -176,7 +182,7 @@ export default function StudentsPage() {
                 {enrollments.map((e) => {
                   const certEligible = e.status === "Completed" && e.balanceDue === 0;
                   return (
-                    <tr key={e.id} className="hover:bg-[#E8F5E9]/30 transition-colors">
+                    <tr key={e.id} className={`transition-colors ${!e.registrationComplete ? "bg-rose-50/60 hover:bg-rose-50" : "hover:bg-[#E8F5E9]/30"}`}>
                       <td className="px-4 py-3 text-xs font-mono text-slate-400">{e.enrollmentId}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -184,10 +190,15 @@ export default function StudentsPage() {
                             {e.fullName.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div className="font-medium text-[#0D1F0E] flex items-center gap-1">
+                            <div className="font-medium text-[#0D1F0E] flex items-center gap-1.5">
                               {e.fullName}
                               {certEligible && (
                                 <Award className="w-3.5 h-3.5 text-amber-500" aria-label="Certificate eligible" />
+                              )}
+                              {!e.registrationComplete && (
+                                <span className="inline-flex rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold text-rose-700 ring-1 ring-rose-200" title={`Missing: ${e.missingFields.join(", ")}`}>
+                                  ⚠ Incomplete
+                                </span>
                               )}
                             </div>
                             {e.email && <div className="text-xs text-slate-400">{e.email}</div>}
@@ -197,6 +208,10 @@ export default function StudentsPage() {
                       <td className="px-4 py-3">
                         <div className="text-slate-700 max-w-[160px] truncate">{e.course}</div>
                         {e.batchName && <div className="text-xs text-slate-400">{e.batchName}</div>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-xs text-slate-600 mb-1">{e.teacherName || <span className="text-rose-500 font-medium">No teacher</span>}</div>
+                        <HoursProgress total={e.totalRegisteredHours} completed={e.completedHours} compact />
                       </td>
                       <td className="px-4 py-3">
                         <StatusCell enrollment={e} onUpdated={handleStatusUpdate} />
@@ -216,6 +231,16 @@ export default function StudentsPage() {
                         <div className="text-slate-600 text-xs">{e.phone}</div>
                       </td>
                       <td className="px-4 py-3">
+                        <button
+                          onClick={() => setHistoryReg({
+                            id: e.id, fullName: e.fullName, course: e.course, teacherName: e.teacherName,
+                            totalRegisteredHours: e.totalRegisteredHours, completedHours: e.completedHours, remainingHours: e.remainingHours,
+                          })}
+                          title="Class history / record class"
+                          className="p-1.5 text-slate-400 hover:text-[#2E7D32] hover:bg-[#E8F5E9] rounded transition inline-flex"
+                        >
+                          <History className="w-4 h-4" />
+                        </button>
                         {e.phone && (
                           <a
                             href={(buildWhatsAppUrl(e.phone) ?? "#")}
@@ -237,6 +262,15 @@ export default function StudentsPage() {
           </div>
         )}
       </div>
+
+      {historyReg && (
+        <ClassHistoryDrawer
+          registration={historyReg}
+          canManage
+          onClose={() => setHistoryReg(null)}
+          onHoursChanged={() => void fetchEnrollments()}
+        />
+      )}
     </div>
   );
 }

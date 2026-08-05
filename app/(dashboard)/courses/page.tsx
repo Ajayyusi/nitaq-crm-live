@@ -15,6 +15,8 @@ type Course = {
   durationWeeks: number | null; totalSessions: number | null; sessionsPerWeek: number | null;
   hoursPerSession: number | null; totalHours: number | null; priceExVat: number; vatRate: number;
   priceInclVat: number; maxStudentsPerBatch: number | null; status: string; speaActivity: string;
+  deliveryMethod: string; assignedTeacherIds: string[]; assignedTeacherNames: string[];
+  registeredStudents: number;
   batches: Batch[];
 };
 
@@ -22,12 +24,14 @@ type FormState = {
   courseName: string; courseCode: string; category: string; description: string;
   durationWeeks: string; totalSessions: string; sessionsPerWeek: string; hoursPerSession: string;
   priceExVat: string; vatRate: string; maxStudentsPerBatch: string; status: string; speaActivity: string;
+  totalHours: string; deliveryMethod: string; assignedTeacherIds: string[];
 };
 
 const emptyForm: FormState = {
   courseName: "", courseCode: "", category: "Computer Software Training",
   description: "", durationWeeks: "", totalSessions: "", sessionsPerWeek: "",
   hoursPerSession: "", priceExVat: "", vatRate: "5", maxStudentsPerBatch: "", status: "Active", speaActivity: "",
+  totalHours: "", deliveryMethod: "", assignedTeacherIds: [],
 };
 
 function getErr(v: unknown, fb: string) {
@@ -50,6 +54,13 @@ export default function CoursesPage() {
   const isReadOnly = role === "sales" || role === "trainer";
 
   const [courses, setCourses] = useState<Course[]>([]);
+  const [teacherOptions, setTeacherOptions] = useState<{ id: string; fullName: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/teachers")
+      .then((r) => r.json())
+      .then((d) => setTeacherOptions((d.trainers ?? []).map((t: { id: string; fullName: string }) => ({ id: t.id, fullName: t.fullName }))))
+      .catch(() => {});
+  }, []);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -89,6 +100,8 @@ export default function CoursesPage() {
       hoursPerSession: c.hoursPerSession?.toString() ?? "", priceExVat: c.priceExVat.toString(),
       vatRate: c.vatRate.toString(), maxStudentsPerBatch: c.maxStudentsPerBatch?.toString() ?? "",
       status: c.status, speaActivity: c.speaActivity,
+      totalHours: c.totalHours != null ? String(c.totalHours) : "",
+      deliveryMethod: c.deliveryMethod ?? "", assignedTeacherIds: c.assignedTeacherIds ?? [],
     });
     setFormError(""); setDrawerOpen(true);
   }
@@ -197,6 +210,35 @@ export default function CoursesPage() {
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-bold text-slate-700 mb-1">SPEA activity</label>
                     <input value={form.speaActivity} onChange={(e) => setForm((f) => ({ ...f, speaActivity: e.target.value }))} className={inp} placeholder="Licensed activity name" />
+                    <div className="grid gap-4 sm:grid-cols-2 mt-4">
+                      <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Default Training Hours</label>
+                        <input type="number" min="0" value={form.totalHours} onChange={(e) => setForm((f) => ({ ...f, totalHours: e.target.value }))} className={inp} placeholder="e.g. 40" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-1">Delivery Method</label>
+                        <select value={form.deliveryMethod} onChange={(e) => setForm((f) => ({ ...f, deliveryMethod: e.target.value }))} className={inp}>
+                          <option value="">— Not set —</option>
+                          <option>In-Person</option><option>Online</option><option>Hybrid</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Assigned Teachers</label>
+                      <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 p-3">
+                        {teacherOptions.length === 0 && <span className="text-xs text-slate-400">No trainers found.</span>}
+                        {teacherOptions.map((t) => {
+                          const on = form.assignedTeacherIds.includes(t.id);
+                          return (
+                            <button key={t.id} type="button"
+                              onClick={() => setForm((f) => ({ ...f, assignedTeacherIds: on ? f.assignedTeacherIds.filter((x) => x !== t.id) : [...f.assignedTeacherIds, t.id] }))}
+                              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${on ? "bg-[#2E7D32] text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                              {t.fullName}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
@@ -277,10 +319,16 @@ export default function CoursesPage() {
                         <span>{c.category}</span>
                         <span>·</span>
                         <span>AED {c.priceExVat.toLocaleString()} + VAT → AED {c.priceInclVat.toLocaleString()}</span>
-                        {c.totalSessions && <><span>·</span><span>{c.totalSessions} sessions</span></>}
+                        {c.totalHours ? <><span>·</span><span>{c.totalHours}h default</span></> : null}
+                        {c.deliveryMethod && <><span>·</span><span>{c.deliveryMethod}</span></>}
+                        <span>·</span>
+                        <span className="font-semibold text-[#2E7D32]">{c.registeredStudents} student{c.registeredStudents !== 1 ? "s" : ""}</span>
                         <span>·</span>
                         <span>{c.batches.length} batch{c.batches.length !== 1 ? "es" : ""}</span>
                       </div>
+                      {c.assignedTeacherNames?.length > 0 && (
+                        <p className="mt-0.5 text-xs text-slate-400">Teachers: {c.assignedTeacherNames.join(", ")}</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button onClick={() => setExpandedId(expandedId === c.id ? null : c.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100" title="Toggle batches">
