@@ -3,7 +3,11 @@ import mongoose, { Schema, Document } from "mongoose";
 export const trainerStatuses = ["Active", "Inactive"] as const;
 export const tamamStatuses = ["Registered", "Pending", "Not Registered"] as const;
 export const contractStatuses = ["Active", "Expired", "No Contract"] as const;
-export const paymentTypes = ["Per Session", "Per Course", "Monthly"] as const;
+// "Per Session" is kept for backwards compatibility with existing records and
+// is treated identically to "Per Class".
+export const paymentTypes = ["Per Hour", "Per Class", "Per Course", "Monthly", "Per Session"] as const;
+/** Options offered in the UI (legacy "Per Session" is hidden). */
+export const paymentTypeOptions = ["Per Hour", "Per Class", "Per Course", "Monthly"] as const;
 
 export type TrainerStatus = (typeof trainerStatuses)[number];
 export type TamamStatus = (typeof tamamStatuses)[number];

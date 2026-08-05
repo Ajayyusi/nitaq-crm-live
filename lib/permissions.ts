@@ -24,6 +24,7 @@ export const PAGE_PERMISSIONS: { path: string; roles: AppRole[] }[] = [
   { path: "/expenses",  roles: ["admin", "manager", "finance"] },
   { path: "/reports",   roles: ["admin", "manager", "finance"] },
   { path: "/collections", roles: ["admin", "manager", "finance"] },
+  { path: "/teacher-payouts", roles: ["admin", "manager", "finance"] },
 
   // ── CRM Ops ────────────────────────────────────────────────────────────
   { path: "/leads",               roles: ["admin", "manager", "sales"] },
@@ -92,6 +93,7 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   "/expenses":             ["admin", "manager", "finance"],
   "/reports":              ["admin", "manager", "finance"],
   "/collections":          ["admin", "manager", "finance"],
+  "/teacher-payouts":      ["admin", "manager", "finance"],
   // Centre Management
   "/compliance":           ["admin", "manager", "iqa", "eqa", "assessor"],
   "/learner-profiles":     ["admin", "manager", "iqa", "eqa", "assessor"],

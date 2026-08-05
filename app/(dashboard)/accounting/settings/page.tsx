@@ -20,6 +20,7 @@ const MAPPINGS: { key: string; label: string; hint?: string }[] = [
   { key: "inputVatAccount",      label: "Input VAT" },
   { key: "defaultRevenueAccount", label: "Default Revenue Account", hint: "Used when a course has no specific mapping" },
   { key: "defaultExpenseAccount", label: "Default Expense Account" },
+  { key: "teacherSalaryAccount", label: "Teacher Salary Account", hint: "where teacher payouts post" },
   { key: "discountAccount",      label: "Sales Discount Account", hint: "optional" },
   { key: "refundAccount",        label: "Refund Account", hint: "optional" },
   { key: "badDebtAccount",       label: "Bad Debt Expense", hint: "optional" },

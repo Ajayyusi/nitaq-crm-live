@@ -10,7 +10,7 @@ const ACCOUNT_FIELDS = [
   "tabbyAccount", "tamaraAccount", "pettyCashAccount",
   "accountsReceivable", "accountsPayable", "feesAdvanceAccount",
   "outputVatAccount", "inputVatAccount",
-  "defaultRevenueAccount", "defaultExpenseAccount",
+  "defaultRevenueAccount", "defaultExpenseAccount", "teacherSalaryAccount",
   "discountAccount", "refundAccount", "badDebtAccount",
 ] as const;
 

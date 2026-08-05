@@ -29,6 +29,7 @@ export interface IClassSession extends Document {
   notes?: string;
   homework?: string;
   recordedBy: string;
+  payoutId?: mongoose.Types.ObjectId;   // set once this session has been paid to the teacher
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +52,7 @@ const ClassSessionSchema = new Schema<IClassSession>(
     notes:        { type: String, trim: true, maxlength: 2000 },
     homework:     { type: String, trim: true, maxlength: 1000 },
     recordedBy:   { type: String, required: true, trim: true },
+    payoutId:     { type: Schema.Types.ObjectId, ref: "TeacherPayout", default: null },
   },
   { timestamps: true }
 );

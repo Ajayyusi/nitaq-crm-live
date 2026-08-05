@@ -39,7 +39,7 @@ export const trainerStatuses = ["Active", "Inactive"] as const;
 export const tamamStatuses = ["Registered", "Pending", "Not Registered"] as const;
 export const contractStatuses = ["Active", "Expired", "No Contract"] as const;
 // Renamed from paymentTypes to avoid collision with Financial paymentTypes below
-export const trainerPaymentTypes = ["Per Session", "Per Course", "Monthly"] as const;
+export const trainerPaymentTypes = ["Per Hour", "Per Class", "Per Course", "Monthly"] as const;
 
 // ── Financial (Payments) ──────────────────────────────────────────────────────
 export const paymentMethods = [

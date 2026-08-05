@@ -22,6 +22,7 @@ export interface IAccountingSettings extends Document {
   // P&L
   defaultRevenueAccount: string;
   defaultExpenseAccount: string;
+  teacherSalaryAccount: string;   // where teacher payouts are expensed
   discountAccount: string;
   refundAccount: string;
   badDebtAccount: string;
@@ -54,6 +55,7 @@ const AccountingSettingsSchema = new Schema<IAccountingSettings>(
     inputVatAccount:     { type: String, default: "2030100002" },
     defaultRevenueAccount: { type: String, default: "4010010001" },
     defaultExpenseAccount: { type: String, default: "5010010017" }, // Miscellaneous Expenses
+    teacherSalaryAccount:  { type: String, default: "5010010038" }, // Salaries - Teaching Staff
     discountAccount:     { type: String, default: "" },
     refundAccount:       { type: String, default: "" },
     badDebtAccount:      { type: String, default: "" },
