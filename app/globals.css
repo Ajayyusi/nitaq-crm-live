@@ -514,21 +514,27 @@ finish review, the verdict, and DESIGN.md
   color: var(--advisory) !important;
 }
 
-/* Forms in untouched pages */
-.dark input:not([type="checkbox"]):not([type="radio"]),
-.dark select,
-.dark textarea {
-  background-color: var(--well) !important;
-  border-color: var(--bezel-strong) !important;
-  color: var(--ink) !important;
-}
-.dark input::placeholder,
-.dark textarea::placeholder {
-  color: var(--faint) !important;
-}
-.dark select option {
-  background-color: var(--raised);
-  color: var(--ink);
+/* Forms in untouched pages.
+   Deliberately inside @layer base and WITHOUT !important: this is a fallback
+   for raw, unstyled controls only. As an unlayered !important rule it beat
+   every token utility — a `bg-transparent` input (the ⌘K palette field)
+   rendered with a filled well background instead of blending into its panel. */
+@layer base {
+  .dark input:not([type="checkbox"]):not([type="radio"]),
+  .dark select,
+  .dark textarea {
+    background-color: var(--well);
+    border-color: var(--bezel-strong);
+    color: var(--ink);
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: var(--faint);
+  }
+  .dark select option {
+    background-color: var(--raised);
+    color: var(--ink);
+  }
 }
 
 .dark .shadow-sm {
