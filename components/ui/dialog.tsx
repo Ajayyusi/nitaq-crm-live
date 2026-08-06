@@ -13,30 +13,63 @@ import { Button } from "./button";
  * (unsaved forms must not be discarded by a stray click).
  */
 
-function useDialogBehavior(open: boolean, onClose: () => void) {
+const FOCUSABLE =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Focus management, scroll lock, ESC and a Tab trap for a portaled panel.
+ *
+ * The focus work is keyed ONLY on (open, mounted) — never on `onClose`.
+ * Call sites pass inline arrows, so `onClose` gets a new identity on every
+ * parent render; keying the focus effect on it meant every keystroke in a
+ * drawer form tore the effect down and threw focus back to the ✕ button.
+ * `onClose` is therefore read through a ref instead.
+ *
+ * `mounted` matters because the portal does not exist on the first commit of
+ * a dialog that mounts already-open; without it the initial focus would land
+ * on nothing and the Tab trap would have no panel to trap.
+ */
+function useDialogBehavior(open: boolean, mounted: boolean, onClose: () => void) {
   const ref = React.useRef<HTMLDivElement>(null);
-
+  const onCloseRef = React.useRef(onClose);
   React.useEffect(() => {
-    if (!open) return;
-    const prev = document.activeElement as HTMLElement | null;
-    const node = ref.current;
-    // focus the panel (or its first focusable) on open
-    const focusables = node?.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    (focusables?.[0] ?? node)?.focus();
+    onCloseRef.current = onClose;
+  });
+  const prevFocusRef = React.useRef<HTMLElement | null>(null);
 
+  // Initial focus + scroll lock: exactly once per opening.
+  React.useEffect(() => {
+    if (!open || !mounted) return;
+    prevFocusRef.current = document.activeElement as HTMLElement | null;
+    const node = ref.current;
+    // Prefer the first real control; landing on the ✕ makes forms hostile.
+    const target =
+      node?.querySelector<HTMLElement>(
+        `${FOCUSABLE.split(", ").map((s) => `${s}:not([data-dialog-close])`).join(", ")}`
+      ) ?? node;
+    target?.focus();
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+      prevFocusRef.current?.focus();
+      prevFocusRef.current = null;
+    };
+  }, [open, mounted]);
+
+  // ESC + Tab trap, independent of the focus effect above.
+  React.useEffect(() => {
+    if (!open || !mounted) return;
     function onKey(e: KeyboardEvent) {
+      const node = ref.current;
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
+        return;
       }
       if (e.key === "Tab" && node) {
-        const items = Array.from(
-          node.querySelectorAll<HTMLElement>(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-          )
-        ).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+        const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+          (el) => !el.hasAttribute("disabled") && el.offsetParent !== null
+        );
         if (items.length === 0) return;
         const first = items[0];
         const last = items[items.length - 1];
@@ -50,13 +83,8 @@ function useDialogBehavior(open: boolean, onClose: () => void) {
       }
     }
     document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-      prev?.focus();
-    };
-  }, [open, onClose]);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, mounted]);
 
   return ref;
 }
@@ -89,9 +117,9 @@ export function Dialog({
   /** When true, backdrop click does NOT close (unsaved work). */
   guarded?: boolean;
 }) {
-  const ref = useDialogBehavior(open, onClose);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
+  const ref = useDialogBehavior(open, mounted, onClose);
   if (!open || !mounted) return null;
 
   const width = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-2xl" }[size];
@@ -113,7 +141,13 @@ export function Dialog({
         >
           <div className="flex items-center justify-between gap-3 border-b border-bezel px-5 py-3.5">
             <h2 className="text-sm font-bold text-ink">{title}</h2>
-            <Button variant="ghost" size="iconSm" onClick={onClose} aria-label="Close dialog">
+            <Button
+              variant="ghost"
+              size="iconSm"
+              onClick={onClose}
+              aria-label="Close dialog"
+              data-dialog-close
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -148,9 +182,9 @@ export function Drawer({
   /** Drawers usually hold forms — guarded by default. */
   guarded?: boolean;
 }) {
-  const ref = useDialogBehavior(open, onClose);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
+  const ref = useDialogBehavior(open, mounted, onClose);
   if (!open || !mounted) return null;
 
   const width = { md: "max-w-md", lg: "max-w-xl", xl: "max-w-3xl" }[size];
@@ -171,7 +205,13 @@ export function Drawer({
       >
         <div className="flex items-center justify-between gap-3 border-b border-bezel px-5 py-4">
           <h2 className="text-sm font-bold text-ink">{title}</h2>
-          <Button variant="ghost" size="iconSm" onClick={onClose} aria-label="Close panel">
+          <Button
+            variant="ghost"
+            size="iconSm"
+            onClick={onClose}
+            aria-label="Close panel"
+            data-dialog-close
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>

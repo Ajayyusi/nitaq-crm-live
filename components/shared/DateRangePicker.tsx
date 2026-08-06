@@ -44,6 +44,15 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
   // In-progress custom selection: first click = start, second click = end
   const [pendingStart, setPendingStart] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  /** Flip to the trigger's other edge when a start-aligned panel would overflow. */
+  const [alignEnd, setAlignEnd] = useState(false);
+
+  useEffect(() => {
+    if (!open || !rootRef.current) return;
+    const r = rootRef.current.getBoundingClientRect();
+    const PANEL_WIDTH = Math.min(560, window.innerWidth - 32);
+    setAlignEnd(r.left + PANEL_WIDTH > window.innerWidth - 8 && r.right - PANEL_WIDTH > 8);
+  }, [open]);
 
   // When opening, focus the calendar on the current "from" (or today)
   useEffect(() => {
@@ -148,7 +157,9 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
         <div
           role="dialog"
           aria-label="Choose date range"
-          className="absolute left-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden rounded-card border border-bezel bg-raised shadow-raise sm:w-[560px]"
+          className={`absolute z-50 mt-2 w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden rounded-card border border-bezel bg-raised shadow-raise sm:w-[560px] ${
+            alignEnd ? "right-0" : "left-0"
+          }`}
         >
           <div className="flex flex-col sm:flex-row">
             {/* Presets */}

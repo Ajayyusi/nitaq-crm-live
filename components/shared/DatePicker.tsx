@@ -54,6 +54,16 @@ export default function DatePicker({
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const rootRef = useRef<HTMLDivElement>(null);
+  /** Flip the calendar to the trigger's other edge when it would overflow. */
+  const [alignEnd, setAlignEnd] = useState(false);
+
+  useEffect(() => {
+    if (!open || !rootRef.current) return;
+    const r = rootRef.current.getBoundingClientRect();
+    const CAL_WIDTH = 290;
+    // Would a start-aligned calendar run past the viewport edge?
+    setAlignEnd(r.left + CAL_WIDTH > window.innerWidth - 8 && r.right - CAL_WIDTH > 8);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -141,7 +151,9 @@ export default function DatePicker({
         <div
           role="dialog"
           aria-label="Choose date"
-          className="absolute left-0 z-50 mt-2 w-[290px] rounded-card border border-bezel bg-raised p-3 shadow-raise"
+          className={`absolute z-50 mt-2 w-[290px] rounded-card border border-bezel bg-raised p-3 shadow-raise ${
+            alignEnd ? "right-0" : "left-0"
+          }`}
         >
           {/* Month navigation */}
           <div className="mb-2 flex items-center justify-between">
