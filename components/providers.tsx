@@ -29,19 +29,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
           toastOptions={{
             duration: 3000,
             style: {
-              background: "#0D1F0E",
-              color: "#fff",
+              background: "var(--raised)",
+              color: "var(--ink)",
+              border: "1px solid var(--bezel-strong)",
               fontSize: "14px",
               fontWeight: 500,
-              borderRadius: "10px",
+              borderRadius: "var(--radius-card, 10px)",
               padding: "12px 16px",
+              boxShadow: "var(--shadow-raise)",
             },
             success: {
-              iconTheme: { primary: "#4CAF50", secondary: "#fff" },
+              iconTheme: { primary: "var(--phos)", secondary: "var(--raised)" },
             },
             error: {
               duration: 5000,
-              iconTheme: { primary: "#EF5350", secondary: "#fff" },
+              iconTheme: { primary: "var(--alert)", secondary: "var(--raised)" },
             },
           }}
         />

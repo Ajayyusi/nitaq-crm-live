@@ -1,18 +1,19 @@
 "use client";
 
-import { use, useEffect, useState, useCallback } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import {
-  ChevronLeft,
-  Loader2,
-  Plus,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
+import { BookMarked, ChevronLeft, Plus, Save, Trash2 } from "lucide-react";
 import { isReadOnlyRole } from "@/lib/permissions";
 import type { AppRole } from "@/lib/permissions";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
+import { Field, Input, Select } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ui/dialog";
+import { LoadError, PanelLoading, Spinner } from "@/components/ui/feedback";
 
 interface Unit {
   unitCode: string;
@@ -41,8 +42,23 @@ interface Qualification {
 
 const AWARDING_BODIES = ["Qualifi", "Pearson", "City & Guilds", "OTHM", "ATHE", "Other"];
 
+const QUAL_LAMP: Record<string, LampVariant> = {
+  Active: "ok",
+  Inactive: "off",
+  "Pending Approval": "caution",
+};
+
 function emptyUnit(): Unit {
-  return { unitCode: "", unitTitle: "", level: "", credits: null, glh: null, isMandatory: true, learningOutcomes: "", assessmentCriteria: "" };
+  return {
+    unitCode: "",
+    unitTitle: "",
+    level: "",
+    credits: null,
+    glh: null,
+    isMandatory: true,
+    learningOutcomes: "",
+    assessmentCriteria: "",
+  };
 }
 
 export default function QualificationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -53,8 +69,10 @@ export default function QualificationDetailPage({ params }: { params: Promise<{ 
 
   const [qual, setQual] = useState<Qualification | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const [title, setTitle] = useState("");
   const [awardingBody, setAwardingBody] = useState("Qualifi");
@@ -67,50 +85,70 @@ export default function QualificationDetailPage({ params }: { params: Promise<{ 
   const [units, setUnits] = useState<Unit[]>([]);
   const [addingUnit, setAddingUnit] = useState(false);
   const [newUnit, setNewUnit] = useState<Unit>(emptyUnit());
+  const [unitErrors, setUnitErrors] = useState<{ code?: string; title?: string }>({});
+  const [removeIdx, setRemoveIdx] = useState<number | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    fetch(`/api/qualifications/${id}`)
-      .then((r) => r.json())
-      .then((d) => {
-        const q: Qualification = d.qualification;
-        setQual(q);
-        setTitle(q.title);
-        setAwardingBody(q.awardingBody);
-        setLevel(q.level);
-        setQualCode(q.qualificationCode);
-        setCredits(q.credits != null ? String(q.credits) : "");
-        setGlh(q.glh != null ? String(q.glh) : "");
-        setTqt(q.tqt != null ? String(q.tqt) : "");
-        setStatus(q.status);
-        setUnits(q.units);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    setLoadFailed(false);
+    try {
+      const res = await fetch(`/api/qualifications/${id}`);
+      const d = await res.json();
+      const q: Qualification | undefined = d.qualification;
+      if (!res.ok || !q) {
+        setQual(null);
+        if (res.status !== 404) setLoadFailed(true);
+        return;
+      }
+      setQual(q);
+      setTitle(q.title);
+      setAwardingBody(q.awardingBody);
+      setLevel(q.level);
+      setQualCode(q.qualificationCode);
+      setCredits(q.credits != null ? String(q.credits) : "");
+      setGlh(q.glh != null ? String(q.glh) : "");
+      setTqt(q.tqt != null ? String(q.tqt) : "");
+      setStatus(q.status);
+      setUnits(q.units);
+    } catch {
+      setQual(null);
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const save = async () => {
-    setSaving(true); setSaveMsg("");
+    setSaving(true);
+    setSaveMsg("");
+    setSaveFailed(false);
     try {
       const res = await fetch(`/api/qualifications/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title, awardingBody, level, qualificationCode: qualCode,
+          title,
+          awardingBody,
+          level,
+          qualificationCode: qualCode,
           credits: credits ? Number(credits) : null,
           glh: glh ? Number(glh) : null,
           tqt: tqt ? Number(tqt) : null,
-          status, units,
+          status,
+          units,
         }),
       });
       const d = await res.json();
-      if (!res.ok) throw new Error(d.message);
+      if (!res.ok) throw new Error(d.message || "Save failed — try again.");
       setQual(d.qualification);
       setSaveMsg("Saved.");
       setTimeout(() => setSaveMsg(""), 3000);
     } catch (e) {
+      setSaveFailed(true);
       setSaveMsg((e as Error).message);
     } finally {
       setSaving(false);
@@ -118,177 +156,317 @@ export default function QualificationDetailPage({ params }: { params: Promise<{ 
   };
 
   const addUnit = () => {
-    if (!newUnit.unitCode.trim() || !newUnit.unitTitle.trim()) return;
+    const errs: { code?: string; title?: string } = {};
+    if (!newUnit.unitCode.trim()) errs.code = "Unit code is required.";
+    if (!newUnit.unitTitle.trim()) errs.title = "Unit title is required.";
+    setUnitErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     setUnits((prev) => [...prev, { ...newUnit }]);
     setNewUnit(emptyUnit());
+    setUnitErrors({});
     setAddingUnit(false);
   };
 
   const removeUnit = (idx: number) => setUnits((prev) => prev.filter((_, i) => i !== idx));
 
-  if (loading) return (
-    <div className="flex h-64 items-center justify-center text-gray-400">
-      <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
-    </div>
-  );
-  if (!qual) return <div className="p-6 text-center text-gray-500">Qualification not found.</div>;
+  if (loading) return <PanelLoading label="Loading qualification" />;
+
+  if (loadFailed) {
+    return (
+      <div className="space-y-4">
+        <BackLink />
+        <LoadError
+          message="Couldn't load this qualification. Check your connection and retry."
+          onRetry={() => void load()}
+        />
+      </div>
+    );
+  }
+
+  if (!qual) {
+    return (
+      <div className="space-y-4">
+        <BackLink />
+        <EmptyState
+          icon={BookMarked}
+          title="Qualification not found"
+          description="This qualification may have been removed."
+          action={
+            <Link href="/qualifications" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+              Back to Qualifications
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
+  const saveMsgEl = saveMsg ? (
+    <span
+      role={saveFailed ? "alert" : "status"}
+      className={`text-sm font-semibold ${saveFailed ? "text-alert" : "text-phos"}`}
+    >
+      {saveMsg}
+    </span>
+  ) : null;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      {/* Header */}
-      <div>
-        <Link href="/qualifications" className="mb-2 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400">
-          <ChevronLeft className="h-3 w-3" /> Qualifications
-        </Link>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">{qual.title}</h1>
-        <p className="text-sm text-gray-500">{qual.awardingBody} · Level {qual.level}</p>
-      </div>
+    <div className="space-y-4">
+      <BackLink />
+      <PageHeader
+        title={qual.title}
+        subtitle={`${qual.awardingBody} · Level ${qual.level}`}
+        actions={<Lamp variant={QUAL_LAMP[qual.status] ?? "off"}>{qual.status}</Lamp>}
+      />
 
-      {/* Details form */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Details</h2>
-        {readOnly ? (
-          <dl className="space-y-3">
-            {[
-              ["Title", qual.title], ["Awarding Body", qual.awardingBody], ["Level", qual.level],
-              ["Code", qual.qualificationCode || "—"], ["Credits", qual.credits ?? "—"],
-              ["GLH", qual.glh ?? "—"], ["TQT", qual.tqt ?? "—"], ["Status", qual.status],
-            ].map(([l, v]) => (
-              <div key={String(l)} className="flex gap-3">
-                <dt className="w-32 text-xs font-semibold text-gray-500 dark:text-gray-400">{l}</dt>
-                <dd className="flex-1 text-sm text-gray-800 dark:text-gray-200">{String(v)}</dd>
+      {/* Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {readOnly ? (
+            <dl className="space-y-3">
+              {[
+                ["Title", qual.title],
+                ["Awarding Body", qual.awardingBody],
+                ["Level", qual.level],
+                ["Code", qual.qualificationCode || "—"],
+                ["Credits", qual.credits ?? "—"],
+                ["GLH", qual.glh ?? "—"],
+                ["TQT", qual.tqt ?? "—"],
+                ["Status", qual.status],
+              ].map(([l, v]) => (
+                <div key={String(l)} className="flex gap-3">
+                  <dt className="placard w-32 flex-shrink-0 pt-0.5">{l}</dt>
+                  <dd className="flex-1 text-sm text-ink">{String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <div className="space-y-4">
+              <Field label="Title" htmlFor="q-title">
+                <Input id="q-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Awarding Body" htmlFor="q-body">
+                  <Select id="q-body" value={awardingBody} onChange={(e) => setAwardingBody(e.target.value)}>
+                    {AWARDING_BODIES.map((b) => (
+                      <option key={b}>{b}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Level" htmlFor="q-level">
+                  <Input id="q-level" value={level} onChange={(e) => setLevel(e.target.value)} />
+                </Field>
               </div>
-            ))}
-          </dl>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="label">Title</label>
-              <input value={title} onChange={(e) => setTitle(e.target.value)} className="input-f w-full" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Awarding Body</label>
-                <select value={awardingBody} onChange={(e) => setAwardingBody(e.target.value)} className="input-f w-full">
-                  {AWARDING_BODIES.map((b) => <option key={b}>{b}</option>)}
-                </select>
+              <Field label="Qualification Code" htmlFor="q-code">
+                <Input id="q-code" value={qualCode} onChange={(e) => setQualCode(e.target.value)} />
+              </Field>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Credits" htmlFor="q-credits">
+                  <Input
+                    id="q-credits"
+                    type="number"
+                    value={credits}
+                    onChange={(e) => setCredits(e.target.value)}
+                  />
+                </Field>
+                <Field label="GLH" htmlFor="q-glh">
+                  <Input id="q-glh" type="number" value={glh} onChange={(e) => setGlh(e.target.value)} />
+                </Field>
+                <Field label="TQT" htmlFor="q-tqt">
+                  <Input id="q-tqt" type="number" value={tqt} onChange={(e) => setTqt(e.target.value)} />
+                </Field>
               </div>
-              <div>
-                <label className="label">Level</label>
-                <input value={level} onChange={(e) => setLevel(e.target.value)} className="input-f w-full" />
+              <Field label="Status" htmlFor="q-status">
+                <Select id="q-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option>Active</option>
+                  <option>Inactive</option>
+                  <option>Pending Approval</option>
+                </Select>
+              </Field>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="solid" onClick={() => void save()} disabled={saving}>
+                  {saving ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" aria-hidden />}
+                  Save
+                </Button>
+                {saveMsgEl}
               </div>
             </div>
-            <div>
-              <label className="label">Qualification Code</label>
-              <input value={qualCode} onChange={(e) => setQualCode(e.target.value)} className="input-f w-full" />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div><label className="label">Credits</label><input type="number" value={credits} onChange={(e) => setCredits(e.target.value)} className="input-f w-full" /></div>
-              <div><label className="label">GLH</label><input type="number" value={glh} onChange={(e) => setGlh(e.target.value)} className="input-f w-full" /></div>
-              <div><label className="label">TQT</label><input type="number" value={tqt} onChange={(e) => setTqt(e.target.value)} className="input-f w-full" /></div>
-            </div>
-            <div>
-              <label className="label">Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className="input-f w-full">
-                <option>Active</option><option>Inactive</option><option>Pending Approval</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-[#2E7D32] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
-              </button>
-              {saveMsg && <span className={`text-sm font-medium ${saveMsg === "Saved." ? "text-green-600" : "text-red-600"}`}>{saveMsg}</span>}
-            </div>
-          </div>
-        )}
-      </section>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Units */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            Units ({units.length})
-          </h2>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <CardTitle>Units</CardTitle>
+            <Lamp variant="off">{units.length}</Lamp>
+          </div>
           {!readOnly && !addingUnit && (
-            <button
-              onClick={() => setAddingUnit(true)}
-              className="flex items-center gap-1 text-xs font-semibold text-[#2E7D32] hover:underline dark:text-green-400"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Unit
-            </button>
+            <Button variant="ghost" size="sm" onClick={() => setAddingUnit(true)}>
+              <Plus className="h-3.5 w-3.5" aria-hidden /> Add Unit
+            </Button>
           )}
-        </div>
+        </CardHeader>
+        <CardContent>
+          {units.length === 0 && !addingUnit && (
+            <p className="text-sm text-faint">No units added yet.</p>
+          )}
 
-        {units.length === 0 && !addingUnit && (
-          <p className="text-sm text-gray-400">No units added yet.</p>
-        )}
-
-        <div className="space-y-2">
-          {units.map((u, idx) => (
-            <div key={idx} className="flex items-start gap-3 rounded-lg border border-gray-100 px-4 py-3 dark:border-white/10">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {u.unitCode} — {u.unitTitle}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {[u.level && `Level ${u.level}`, u.credits && `${u.credits} credits`, u.glh && `${u.glh} GLH`, u.isMandatory ? "Mandatory" : "Optional"].filter(Boolean).join(" · ")}
-                </p>
+          <div className="space-y-2">
+            {units.map((u, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-3 rounded-ctl border border-bezel px-4 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-ink">
+                    {u.unitCode} — {u.unitTitle}
+                  </p>
+                  <p className="text-xs text-faint">
+                    {[
+                      u.level && `Level ${u.level}`,
+                      u.credits && `${u.credits} credits`,
+                      u.glh && `${u.glh} GLH`,
+                      u.isMandatory ? "Mandatory" : "Optional",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </div>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    onClick={() => setRemoveIdx(idx)}
+                    aria-label={`Remove unit ${u.unitCode}`}
+                    className="flex-shrink-0 hover:text-alert"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                )}
               </div>
-              {!readOnly && (
-                <button onClick={() => removeUnit(idx)} className="flex-shrink-0 rounded p-1 text-gray-300 hover:text-red-500 dark:hover:text-red-400">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {addingUnit && (
-          <div className="mt-3 rounded-xl border border-[#2E7D32]/40 bg-green-50/50 p-4 space-y-3 dark:bg-green-950/20">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Unit Code *</label>
-                <input value={newUnit.unitCode} onChange={(e) => setNewUnit((u) => ({ ...u, unitCode: e.target.value }))} className="input-f w-full" placeholder="e.g. U01" />
-              </div>
-              <div>
-                <label className="label">Level</label>
-                <input value={newUnit.level} onChange={(e) => setNewUnit((u) => ({ ...u, level: e.target.value }))} className="input-f w-full" />
-              </div>
-            </div>
-            <div>
-              <label className="label">Unit Title *</label>
-              <input value={newUnit.unitTitle} onChange={(e) => setNewUnit((u) => ({ ...u, unitTitle: e.target.value }))} className="input-f w-full" placeholder="e.g. Managing People" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="label">Credits</label><input type="number" value={newUnit.credits ?? ""} onChange={(e) => setNewUnit((u) => ({ ...u, credits: e.target.value ? Number(e.target.value) : null }))} className="input-f w-full" /></div>
-              <div><label className="label">GLH</label><input type="number" value={newUnit.glh ?? ""} onChange={(e) => setNewUnit((u) => ({ ...u, glh: e.target.value ? Number(e.target.value) : null }))} className="input-f w-full" /></div>
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={newUnit.isMandatory} onChange={(e) => setNewUnit((u) => ({ ...u, isMandatory: e.target.checked }))} className="h-4 w-4 accent-[#2E7D32]" />
-              <span className="text-gray-700 dark:text-gray-300">Mandatory unit</span>
-            </label>
-            <div className="flex gap-2">
-              <button onClick={addUnit} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1B5E20]">
-                <Plus className="h-3.5 w-3.5" /> Add
-              </button>
-              <button onClick={() => { setAddingUnit(false); setNewUnit(emptyUnit()); }} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:text-gray-400">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            ))}
           </div>
-        )}
 
-        {!readOnly && units.length > 0 && !addingUnit && (
-          <div className="mt-4 flex items-center gap-3">
-            <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-[#2E7D32] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Units
-            </button>
-            {saveMsg && <span className={`text-sm font-medium ${saveMsg === "Saved." ? "text-green-600" : "text-red-600"}`}>{saveMsg}</span>}
-          </div>
-        )}
-      </section>
+          {addingUnit && (
+            <div className="mt-3 space-y-3 rounded-card border border-bezel bg-well p-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Unit Code" required htmlFor="u-code" error={unitErrors.code}>
+                  <Input
+                    id="u-code"
+                    value={newUnit.unitCode}
+                    onChange={(e) => setNewUnit((u) => ({ ...u, unitCode: e.target.value }))}
+                    placeholder="e.g. U01"
+                  />
+                </Field>
+                <Field label="Level" htmlFor="u-level">
+                  <Input
+                    id="u-level"
+                    value={newUnit.level}
+                    onChange={(e) => setNewUnit((u) => ({ ...u, level: e.target.value }))}
+                  />
+                </Field>
+              </div>
+              <Field label="Unit Title" required htmlFor="u-title" error={unitErrors.title}>
+                <Input
+                  id="u-title"
+                  value={newUnit.unitTitle}
+                  onChange={(e) => setNewUnit((u) => ({ ...u, unitTitle: e.target.value }))}
+                  placeholder="e.g. Managing People"
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Credits" htmlFor="u-credits">
+                  <Input
+                    id="u-credits"
+                    type="number"
+                    value={newUnit.credits ?? ""}
+                    onChange={(e) =>
+                      setNewUnit((u) => ({ ...u, credits: e.target.value ? Number(e.target.value) : null }))
+                    }
+                  />
+                </Field>
+                <Field label="GLH" htmlFor="u-glh">
+                  <Input
+                    id="u-glh"
+                    type="number"
+                    value={newUnit.glh ?? ""}
+                    onChange={(e) =>
+                      setNewUnit((u) => ({ ...u, glh: e.target.value ? Number(e.target.value) : null }))
+                    }
+                  />
+                </Field>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={newUnit.isMandatory}
+                  onChange={(e) => setNewUnit((u) => ({ ...u, isMandatory: e.target.checked }))}
+                  className="h-4 w-4 rounded accent-phos"
+                />
+                Mandatory unit
+              </label>
+              <div className="flex gap-2">
+                <Button variant="primary" size="sm" onClick={addUnit}>
+                  <Plus className="h-3.5 w-3.5" aria-hidden /> Add
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setAddingUnit(false);
+                    setNewUnit(emptyUnit());
+                    setUnitErrors({});
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
 
-      <style>{`.label { display:block; margin-bottom:0.25rem; font-size:0.75rem; font-weight:600; color:#4B5563; } .input-f { height:2.25rem; border-radius:0.5rem; border:1px solid #e5e7eb; background:white; padding:0 0.75rem; font-size:0.875rem; outline:none; }`}</style>
+          {!readOnly && units.length > 0 && !addingUnit && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button variant="primary" onClick={() => void save()} disabled={saving}>
+                {saving ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" aria-hidden />}
+                Save Units
+              </Button>
+              {saveMsgEl}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={removeIdx !== null}
+        onClose={() => setRemoveIdx(null)}
+        onConfirm={() => {
+          if (removeIdx !== null) removeUnit(removeIdx);
+          setRemoveIdx(null);
+        }}
+        title="Remove Unit"
+        confirmLabel="Remove"
+        message={
+          removeIdx !== null && units[removeIdx]
+            ? `Remove unit ${units[removeIdx].unitCode} — ${units[removeIdx].unitTitle}? The change applies when you save.`
+            : "Remove this unit? The change applies when you save."
+        }
+      />
     </div>
+  );
+}
+
+function BackLink() {
+  return (
+    <Link
+      href="/qualifications"
+      className="inline-flex items-center gap-1 text-xs font-medium text-dim transition-colors hover:text-ink"
+    >
+      <ChevronLeft className="h-3 w-3" aria-hidden /> Qualifications
+    </Link>
   );
 }

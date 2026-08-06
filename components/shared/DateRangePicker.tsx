@@ -31,6 +31,12 @@ function monthGrid(year: number, month: number): (Date | null)[] {
   return cells;
 }
 
+/** Shared calendar-internals styling (kept in lockstep with DatePicker). */
+const navBtn =
+  "grid h-8 w-8 place-items-center rounded-ctl text-dim transition-colors hover:bg-well hover:text-ink focus-visible:outline-none focus-visible:shadow-glow";
+const monthSelect =
+  "rounded-ctl border border-bezel-strong bg-well px-2 py-1 text-sm font-semibold text-ink focus:border-phos focus:outline-none";
+
 export default function DateRangePicker({ from, to, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
@@ -112,12 +118,12 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
     const isEdge = s === rangeFrom || s === rangeTo;
     const isToday = s === todayStr;
     if (isEdge)
-      return "bg-[#2E7D32] text-white font-bold";
+      return "bg-phos font-bold text-phos-ink";
     if (inRange)
-      return "bg-[#E8F5E9] text-[#1B5E20] dark:bg-green-900/40 dark:text-green-200";
+      return "bg-phos/15 text-phos";
     if (isToday)
-      return "ring-1 ring-inset ring-[#2E7D32] text-[#2E7D32] font-semibold dark:text-green-400";
-    return "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10";
+      return "font-semibold text-phos ring-1 ring-inset ring-phos";
+    return "text-ink hover:bg-well";
   }
 
   const cells = monthGrid(viewYear, viewMonth);
@@ -128,21 +134,25 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-[#2E7D32]/50 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
+        className="flex items-center gap-2 rounded-ctl border border-bezel-strong bg-well px-3 py-2 text-sm font-medium text-ink transition-colors hover:border-phos/60 focus:border-phos focus:outline-none focus:ring-2 focus:ring-phos/25"
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <CalendarDays className="h-4 w-4 text-[#2E7D32] dark:text-green-400" />
+        <CalendarDays className="h-4 w-4 text-phos" aria-hidden />
         <span className="whitespace-nowrap">{label}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-3.5 w-3.5 text-faint transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
       </button>
 
       {/* Popover */}
       {open && (
-        <div className="absolute left-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#122B14] sm:w-[560px]">
+        <div
+          role="dialog"
+          aria-label="Choose date range"
+          className="absolute left-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-[560px] overflow-hidden rounded-card border border-bezel bg-raised shadow-raise sm:w-[560px]"
+        >
           <div className="flex flex-col sm:flex-row">
             {/* Presets */}
-            <div className="border-b border-slate-100 p-2 dark:border-white/10 sm:w-40 sm:border-b-0 sm:border-r">
+            <div className="border-b border-bezel p-2 sm:w-40 sm:border-b-0 sm:border-r">
               <div className="grid grid-cols-3 gap-1 sm:grid-cols-1">
                 {DATE_PRESETS.filter((p) => p.value !== "custom").map((p) => {
                   const active = label === p.label;
@@ -151,10 +161,11 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
                       key={p.value}
                       type="button"
                       onClick={() => applyPreset(p.value)}
-                      className={`rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition sm:text-[13px] ${
+                      aria-pressed={active}
+                      className={`rounded-ctl px-2.5 py-1.5 text-left text-xs font-medium transition-colors sm:text-[13px] ${
                         active
-                          ? "bg-[#2E7D32] text-white"
-                          : "text-slate-600 hover:bg-[#E8F5E9] hover:text-[#1B5E20] dark:text-slate-300 dark:hover:bg-green-900/30 dark:hover:text-green-200"
+                          ? "bg-phos font-bold text-phos-ink"
+                          : "text-dim hover:bg-well hover:text-ink"
                       }`}
                     >
                       {p.label}
@@ -168,19 +179,14 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
             <div className="flex-1 p-3">
               {/* Month navigation */}
               <div className="mb-2 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={prevMonth}
-                  className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
-                  aria-label="Previous month"
-                >
+                <button type="button" onClick={prevMonth} className={navBtn} aria-label="Previous month">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <div className="flex items-center gap-2">
                   <select
                     value={viewMonth}
                     onChange={(e) => setViewMonth(Number(e.target.value))}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-800 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                    className={monthSelect}
                     aria-label="Month"
                   >
                     {MONTHS.map((mn, i) => (
@@ -190,7 +196,7 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
                   <select
                     value={viewYear}
                     onChange={(e) => setViewYear(Number(e.target.value))}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-800 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                    className={monthSelect}
                     aria-label="Year"
                   >
                     {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 8 + i).map((yy) => (
@@ -198,12 +204,7 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
                     ))}
                   </select>
                 </div>
-                <button
-                  type="button"
-                  onClick={nextMonth}
-                  className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
-                  aria-label="Next month"
-                >
+                <button type="button" onClick={nextMonth} className={navBtn} aria-label="Next month">
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -211,7 +212,7 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
               {/* Weekday header */}
               <div className="grid grid-cols-7 text-center">
                 {WEEKDAYS.map((w) => (
-                  <span key={w} className="py-1 text-[11px] font-bold uppercase text-slate-400">{w}</span>
+                  <span key={w} className="placard py-1">{w}</span>
                 ))}
               </div>
 
@@ -223,7 +224,7 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
                       key={i}
                       type="button"
                       onClick={() => clickDay(d)}
-                      className={`m-0.5 grid h-9 place-items-center rounded-lg text-sm transition ${dayClasses(d)}`}
+                      className={`readout m-0.5 grid h-9 place-items-center rounded-ctl text-sm transition-colors ${dayClasses(d)}`}
                     >
                       {d.getDate()}
                     </button>
@@ -234,19 +235,19 @@ export default function DateRangePicker({ from, to, onChange }: Props) {
               </div>
 
               {/* Hint / status row */}
-              <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-white/10">
-                <p className="text-xs text-slate-400">
+              <div className="mt-2 flex items-center justify-between border-t border-bezel pt-2">
+                <p className="text-xs text-faint" aria-live="polite">
                   {pendingStart
-                    ? <>Start: <span className="font-semibold text-[#2E7D32] dark:text-green-400">{pendingStart}</span> — now tap the end date</>
+                    ? <>Start: <span className="readout font-semibold text-phos" data-numeric>{pendingStart}</span> — now tap the end date</>
                     : "Tap a start date, then an end date"}
                 </p>
                 {(from || to || pendingStart) && (
                   <button
                     type="button"
                     onClick={() => { setPendingStart(null); onChange("", ""); setOpen(false); }}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-red-600 dark:text-slate-400 dark:hover:bg-white/10"
+                    className="flex items-center gap-1 rounded-ctl px-2 py-1 text-xs font-semibold text-dim transition-colors hover:bg-well hover:text-alert"
                   >
-                    <X className="h-3 w-3" /> Clear
+                    <X className="h-3 w-3" aria-hidden /> Clear
                   </button>
                 )}
               </div>

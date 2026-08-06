@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock, Loader2, X, MessageCircle, GraduationCap } from "lucide-react";
-import PageHeader from "@/components/shared/PageHeader";
-import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { Clock, GraduationCap, Inbox, MessageCircle, X } from "lucide-react";
 import { useSession } from "next-auth/react";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, SearchInput, Select, Textarea } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/dialog";
+import { Pagination, TableFooter, usePagination } from "@/components/ui/table";
+import { LoadError, SkeletonRows, Spinner } from "@/components/ui/feedback";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { cn } from "@/lib/utils";
 
 type EnrollmentRequest = {
   id: string;
@@ -24,11 +33,11 @@ type EnrollmentRequest = {
   createdAt: string;
 };
 
-const statusCls: Record<string, string> = {
-  Pending: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-  Approved: "bg-green-50 text-green-700 ring-1 ring-green-200",
-  Rejected: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
-  "More Info Needed": "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+const REQUEST_LAMP: Record<string, LampVariant> = {
+  Pending: "caution",
+  Approved: "ok",
+  Rejected: "alert",
+  "More Info Needed": "advisory",
 };
 
 function formatDate(s: string) {
@@ -44,8 +53,10 @@ export default function EnrollmentRequestsPage() {
 
   const [requests, setRequests] = useState<EnrollmentRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [query, setQuery] = useState("");
   const [reviewing, setReviewing] = useState<EnrollmentRequest | null>(null);
   const [reviewStatus, setReviewStatus] = useState("Approved");
   const [reviewNote, setReviewNote] = useState("");
@@ -53,13 +64,14 @@ export default function EnrollmentRequestsPage() {
 
   async function load() {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const res = await fetch("/api/enrollment-requests");
       const data = await res.json();
       if (!res.ok) throw data;
       setRequests(data.requests ?? []);
     } catch {
-      setError("Unable to load requests.");
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -83,17 +95,33 @@ export default function EnrollmentRequestsPage() {
       setReviewing(null);
       await load();
     } catch {
-      setError("Failed to update request.");
+      setError("Couldn't save the review. Check your connection and try again.");
     } finally {
       setSaving(false);
     }
   }
 
-  const pending = requests.filter((r) => r.status === "Pending");
-  const others = requests.filter((r) => r.status !== "Pending");
+  function openReview(r: EnrollmentRequest) {
+    setReviewing(r);
+    setReviewStatus("Approved");
+    setReviewNote("");
+  }
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return requests;
+    return requests.filter((r) =>
+      [r.leadName, r.leadRef, r.leadPhone, r.course, r.salesName]
+        .some((v) => (v ?? "").toLowerCase().includes(q))
+    );
+  }, [requests, query]);
+
+  const pending = filtered.filter((r) => r.status === "Pending");
+  const others = filtered.filter((r) => r.status !== "Pending");
+  const reviewed = usePagination(others, 30);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={isSales ? "My Enrollment Requests" : "Enrollment Requests"}
         subtitle={isSales
@@ -102,108 +130,144 @@ export default function EnrollmentRequestsPage() {
       />
 
       {notice && (
-        <div className="flex items-center justify-between rounded-xl border border-green-200 bg-[#E8F5E9] px-4 py-3 text-sm font-semibold text-[#2E7D32]">
+        <div role="status" className="flex items-center justify-between rounded-card border border-phos/30 bg-[var(--lamp-ok-bg)] px-4 py-3 text-sm font-semibold text-phos">
           <span>{notice}</span>
-          <button onClick={() => setNotice("")} type="button"><X className="h-4 w-4" /></button>
+          <Button variant="ghost" size="iconSm" onClick={() => setNotice("")} aria-label="Dismiss message">
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       )}
       {error && (
-        <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
+        <div role="alert" className="flex items-center justify-between rounded-card border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-3 text-sm font-semibold text-alert">
           <span>{error}</span>
-          <button onClick={() => setError("")} type="button"><X className="h-4 w-4" /></button>
+          <Button variant="ghost" size="iconSm" onClick={() => setError("")} aria-label="Dismiss error">
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       )}
 
-      {/* Review modal (admin/manager only) */}
-      {reviewing && !isSales && (
-        <>
-          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={() => setReviewing(null)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-              <div className="border-b border-slate-200 bg-[#0D1F0E] px-6 py-5 rounded-t-2xl text-white">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold">Review Request — {reviewing.leadName}</h2>
-                  <button onClick={() => setReviewing(null)} className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20" type="button">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              <form onSubmit={submitReview} className="p-6 space-y-4">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-1 text-sm">
-                  <p><span className="font-bold text-slate-600">Lead:</span> <span className="text-slate-900">{reviewing.leadName}</span></p>
-                  <p><span className="font-bold text-slate-600">Phone:</span> <span className="text-slate-900">{reviewing.leadPhone}</span></p>
-                  <p><span className="font-bold text-slate-600">Course:</span> <span className="text-slate-900">{reviewing.course}</span></p>
-                  <p><span className="font-bold text-slate-600">Sales Rep:</span> <span className="text-slate-900">{reviewing.salesName}</span></p>
-                  {reviewing.notes && <p><span className="font-bold text-slate-600">Notes:</span> <span className="text-slate-900">{reviewing.notes}</span></p>}
-                  {reviewing.expectedStartDate && <p><span className="font-bold text-slate-600">Expected Start:</span> <span className="text-slate-900">{formatDate(reviewing.expectedStartDate)}</span></p>}
-                </div>
-                <label className="block">
-                  <span className="text-sm font-bold text-slate-700">Decision</span>
-                  <select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}
-                    className="mt-1.5 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]">
-                    <option value="Approved">Approve — Convert to Enrollment</option>
-                    <option value="Rejected">Reject</option>
-                    <option value="More Info Needed">Request More Info</option>
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="text-sm font-bold text-slate-700">Note to Sales Rep</span>
-                  <textarea value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} rows={3}
-                    placeholder="Reason, next steps, or instructions..."
-                    className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]" />
-                </label>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setReviewing(null)}
-                    className="flex-1 h-10 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-                  <button type="submit" disabled={saving}
-                    className="flex-1 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                    {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Submit Review
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </>
-      )}
+      {/* Review dialog (admin/manager only) */}
+      <Dialog
+        open={Boolean(reviewing) && !isSales}
+        onClose={() => setReviewing(null)}
+        title={reviewing ? `Review Request — ${reviewing.leadName}` : "Review Request"}
+        guarded
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setReviewing(null)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="solid" size="sm" type="submit" form="review-form" disabled={saving}>
+              {saving && <Spinner className="h-3.5 w-3.5" />}
+              Submit Review
+            </Button>
+          </>
+        }
+      >
+        {reviewing && (
+          <form id="review-form" onSubmit={submitReview} className="space-y-4">
+            <dl className="space-y-1 rounded-ctl border border-bezel bg-well p-4 text-sm">
+              <div className="flex gap-2"><dt className="font-bold text-dim">Lead:</dt><dd className="text-ink">{reviewing.leadName}</dd></div>
+              <div className="flex gap-2"><dt className="font-bold text-dim">Phone:</dt><dd className="readout text-ink" data-numeric>{reviewing.leadPhone}</dd></div>
+              <div className="flex gap-2"><dt className="font-bold text-dim">Course:</dt><dd className="text-ink">{reviewing.course}</dd></div>
+              <div className="flex gap-2"><dt className="font-bold text-dim">Sales Rep:</dt><dd className="text-ink">{reviewing.salesName}</dd></div>
+              {reviewing.notes && <div className="flex gap-2"><dt className="font-bold text-dim">Notes:</dt><dd className="text-ink">{reviewing.notes}</dd></div>}
+              {reviewing.expectedStartDate && <div className="flex gap-2"><dt className="font-bold text-dim">Expected Start:</dt><dd className="text-ink">{formatDate(reviewing.expectedStartDate)}</dd></div>}
+            </dl>
+            <Field label="Decision" htmlFor="review-decision">
+              <Select id="review-decision" value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}>
+                <option value="Approved">Approve — Convert to Enrollment</option>
+                <option value="Rejected">Reject</option>
+                <option value="More Info Needed">Request More Info</option>
+              </Select>
+            </Field>
+            <Field label="Note to Sales Rep" htmlFor="review-note" help="Reason, next steps, or instructions.">
+              <Textarea id="review-note" rows={3} value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} />
+            </Field>
+          </form>
+        )}
+      </Dialog>
 
-      {loading ? (
-        <div className="flex min-h-[260px] items-center justify-center gap-3 text-slate-500">
-          <Loader2 className="h-6 w-6 animate-spin text-[#2E7D32]" />
-          <span className="text-sm font-semibold">Loading...</span>
-        </div>
+      {loadFailed ? (
+        <LoadError message="Couldn't load enrollment requests. Check your connection and retry." onRetry={() => void load()} />
+      ) : loading ? (
+        <Card>
+          <SkeletonRows rows={6} cols={4} />
+        </Card>
       ) : (
-        <div className="space-y-5">
-          {/* Pending */}
-          {pending.length > 0 && (
-            <section className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
-              <div className="border-b border-amber-100 bg-amber-50 px-6 py-3">
-                <h2 className="text-sm font-bold text-amber-800">Pending ({pending.length})</h2>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {pending.map((r) => <RequestRow key={r.id} r={r} isSales={isSales} onReview={() => { setReviewing(r); setReviewStatus("Approved"); setReviewNote(""); }} />)}
-              </div>
-            </section>
+        <div className="space-y-4">
+          {requests.length > 0 && (
+            <SearchInput
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name, phone, course, sales rep…"
+              aria-label="Search enrollment requests"
+              className="max-w-sm"
+            />
           )}
 
-          {/* Reviewed */}
+          {pending.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Pending
+                  <Lamp variant="caution">{pending.length}</Lamp>
+                </CardTitle>
+              </CardHeader>
+              <div className="divide-y divide-bezel/60">
+                {pending.map((r) => (
+                  <RequestRow key={r.id} r={r} isSales={isSales} onReview={() => openReview(r)} />
+                ))}
+              </div>
+            </Card>
+          )}
+
           {others.length > 0 && (
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 bg-slate-50 px-6 py-3">
-                <h2 className="text-sm font-bold text-slate-700">Reviewed ({others.length})</h2>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Reviewed
+                  <Lamp variant="off">{others.length}</Lamp>
+                </CardTitle>
+              </CardHeader>
+              <div className="divide-y divide-bezel/60">
+                {reviewed.slice.map((r) => (
+                  <RequestRow key={r.id} r={r} isSales={isSales} onReview={() => openReview(r)} />
+                ))}
               </div>
-              <div className="divide-y divide-slate-100">
-                {others.map((r) => <RequestRow key={r.id} r={r} isSales={isSales} onReview={() => { setReviewing(r); setReviewStatus("Approved"); setReviewNote(""); }} />)}
-              </div>
-            </section>
+              <TableFooter>
+                <Pagination
+                  page={reviewed.page}
+                  pages={reviewed.pages}
+                  setPage={reviewed.setPage}
+                  total={reviewed.total}
+                  shown={reviewed.slice.length}
+                />
+              </TableFooter>
+            </Card>
           )}
 
           {requests.length === 0 && (
-            <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-center">
-              <CheckCircle2 className="h-8 w-8 text-slate-300" />
-              <p className="text-sm font-semibold text-slate-600">No enrollment requests yet.</p>
-              {isSales && <p className="text-xs text-slate-400">Use the "Request Enrollment" button on a lead to submit a request.</p>}
-            </div>
+            <Card>
+              <EmptyState
+                icon={Inbox}
+                title="No enrollment requests yet"
+                description={isSales
+                  ? 'Use the "Request Enrollment" button on a lead to submit a request.'
+                  : "Requests submitted by Sales staff will appear here for review."}
+              />
+            </Card>
+          )}
+
+          {requests.length > 0 && filtered.length === 0 && (
+            <Card>
+              <EmptyState
+                icon={Inbox}
+                title="No requests match your search"
+                description="Try a different name, phone, or course."
+                action={<Button variant="secondary" size="sm" onClick={() => setQuery("")}>Clear Search</Button>}
+              />
+            </Card>
           )}
         </div>
       )}
@@ -214,46 +278,57 @@ export default function EnrollmentRequestsPage() {
 function RequestRow({ r, isSales, onReview }: { r: EnrollmentRequest; isSales: boolean; onReview: () => void }) {
   const waUrl = r.leadPhone ? (buildWhatsAppUrl(r.leadPhone) ?? "#") : null;
   return (
-    <div className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-bold text-slate-900">{r.leadName}</p>
-          {r.leadRef && <span className="font-mono text-xs text-slate-400">{r.leadRef}</span>}
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${statusCls[r.status] ?? "bg-slate-100 text-slate-600"}`}>{r.status}</span>
+          <p className="font-bold text-ink">{r.leadName}</p>
+          {r.leadRef && <span className="readout text-xs text-faint" data-numeric>{r.leadRef}</span>}
+          <Lamp variant={REQUEST_LAMP[r.status] ?? "off"}>{r.status}</Lamp>
         </div>
-        <p className="text-sm text-slate-600">{r.course}</p>
-        <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-          {!isSales && <span>Sales: <strong className="text-slate-700">{r.salesName}</strong></span>}
+        <p className="text-sm text-dim">{r.course}</p>
+        <div className="flex flex-wrap gap-3 text-xs text-faint">
+          {!isSales && <span>Sales: <strong className="text-dim">{r.salesName}</strong></span>}
           <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {new Date(r.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+            <Clock className="h-3 w-3" aria-hidden />
+            {formatDate(r.createdAt)}
           </span>
           {waUrl && (
-            <a href={waUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[#2E7D32] hover:underline">
-              <MessageCircle className="h-3 w-3" />{r.leadPhone}
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-phos hover:underline"
+              aria-label={`WhatsApp ${r.leadName}`}
+            >
+              <MessageCircle className="h-3 w-3" aria-hidden />
+              <span className="readout" data-numeric>{r.leadPhone}</span>
             </a>
           )}
         </div>
-        {r.notes && <p className="text-xs text-slate-400 italic">"{r.notes.slice(0, 120)}{r.notes.length > 120 ? "…" : ""}"</p>}
+        {r.notes && (
+          <p className="truncate text-xs italic text-faint" title={r.notes}>
+            "{r.notes.slice(0, 120)}{r.notes.length > 120 ? "…" : ""}"
+          </p>
+        )}
         {r.reviewNote && (
-          <p className="text-xs text-slate-500">
-            <span className="font-bold text-slate-600">Admin note:</span> {r.reviewNote}
-            {r.reviewedBy && <span className="ml-1 text-slate-400">— {r.reviewedBy}</span>}
+          <p className="text-xs text-dim">
+            <span className="font-bold">Admin note:</span> {r.reviewNote}
+            {r.reviewedBy && <span className="ml-1 text-faint">— {r.reviewedBy}</span>}
           </p>
         )}
       </div>
       <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
         {!isSales && r.status === "Pending" && (
-          <button onClick={onReview} type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#2E7D32] bg-[#E8F5E9] px-4 text-sm font-bold text-[#2E7D32] transition hover:bg-green-100">
+          <Button variant="primary" size="sm" onClick={onReview}>
             Review
-          </button>
+          </Button>
         )}
         {!isSales && r.status === "Approved" && (
           <Link
             href={`/enrollments?name=${encodeURIComponent(r.leadName)}&phone=${encodeURIComponent(r.leadPhone)}&course=${encodeURIComponent(r.course)}`}
-            className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-sm font-bold text-white transition hover:bg-[#1B5E20]">
-            <GraduationCap className="h-4 w-4" />
+            className={cn(buttonVariants({ variant: "primary", size: "sm" }))}
+          >
+            <GraduationCap className="h-4 w-4" aria-hidden />
             Convert to Enrollment
           </Link>
         )}

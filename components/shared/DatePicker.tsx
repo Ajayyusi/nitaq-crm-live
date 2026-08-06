@@ -41,6 +41,12 @@ function displayLabel(iso: string): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** Shared calendar-internals styling (kept in lockstep with DateRangePicker). */
+const navBtn =
+  "grid h-8 w-8 place-items-center rounded-ctl text-dim transition-colors hover:bg-well hover:text-ink focus-visible:outline-none focus-visible:shadow-glow";
+const monthSelect =
+  "rounded-ctl border border-bezel-strong bg-well px-1.5 py-1 text-sm font-semibold text-ink focus:border-phos focus:outline-none";
+
 export default function DatePicker({
   value, onChange, placeholder = "Select date", required, min, max, className = "", compact,
 }: Props) {
@@ -101,54 +107,52 @@ export default function DatePicker({
   const cells = monthGrid(viewYear, viewMonth);
 
   const triggerBase = compact
-    ? "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-white/5"
-    : "flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5";
+    ? "flex items-center gap-1.5 rounded-ctl border border-bezel-strong bg-well px-2 py-1 text-xs"
+    : "flex w-full items-center gap-2 rounded-ctl border border-bezel-strong bg-well px-3 py-2 text-sm";
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`${triggerBase} text-left transition focus:outline-none focus:ring-2 focus:ring-[#2E7D32] hover:border-[#2E7D32]/50 ${className}`}
+        className={`${triggerBase} text-left transition-colors hover:border-phos/60 focus:border-phos focus:outline-none focus:ring-2 focus:ring-phos/25 ${value ? "pr-7" : ""} ${className}`}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <CalendarDays className={`${compact ? "h-3.5 w-3.5" : "h-4 w-4"} flex-shrink-0 text-[#2E7D32] dark:text-green-400`} />
+        <CalendarDays className={`${compact ? "h-3.5 w-3.5" : "h-4 w-4"} flex-shrink-0 text-phos`} aria-hidden />
         {value ? (
-          <span className="flex-1 truncate text-slate-900 dark:text-slate-100">{displayLabel(value)}</span>
+          <span className="flex-1 truncate text-ink">{displayLabel(value)}</span>
         ) : (
-          <span className="flex-1 truncate text-slate-400">{placeholder}{required ? " *" : ""}</span>
-        )}
-        {value && (
-          <span
-            role="button"
-            tabIndex={-1}
-            onClick={(e) => { e.stopPropagation(); onChange(""); }}
-            className="grid h-4 w-4 flex-shrink-0 place-items-center rounded-full text-slate-300 hover:bg-slate-100 hover:text-red-500 dark:hover:bg-white/10"
-            aria-label="Clear date"
-          >
-            <X className="h-3 w-3" />
-          </span>
+          <span className="flex-1 truncate text-faint">{placeholder}{required ? " *" : ""}</span>
         )}
       </button>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-ctl text-faint transition-colors hover:bg-well hover:text-alert focus-visible:outline-none focus-visible:shadow-glow"
+          aria-label="Clear date"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
 
       {open && (
-        <div className="absolute left-0 z-50 mt-2 w-[290px] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#122B14]">
+        <div
+          role="dialog"
+          aria-label="Choose date"
+          className="absolute left-0 z-50 mt-2 w-[290px] rounded-card border border-bezel bg-raised p-3 shadow-raise"
+        >
           {/* Month navigation */}
           <div className="mb-2 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={prevMonth}
-              className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
-              aria-label="Previous month"
-            >
+            <button type="button" onClick={prevMonth} className={navBtn} aria-label="Previous month">
               <ChevronLeft className="h-4 w-4" />
             </button>
             <div className="flex items-center gap-1.5">
               <select
                 value={viewMonth}
                 onChange={(e) => setViewMonth(Number(e.target.value))}
-                className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-sm font-semibold text-slate-800 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                className={monthSelect}
                 aria-label="Month"
               >
                 {MONTHS.map((mn, i) => (
@@ -158,7 +162,7 @@ export default function DatePicker({
               <select
                 value={viewYear}
                 onChange={(e) => setViewYear(Number(e.target.value))}
-                className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-sm font-semibold text-slate-800 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                className={monthSelect}
                 aria-label="Year"
               >
                 {Array.from({ length: 41 }, (_, i) => new Date().getFullYear() - 30 + i).map((yy) => (
@@ -166,12 +170,7 @@ export default function DatePicker({
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              onClick={nextMonth}
-              className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
-              aria-label="Next month"
-            >
+            <button type="button" onClick={nextMonth} className={navBtn} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -179,7 +178,7 @@ export default function DatePicker({
           {/* Weekday header */}
           <div className="grid grid-cols-7 text-center">
             {WEEKDAYS.map((w) => (
-              <span key={w} className="py-1 text-[11px] font-bold uppercase text-slate-400">{w}</span>
+              <span key={w} className="placard py-1">{w}</span>
             ))}
           </div>
 
@@ -197,14 +196,16 @@ export default function DatePicker({
                   type="button"
                   onClick={() => pick(d)}
                   disabled={isDisabled}
-                  className={`m-0.5 grid h-9 place-items-center rounded-lg text-sm transition ${
+                  aria-label={displayLabel(s)}
+                  aria-current={isSelected ? "date" : undefined}
+                  className={`readout m-0.5 grid h-9 place-items-center rounded-ctl text-sm transition-colors ${
                     isSelected
-                      ? "bg-[#2E7D32] font-bold text-white"
+                      ? "bg-phos font-bold text-phos-ink"
                       : isDisabled
-                        ? "cursor-not-allowed text-slate-300 dark:text-slate-600"
+                        ? "cursor-not-allowed text-faint opacity-40"
                         : isToday
-                          ? "font-semibold text-[#2E7D32] ring-1 ring-inset ring-[#2E7D32] dark:text-green-400"
-                          : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
+                          ? "font-semibold text-phos ring-1 ring-inset ring-phos"
+                          : "text-ink hover:bg-well"
                   }`}
                 >
                   {d.getDate()}
@@ -214,11 +215,11 @@ export default function DatePicker({
           </div>
 
           {/* Footer */}
-          <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-white/10">
+          <div className="mt-2 flex items-center justify-between border-t border-bezel pt-2">
             <button
               type="button"
               onClick={() => { const t = fmt(new Date()); if (!disabled(t)) { onChange(t); setOpen(false); } }}
-              className="rounded-lg px-2 py-1 text-xs font-semibold text-[#2E7D32] hover:bg-[#E8F5E9] dark:text-green-400 dark:hover:bg-green-900/30"
+              className="rounded-ctl px-2 py-1 text-xs font-bold text-phos transition-colors hover:bg-well"
             >
               Today
             </button>
@@ -226,7 +227,7 @@ export default function DatePicker({
               <button
                 type="button"
                 onClick={() => { onChange(""); setOpen(false); }}
-                className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-red-600 dark:text-slate-400 dark:hover:bg-white/10"
+                className="rounded-ctl px-2 py-1 text-xs font-semibold text-dim transition-colors hover:bg-well hover:text-alert"
               >
                 Clear
               </button>

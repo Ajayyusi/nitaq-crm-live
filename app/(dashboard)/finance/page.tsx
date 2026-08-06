@@ -30,15 +30,22 @@ async function accrualRevenue(from?: string, to?: string): Promise<number> {
   ]);
   return Math.round(((rows[0]?.credit ?? 0) - (rows[0]?.debit ?? 0)) * 100) / 100;
 }
-import { CreditCard, Receipt, TrendingDown, TrendingUp, ArrowRight, BarChart3, AlertTriangle, Users } from "lucide-react";
+import { CreditCard, Receipt, ArrowRight, BarChart3 } from "lucide-react";
 import { RevenueExpensesChart, CourseRevenuePieChart } from "@/components/finance/FinanceCharts";
 import UrlDateFilter from "@/components/shared/UrlDateFilter";
 import { buildDateFilter, describeRange } from "@/lib/dateRange";
+import PageHeader from "@/components/shared/PageHeader";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Instrument, InstrumentRow } from "@/components/ui/instrument";
+import { Lamp } from "@/components/ui/lamp";
+import { LoadError } from "@/components/ui/feedback";
 
 const fmt = (n: number) =>
   "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const PIE_COLOR_VARS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
 async function getFinanceData(from: string, to: string) {
   try {
@@ -189,331 +196,308 @@ export default async function FinancePage({
 
   if (!data) {
     return (
-      <div className="p-8">
-        <h1 className="text-2xl font-bold text-[#0D1F0E]">Finance</h1>
-        <p className="mt-2 text-sm text-rose-600">Could not connect to database.</p>
+      <div>
+        <PageHeader title="Finance" subtitle="Revenue, expenses, and financial performance" />
+        <LoadError message="Couldn't load finance data. Refresh the page, or contact your administrator if it keeps failing." />
       </div>
     );
   }
 
-  const kpis = [
+  const maxExpense = Math.max(...data.expensesByCategory.map((e) => e.total), 1);
+
+  const modules = [
     {
-      icon: TrendingUp,
-      label: isFiltered ? `Revenue (${periodLabel})` : "Total Revenue",
-      value: fmt(data.periodRevenue),
-      sub: isFiltered ? "Received in period" : "All received payments",
-      color: "#2E7D32",
-    },
-    {
-      icon: TrendingDown,
-      label: isFiltered ? `Expenses (${periodLabel})` : "Total Expenses",
-      value: fmt(data.periodExpenses),
-      sub: isFiltered ? "Costs in period" : "All time",
-      color: "#EF5350",
-    },
-    {
-      icon: BarChart3,
-      label: isFiltered ? `Net (${periodLabel})` : "Net Income",
-      value: fmt(data.periodNet),
-      sub: "Revenue minus expenses",
-      color: data.periodNet >= 0 ? "#2E7D32" : "#EF5350",
-    },
-    {
+      href: "/payments",
       icon: CreditCard,
-      label: "Pending / Overdue",
-      value: fmt(data.totalPending),
-      sub: "Not yet collected (all time)",
-      color: "#F59E0B",
+      title: "Receipts",
+      desc: "Student receipts, instalments and dues",
     },
     {
-      icon: TrendingUp,
-      label: "All-Time Revenue",
-      value: fmt(data.allTimeRevenue),
-      sub: "Total received ever",
-      color: "#2196F3",
+      href: "/expenses",
+      icon: Receipt,
+      title: "Expenses",
+      desc: "Rent, salaries, marketing, utilities",
+    },
+    {
+      href: "/reports",
+      icon: BarChart3,
+      title: "Full Reports",
+      desc: "Leads, enrollments, revenue analytics",
     },
   ];
 
-  const maxExpense = Math.max(...data.expensesByCategory.map((e) => e.total), 1);
-
   return (
-    <div className="space-y-7">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">Business</p>
-          <h1 className="mt-1 text-3xl font-bold text-[#0D1F0E]">Finance</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {isFiltered ? `Filtered: ${periodLabel}` : "Revenue, expenses, and financial performance"}
-          </p>
-        </div>
-        <Suspense fallback={null}>
-          <UrlDateFilter />
-        </Suspense>
-      </div>
+    <div>
+      <PageHeader
+        title="Finance"
+        subtitle={isFiltered ? `Filtered: ${periodLabel}` : "Revenue, expenses, and financial performance"}
+        actions={
+          <Suspense fallback={null}>
+            <UrlDateFilter />
+          </Suspense>
+        }
+      />
 
-      {/* KPI cards */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {kpis.map((kpi) => {
-          const Icon = kpi.icon;
-          return (
-            <div
-              key={kpi.label}
-              className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <div
-                className="absolute inset-x-0 top-0 h-[3px] rounded-t-2xl"
-                style={{ background: kpi.color }}
-              />
-              <div
-                className="mb-3 grid h-10 w-10 place-items-center rounded-xl"
-                style={{ background: kpi.color + "15", color: kpi.color }}
+      <div className="space-y-5">
+        {/* Instrument row */}
+        <InstrumentRow className="md:grid-cols-3 xl:grid-cols-5">
+          <Instrument
+            label={isFiltered ? `Revenue (${periodLabel})` : "Total Revenue"}
+            value={fmt(data.periodRevenue)}
+            sub={isFiltered ? "Recognised in period" : "All recognised revenue"}
+            tone="phos"
+          />
+          <Instrument
+            label={isFiltered ? `Expenses (${periodLabel})` : "Total Expenses"}
+            value={fmt(data.periodExpenses)}
+            sub={isFiltered ? "Costs in period" : "All time"}
+          />
+          <Instrument
+            label={isFiltered ? `Net (${periodLabel})` : "Net Income"}
+            value={fmt(data.periodNet)}
+            sub="Revenue minus expenses"
+            tone={data.periodNet >= 0 ? "phos" : "alert"}
+          />
+          <Instrument
+            label="Pending / Overdue"
+            value={fmt(data.totalPending)}
+            sub="Not yet collected (all time)"
+            tone="caution"
+            href="/payments?status=Overdue"
+          />
+          <Instrument
+            label="All-Time Revenue"
+            value={fmt(data.allTimeRevenue)}
+            sub="Total recognised ever"
+          />
+        </InstrumentRow>
+
+        {/* Charts row */}
+        <section className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Revenue vs Expenses</CardTitle>
+                <CardDescription>Last 6 months, cash received vs costs</CardDescription>
+              </div>
+              <div className="flex gap-4 text-xs text-dim">
+                <span className="flex items-center gap-1.5">
+                  <span aria-hidden className="h-2.5 w-2.5 rounded-lamp" style={{ background: "var(--chart-1)" }} />
+                  Revenue
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span aria-hidden className="h-2.5 w-2.5 rounded-lamp" style={{ background: "var(--chart-5)" }} />
+                  Expenses
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {data.monthlyChart.every((m) => m.revenue === 0 && m.expenses === 0) ? (
+                <div className="flex h-52 items-center justify-center rounded-ctl bg-well text-sm text-faint">
+                  No financial activity recorded in the last six months.
+                </div>
+              ) : (
+                <RevenueExpensesChart data={data.monthlyChart} />
+              )}
+              <div className="mt-4 flex items-center justify-between rounded-ctl bg-well px-4 py-3">
+                <span className="placard">{isFiltered ? `Net (${periodLabel})` : "Net This Period"}</span>
+                <span
+                  className={`readout text-lg font-bold ${data.periodNet >= 0 ? "text-phos" : "text-alert"}`}
+                  data-numeric
+                >
+                  {data.periodNet >= 0 ? "+" : ""}{fmt(data.periodNet)}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Revenue by Course</CardTitle>
+                <CardDescription>{isFiltered ? periodLabel : "All received payments"}</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {data.courseRevenue.length === 0 ? (
+                <div className="flex h-48 items-center justify-center rounded-ctl bg-well text-sm text-faint">
+                  No receipts recorded yet
+                </div>
+              ) : (
+                <>
+                  <CourseRevenuePieChart data={data.courseRevenue} />
+                  <ul className="mt-3 space-y-1.5">
+                    {data.courseRevenue.map((c, i) => (
+                      <li key={c.name} className="flex items-center justify-between text-xs">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            aria-hidden
+                            className="h-2 w-2 flex-shrink-0 rounded-lamp"
+                            style={{ background: PIE_COLOR_VARS[i % PIE_COLOR_VARS.length] }}
+                          />
+                          <span className="truncate text-dim" title={c.name}>{c.name}</span>
+                        </span>
+                        <span className="readout ml-2 flex-shrink-0 text-ink" data-numeric>{fmt(c.value)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Outstanding balances + Overdue receipts */}
+        <section className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Outstanding Balances</CardTitle>
+                <CardDescription>Active enrollments with unpaid fees, largest first</CardDescription>
+              </div>
+              <Link
+                href="/enrollments"
+                className="rounded-ctl border border-bezel-strong px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-ink transition-colors hover:bg-well"
               >
-                <Icon className="h-5 w-5" />
+                All Enrollments
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {data.studentsWithBalance.length === 0 ? (
+                <p className="text-sm text-dim">No outstanding balances — all fees collected.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {data.studentsWithBalance.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between rounded-ctl border border-bezel bg-well px-4 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">{e.fullName}</p>
+                        <p className="truncate text-xs text-faint">{e.course || "—"}</p>
+                      </div>
+                      <span className="readout ml-3 flex-shrink-0 text-sm font-bold text-caution" data-numeric>
+                        {fmt(e.balanceDue)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Overdue Receipts
+                  {data.overduePayments.length > 0 && (
+                    <Lamp variant="alert">{data.overduePayments.length} overdue</Lamp>
+                  )}
+                </CardTitle>
+                <CardDescription>Receipts past their due date</CardDescription>
               </div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{kpi.label}</p>
-              <p className="mt-1.5 text-2xl font-bold" style={{ color: kpi.color }}>
-                {kpi.value}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">{kpi.sub}</p>
-            </div>
-          );
-        })}
-      </section>
+              <Link
+                href="/payments?status=Overdue"
+                className="rounded-ctl border border-bezel-strong px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-ink transition-colors hover:bg-well"
+              >
+                View All
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {data.overduePayments.length === 0 ? (
+                <p className="text-sm text-dim">No overdue receipts.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {data.overduePayments.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">{p.studentName}</p>
+                        <p className="truncate text-xs text-faint">{p.course || p.paymentType}</p>
+                      </div>
+                      <div className="ml-3 flex-shrink-0 text-right">
+                        <p className="readout text-sm font-bold text-alert" data-numeric>{fmt(p.amount)}</p>
+                        {p.dueDate && <p className="text-xs text-faint">Due {p.dueDate}</p>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </section>
 
-      {/* Charts row */}
-      <section className="grid gap-5 xl:grid-cols-[1.4fr_0.6fr]">
-        {/* Revenue vs Expenses bar chart */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex items-start justify-between">
-            <div>
-              <h2 className="text-base font-bold text-[#0D1F0E]">Revenue vs Expenses</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Last 6 months</p>
-            </div>
-            <div className="flex gap-4 text-xs">
-              <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded-sm bg-[#2E7D32]" /><span className="text-slate-600">Revenue</span></div>
-              <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded-sm bg-rose-400" /><span className="text-slate-600">Expenses</span></div>
-            </div>
-          </div>
-          {data.monthlyChart.every((m) => m.revenue === 0 && m.expenses === 0) ? (
-            <div className="flex h-52 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
-              No financial data yet. Run the seed or add payments/expenses.
-            </div>
-          ) : (
-            <RevenueExpensesChart data={data.monthlyChart} />
-          )}
-          {/* Monthly net row */}
-          <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-            <span className="text-sm font-semibold text-slate-600">
-              {isFiltered ? `Net (${periodLabel})` : "Net this month"}
-            </span>
-            <span className={`text-lg font-bold ${data.periodNet >= 0 ? "text-[#2E7D32]" : "text-rose-600"}`}>
-              {data.periodNet >= 0 ? "+" : ""}{fmt(data.periodNet)}
-            </span>
-          </div>
-        </div>
-
-        {/* Course revenue pie chart */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-base font-bold text-[#0D1F0E]">Revenue by Course</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              {isFiltered ? periodLabel : "All received payments"}
-            </p>
-          </div>
-          {data.courseRevenue.length === 0 ? (
-            <div className="flex h-48 items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-400">
-              No data yet
-            </div>
-          ) : (
-            <>
-              <CourseRevenuePieChart data={data.courseRevenue} />
-              <div className="mt-3 space-y-1.5">
-                {data.courseRevenue.slice(0, 4).map((c, i) => (
-                  <div key={c.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className="h-2 w-2 flex-shrink-0 rounded-full"
-                        style={{ background: ["#2E7D32", "#00897B", "#2196F3", "#7B1FA2"][i] }}
-                      />
-                      <span className="truncate text-slate-600">{c.name}</span>
-                    </div>
-                    <span className="ml-2 flex-shrink-0 font-semibold text-[#0D1F0E]">{fmt(c.value)}</span>
-                  </div>
-                ))}
+        {/* Expenses breakdown + module links */}
+        <section className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Expenses by Category</CardTitle>
+                <CardDescription>{isFiltered ? periodLabel : "All time breakdown"}</CardDescription>
               </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* Outstanding balances + Overdue alerts */}
-      <section className="grid gap-5 xl:grid-cols-2">
-        {/* Students with outstanding balance */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 text-base font-bold text-[#0D1F0E]">
-                <Users className="h-4 w-4 text-amber-500" />
-                Outstanding Balances
-              </h2>
-              <p className="mt-0.5 text-xs text-slate-500">Active enrollments with unpaid balance</p>
-            </div>
-            <Link
-              href="/enrollments"
-              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]"
-            >
-              All Enrollments
-            </Link>
-          </div>
-          {data.studentsWithBalance.length === 0 ? (
-            <p className="text-sm text-slate-400">No outstanding balances — all fees collected.</p>
-          ) : (
-            <div className="space-y-2">
-              {data.studentsWithBalance.map((e) => (
-                <div key={e.id} className="flex items-center justify-between rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[#0D1F0E]">{e.fullName}</p>
-                    <p className="truncate text-xs text-slate-500">{e.course || "—"}</p>
-                  </div>
-                  <span className="ml-3 flex-shrink-0 text-sm font-bold text-amber-600">{fmt(e.balanceDue)}</span>
+              <Link
+                href="/expenses"
+                className="rounded-ctl border border-bezel-strong px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-ink transition-colors hover:bg-well"
+              >
+                All Expenses
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {data.expensesByCategory.length === 0 ? (
+                <p className="text-sm text-dim">No expenses recorded yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {data.expensesByCategory.map((e) => {
+                    const pct = Math.round((e.total / maxExpense) * 100);
+                    return (
+                      <div key={e.category}>
+                        <div className="mb-1 flex items-baseline justify-between gap-2">
+                          <span className="text-sm text-ink">{e.category}</span>
+                          <span className="readout text-sm text-ink" data-numeric>{fmt(e.total)}</span>
+                        </div>
+                        <div
+                          role="progressbar"
+                          aria-valuenow={pct}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${e.category} share of largest category`}
+                          className="h-2 overflow-hidden rounded-sm bg-well"
+                        >
+                          <div className="h-full rounded-sm" style={{ width: `${pct}%`, background: "var(--chart-5)" }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Overdue payments */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 text-base font-bold text-[#0D1F0E]">
-                <AlertTriangle className="h-4 w-4 text-rose-500" />
-                Overdue Payments
-                {data.overduePayments.length > 0 && (
-                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-600">
-                    {data.overduePayments.length}
-                  </span>
-                )}
-              </h2>
-              <p className="mt-0.5 text-xs text-slate-500">Payments past their due date</p>
-            </div>
-            <Link
-              href="/payments?status=Overdue"
-              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-rose-300 hover:bg-rose-50"
-            >
-              View All
-            </Link>
-          </div>
-          {data.overduePayments.length === 0 ? (
-            <p className="text-sm text-slate-400">No overdue payments.</p>
-          ) : (
-            <div className="space-y-2">
-              {data.overduePayments.map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded-xl bg-rose-50 border border-rose-100 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[#0D1F0E]">{p.studentName}</p>
-                    <p className="truncate text-xs text-slate-500">{p.course || p.paymentType}</p>
-                  </div>
-                  <div className="ml-3 flex-shrink-0 text-right">
-                    <p className="text-sm font-bold text-rose-600">{fmt(p.amount)}</p>
-                    {p.dueDate && (
-                      <p className="text-xs text-slate-400">Due {p.dueDate}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Expenses breakdown + Quick links */}
-      <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        {/* Expenses by category */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-[#0D1F0E]">Expenses by Category</h2>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {isFiltered ? periodLabel : "All time breakdown"}
-              </p>
-            </div>
-            <Link
-              href="/expenses"
-              className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]"
-            >
-              All Expenses
-            </Link>
-          </div>
-          {data.expensesByCategory.length === 0 ? (
-            <p className="text-sm text-slate-400">No expenses yet.</p>
-          ) : (
-            <div className="space-y-3">
-              {data.expensesByCategory.map((e) => {
-                const pct = Math.max(4, Math.round((e.total / maxExpense) * 100));
+          <Card>
+            <CardHeader>
+              <CardTitle>Finance Modules</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {modules.map((m) => {
+                const Icon = m.icon;
                 return (
-                  <div key={e.category}>
-                    <div className="mb-1 flex items-center justify-between text-sm">
-                      <span className="font-semibold text-slate-700">{e.category}</span>
-                      <span className="font-bold text-[#0D1F0E]">{fmt(e.total)}</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-rose-400" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
+                  <Link
+                    key={m.href}
+                    href={m.href}
+                    className="group flex items-center gap-4 rounded-ctl border border-bezel bg-well p-4 transition-colors hover:border-phos/60"
+                  >
+                    <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-ctl border border-bezel bg-face">
+                      <Icon className="h-5 w-5 text-phos" aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-bold text-ink">{m.title}</span>
+                      <span className="block truncate text-xs text-dim">{m.desc}</span>
+                    </span>
+                    <ArrowRight className="ml-auto h-4 w-4 flex-shrink-0 text-faint transition-colors group-hover:text-phos" aria-hidden />
+                  </Link>
                 );
               })}
-            </div>
-          )}
-        </div>
-
-        {/* Quick navigation */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-5 text-base font-bold text-[#0D1F0E]">Finance Modules</h2>
-          <div className="space-y-3">
-            <Link
-              href="/payments"
-              className="group flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-5 transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]"
-            >
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-green-100">
-                <CreditCard className="h-6 w-6 text-[#2E7D32]" />
-              </div>
-              <div>
-                <p className="font-bold text-[#0D1F0E]">Payments</p>
-                <p className="text-sm text-slate-500">Tuition, instalments, receipts</p>
-              </div>
-              <ArrowRight className="ml-auto h-5 w-5 text-slate-300 transition group-hover:text-[#2E7D32]" />
-            </Link>
-            <Link
-              href="/expenses"
-              className="group flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-5 transition hover:border-rose-300 hover:bg-rose-50"
-            >
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-rose-100">
-                <Receipt className="h-6 w-6 text-rose-600" />
-              </div>
-              <div>
-                <p className="font-bold text-[#0D1F0E]">Expenses</p>
-                <p className="text-sm text-slate-500">Rent, salaries, marketing, utilities</p>
-              </div>
-              <ArrowRight className="ml-auto h-5 w-5 text-slate-300 transition group-hover:text-rose-500" />
-            </Link>
-            <Link
-              href="/reports"
-              className="group flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-5 transition hover:border-blue-300 hover:bg-blue-50"
-            >
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-100">
-                <BarChart3 className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-bold text-[#0D1F0E]">Full Reports</p>
-                <p className="text-sm text-slate-500">Leads, enrollments, revenue analytics</p>
-              </div>
-              <ArrowRight className="ml-auto h-5 w-5 text-slate-300 transition group-hover:text-blue-500" />
-            </Link>
-          </div>
-        </div>
-      </section>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
     </div>
   );
 }

@@ -54,7 +54,13 @@ export default async function LoginPage() {
   const academyName = await fetchAcademyName();
 
   return (
-    <div className="dark flex min-h-screen items-center justify-center bg-panel p-4 text-ink">
+    <div
+      className="dark flex min-h-screen items-center justify-center bg-panel p-4 text-ink"
+      style={{
+        backgroundImage:
+          "radial-gradient(640px 520px at 32% 42%, rgba(57,255,154,0.05), transparent 70%), radial-gradient(900px 700px at 85% 90%, rgba(85,200,240,0.03), transparent 70%)",
+      }}
+    >
       <div className="grid w-full max-w-4xl items-center gap-10 lg:grid-cols-[1fr_420px]">
         {/* Statement panel */}
         <div className="hidden flex-col items-start gap-6 lg:flex">

@@ -1,16 +1,23 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState, useCallback } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
-  ChevronDown, ChevronLeft, ChevronUp, Loader2, Paperclip, Pencil,
-  Plus, RefreshCw, Trash2, Upload, X,
+  Calculator, ChevronDown, ChevronUp, Paperclip, Pencil, Plus, RefreshCw, Trash2, Upload, X,
 } from "lucide-react";
 import DatePicker from "@/components/shared/DatePicker";
-import { AccountSelect, fmtNum, jvStatusBadge, usePostingAccounts } from "@/components/accounting/shared";
+import { AccountSelect, fmtNum, usePostingAccounts } from "@/components/accounting/shared";
 import BackButton from "@/components/shared/BackButton";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import StatusBadge from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Lamp } from "@/components/ui/lamp";
+import { Drawer, ConfirmDialog } from "@/components/ui/dialog";
+import { Input, Textarea, Select, Field, SearchInput } from "@/components/ui/input";
+import { TableFooter, usePagination, Pagination } from "@/components/ui/table";
+import { PanelLoading, SkeletonRows, LoadError } from "@/components/ui/feedback";
 
 interface JvLine { accountCode: string; accountName?: string; debit: number; credit: number; description?: string; }
 interface Jv {
@@ -47,6 +54,7 @@ function JournalInner() {
 
   const [entries, setEntries] = useState<Jv[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [search, setSearch] = useState("");
@@ -67,6 +75,10 @@ function JournalInner() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [actioning, setActioning] = useState("");
+  const [actionError, setActionError] = useState("");
+  // Guarded confirmations (replace window.confirm)
+  const [confirmCorrect, setConfirmCorrect] = useState<Jv | null>(null);
+  const [confirmReverse, setConfirmReverse] = useState<string | null>(null);
 
   // Shared form state
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -86,6 +98,7 @@ function JournalInner() {
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     const params = new URLSearchParams();
     if (statusFilter) params.set("status", statusFilter);
     if (sourceFilter) params.set("sourceType", sourceFilter);
@@ -93,7 +106,7 @@ function JournalInner() {
     fetch(`/api/accounting/journal-entries?${params}`)
       .then((r) => r.json())
       .then((d) => setEntries(d.entries ?? []))
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, [statusFilter, sourceFilter, showReversed]);
 
@@ -164,10 +177,16 @@ function JournalInner() {
     setDrawerOpen(true);
   };
 
-  /** "Edit" a POSTED entry: reverse it, then open a pre-filled copy to fix and repost. */
-  const correctEntry = async (e: Jv) => {
-    if (!confirm(`${e.jvNumber} is posted. Correcting will reverse it and open an editable copy. Continue?`)) return;
+  /**
+   * "Edit" a POSTED entry: reverse it, then open a pre-filled copy to fix and
+   * repost. The confirmation dialog gates this; doCorrect performs the exact
+   * reverse-then-edit sequence.
+   */
+  const correctEntry = (e: Jv) => setConfirmCorrect(e);
+
+  const doCorrect = async (e: Jv) => {
     setActioning(e.id + "reverse");
+    setActionError("");
     try {
       const res = await fetch(`/api/accounting/journal-entries/${e.id}`, {
         method: "PATCH",
@@ -182,7 +201,7 @@ function JournalInner() {
       setEditingId(null);
       setReference(`Correction of ${e.jvNumber}`);
     } catch (err) {
-      alert((err as Error).message);
+      setActionError((err as Error).message);
     } finally { setActioning(""); }
   };
 
@@ -221,7 +240,7 @@ function JournalInner() {
   const onFile = (file: File | null) => {
     setAttachError("");
     if (!file) { setAttachment(null); return; }
-    if (file.size > 1_000_000) { setAttachError("File too large — maximum 1 MB."); return; }
+    if (file.size > 1_000_000) { setAttachError("File too large — maximum 1 MB. Choose a smaller file."); return; }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = String(reader.result ?? "");
@@ -278,9 +297,9 @@ function JournalInner() {
     } finally { setSaving(false); }
   };
 
-  const action = async (id: string, act: "post" | "reverse" | "cancel") => {
-    if (act === "reverse" && !confirm("Create a reversal entry for this JV?")) return;
+  const doAction = async (id: string, act: "post" | "reverse" | "cancel") => {
     setActioning(id + act);
+    setActionError("");
     try {
       const res = await fetch(`/api/accounting/journal-entries/${id}`, {
         method: "PATCH",
@@ -291,326 +310,434 @@ function JournalInner() {
       if (!res.ok) throw new Error(d.message);
       load();
     } catch (err) {
-      alert((err as Error).message);
+      setActionError((err as Error).message);
     } finally { setActioning(""); }
   };
 
-  const inp = "h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white";
+  const action = (id: string, act: "post" | "reverse" | "cancel") => {
+    if (act === "reverse") { setConfirmReverse(id); return; }
+    doAction(id, act);
+  };
 
   const q = search.trim().toLowerCase();
   const visibleEntries = q
     ? entries.filter((e) => e.jvNumber.toLowerCase().includes(q) || (e.description ?? "").toLowerCase().includes(q) || (e.sourceNumber ?? "").toLowerCase().includes(q))
     : entries;
 
+  const { slice, page, pages, setPage, total } = usePagination(visibleEntries, 50);
+
+  const chip = (active: boolean) =>
+    `h-8 rounded-ctl border px-3 text-xs font-semibold transition-colors ${
+      active ? "border-phos bg-[var(--lamp-ok-bg)] text-phos" : "border-bezel-strong text-dim hover:bg-well"
+    }`;
+
   return (
-    <div className="space-y-5 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <BackButton />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Journal Vouchers</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{entries.length} entries · auto + manual</p>
+    <div className="p-4 sm:p-6">
+      <BackButton />
+      <PageHeader
+        title="Journal Vouchers"
+        subtitle={`${entries.length} entries · auto + manual`}
+        actions={
+          <>
+            <Button variant="ghost" size="icon" onClick={load} aria-label="Refresh journal entries">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            {canPost && (
+              <>
+                <Button variant="secondary" onClick={() => { setImportOpen(true); setImportMsg(""); }}>
+                  <Upload className="h-4 w-4" /> Import
+                </Button>
+                <Button variant="solid" onClick={() => openNew("journal")}>
+                  <Plus className="h-4 w-4" /> New JV
+                </Button>
+              </>
+            )}
+          </>
+        }
+      />
+
+      <div className="space-y-5">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search JV number or description…"
+            aria-label="Search journal vouchers"
+            className="w-full sm:w-64"
+          />
+          {["", "Draft", "Posted", "Reversed", "Cancelled"].map((s) => (
+            <button key={s || "all"} type="button" onClick={() => setStatusFilter(s)} aria-pressed={statusFilter === s} className={chip(statusFilter === s)}>
+              {s || "All Status"}
+            </button>
+          ))}
+          <Select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            aria-label="Filter by source"
+            className="h-8 w-auto text-xs font-semibold"
+          >
+            <option value="">All Sources</option>
+            {["JV", "Invoice", "Receipt", "Expense", "SupplierBill", "SupplierPayment", "Reversal"].map((s) => <option key={s}>{s}</option>)}
+          </Select>
+          <label className="flex h-8 cursor-pointer items-center gap-1.5 rounded-ctl border border-bezel-strong px-3 text-xs font-semibold text-dim">
+            <input type="checkbox" checked={showReversed} onChange={(e) => setShowReversed(e.target.checked)} className="h-3.5 w-3.5 accent-phos" />
+            Show Reversed
+          </label>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
-          {canPost && (
-            <>
-              <button onClick={() => { setImportOpen(true); setImportMsg(""); }} className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300">
-                <Upload className="h-4 w-4" /> Import
-              </button>
-              <button onClick={() => openNew("journal")} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20]">
-                <Plus className="h-4 w-4" /> New JV
-              </button>
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search JV number or description…"
-          className="h-8 w-56 rounded-lg border border-gray-200 bg-white px-3 text-xs outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white"
-        />
-        {["", "Draft", "Posted", "Reversed", "Cancelled"].map((s) => (
-          <button key={s || "all"} onClick={() => setStatusFilter(s)}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusFilter === s ? "bg-[#2E7D32] text-white" : "border border-gray-200 bg-white text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400"}`}>
-            {s || "All Status"}
-          </button>
-        ))}
-        <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
-          <option value="">All Sources</option>
-          {["JV", "Invoice", "Receipt", "Expense", "SupplierBill", "SupplierPayment", "Reversal"].map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
-          <input type="checkbox" checked={showReversed} onChange={(e) => setShowReversed(e.target.checked)} className="h-3.5 w-3.5 accent-[#2E7D32]" />
-          Show Reversed
-        </label>
-      </div>
+        {actionError && (
+          <div role="alert" className="flex items-center justify-between gap-3 rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-3 py-2 text-sm font-semibold text-alert">
+            <span>{actionError}</span>
+            <button type="button" onClick={() => setActionError("")} aria-label="Dismiss error" className="flex-shrink-0 hover:opacity-70">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
-      {/* List */}
-      {loading ? (
-        <div className="flex h-40 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
-      ) : visibleEntries.length === 0 ? (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">No journal entries.</div>
-      ) : (
-        <div className="space-y-2">
-          {visibleEntries.map((e) => {
-            const open = expanded === e.id;
-            return (
-              <div key={e.id} className="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-                <button onClick={() => setExpanded(open ? null : e.id)} className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left">
-                  <span className="font-mono text-xs font-bold text-[#2E7D32] dark:text-green-400">{e.jvNumber}</span>
-                  <span className="text-xs text-gray-400">{e.date}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${jvStatusBadge[e.status] ?? ""}`}>{e.status}</span>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:bg-white/10 dark:text-gray-400">{e.sourceType}{e.sourceNumber ? ` · ${e.sourceNumber}` : ""}</span>
-                  {e.attachmentName && <Paperclip className="h-3.5 w-3.5 text-gray-400" />}
-                  <span className="min-w-0 flex-1 truncate text-sm text-gray-700 dark:text-gray-300">{e.description}</span>
-                  <span className="text-sm font-bold tabular-nums text-gray-900 dark:text-white">{fmtNum(e.totalDebit)}</span>
-                  {open ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                </button>
-                {open && (
-                  <div className="border-t border-gray-100 px-4 py-3 dark:border-white/10">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs font-bold uppercase text-gray-400">
-                            <th className="py-1 pr-3">Account</th><th className="py-1 pr-3">Description</th>
-                            <th className="py-1 pr-3 text-right">Debit</th><th className="py-1 text-right">Credit</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {e.lines.map((l, i) => (
-                            <tr key={i} className="border-t border-gray-50 dark:border-white/5">
-                              <td className="py-1.5 pr-3">
-                                <span className="font-mono text-xs text-gray-400">{l.accountCode}</span>{" "}
-                                <span className="text-gray-700 dark:text-gray-300">{l.accountName}</span>
-                              </td>
-                              <td className="py-1.5 pr-3 text-xs text-gray-400">{l.description ?? ""}</td>
-                              <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(l.debit)}</td>
-                              <td className="py-1.5 text-right tabular-nums">{fmtNum(l.credit)}</td>
-                            </tr>
-                          ))}
-                          <tr className="border-t border-gray-200 font-bold dark:border-white/10">
-                            <td className="py-1.5 pr-3" colSpan={2}>Total</td>
-                            <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNum(e.totalDebit)}</td>
-                            <td className="py-1.5 text-right tabular-nums">{fmtNum(e.totalCredit)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                      <span>By {e.createdBy}</span>
-                      {e.postedBy && <span>· Posted by {e.postedBy}</span>}
-                      {e.attachmentName && (
-                        <a href={`/api/accounting/journal-entries/${e.id}?attachment=1`}
-                          className="inline-flex items-center gap-1 font-semibold text-[#2E7D32] hover:underline dark:text-green-400">
-                          <Paperclip className="h-3 w-3" /> {e.attachmentName}
-                        </a>
-                      )}
-                      <span className="flex-1" />
-                      {canPost && e.status === "Draft" && (
-                        <>
-                          <button onClick={() => openEdit(e)} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1 font-semibold text-gray-600 dark:border-white/10 dark:text-gray-400">
-                            <Pencil className="h-3 w-3" /> Edit
-                          </button>
-                          <button onClick={() => action(e.id, "post")} disabled={!!actioning} className="rounded-lg bg-[#2E7D32] px-3 py-1 font-semibold text-white disabled:opacity-60">
-                            {actioning === e.id + "post" ? "…" : "Post"}
-                          </button>
-                          <button onClick={() => action(e.id, "cancel")} disabled={!!actioning} className="rounded-lg border border-gray-200 px-3 py-1 font-semibold text-gray-600 dark:border-white/10 dark:text-gray-400">Cancel JV</button>
-                        </>
-                      )}
-                      {canPost && e.status === "Posted" && (
-                        <>
-                          <button onClick={() => correctEntry(e)} disabled={!!actioning} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1 font-semibold text-gray-600 dark:border-white/10 dark:text-gray-400">
-                            <Pencil className="h-3 w-3" /> Correct
-                          </button>
-                          <button onClick={() => action(e.id, "reverse")} disabled={!!actioning} className="rounded-lg border border-amber-300 px-3 py-1 font-semibold text-amber-700 dark:border-amber-700 dark:text-amber-400">
-                            {actioning === e.id + "reverse" ? "…" : "Reverse (cancel)"}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Drawer */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
-          <aside className="relative ml-auto flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl dark:bg-[#0D1F0E]">
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/10">
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                {editingId ? "Edit Draft JV" : `New ${MODE_LABELS[mode]}`}
-              </h2>
-              <button onClick={() => setDrawerOpen(false)} className="rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-4 w-4 text-gray-500" /></button>
-            </div>
-            <div className="flex-1 space-y-4 overflow-y-auto p-5">
-              {formError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-400">{formError}</p>}
-
-              {mode === "receipt" && !editingId && (
-                <p className="rounded-lg bg-[#E8F5E9] px-3 py-2 text-xs text-[#1B5E20] dark:bg-green-900/30 dark:text-green-300">
-                  <strong>Receipt:</strong> money in — debit a cash/bank account, credit the student&apos;s receivable.
-                </p>
-              )}
-              {mode === "invoice" && !editingId && (
-                <p className="rounded-lg bg-[#E8F5E9] px-3 py-2 text-xs text-[#1B5E20] dark:bg-green-900/30 dark:text-green-300">
-                  <strong>Sales Invoice:</strong> revenue recognised — debit the student&apos;s receivable, credit a revenue account.
-                </p>
-              )}
-              {mode === "expense" && !editingId && (
-                <p className="rounded-lg bg-[#E8F5E9] px-3 py-2 text-xs text-[#1B5E20] dark:bg-green-900/30 dark:text-green-300">
-                  <strong>Expense:</strong> debit the expense account, credit the cash/bank paid from. All {expenseAccounts.length} expense accounts are available below.
-                </p>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="label-x">Date *</label><DatePicker value={date} onChange={setDate} required /></div>
-                <div><label className="label-x">Reference</label><input value={reference} onChange={(e) => setReference(e.target.value)} className={inp} /></div>
-              </div>
-              <div><label className="label-x">Description *</label><input required value={description} onChange={(e) => setDescription(e.target.value)} className={inp} /></div>
-
-              {mode !== "journal" ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="label-x">
-                      {mode === "receipt" ? "Debit — received into (current assets)" : mode === "invoice" ? "Debit — student receivable" : "Debit — expense account"} *
-                    </label>
-                    <AccountSelect
-                      value={simpleDebit} onChange={setSimpleDebit}
-                      accounts={debitAccounts}
-                      placeholder={mode === "receipt" ? "Cash / Bank / POS…" : mode === "invoice" ? "Student account…" : "Expense account…"}
-                    />
-                  </div>
-                  <div>
-                    <label className="label-x">
-                      {mode === "receipt" ? "Credit — student receivable" : mode === "invoice" ? "Credit — revenue account" : "Credit — paid from (cash/bank)"} *
-                    </label>
-                    <AccountSelect
-                      value={simpleCredit} onChange={setSimpleCredit}
-                      accounts={creditAccounts}
-                      placeholder={mode === "receipt" ? "Student account…" : mode === "invoice" ? "Revenue account…" : "Cash / Bank / Petty Cash…"}
-                    />
-                  </div>
-                  <div>
-                    <label className="label-x">Amount (AED) *</label>
-                    <input type="number" step="0.01" min="0.01" required value={simpleAmount} onChange={(e) => setSimpleAmount(e.target.value)} className={inp} />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label className="label-x !mb-0">Lines</label>
-                    <button type="button" onClick={() => setLines((ls) => [...ls, { accountCode: "", debit: "", credit: "", description: "" }])}
-                      className="flex items-center gap-1 text-xs font-semibold text-[#2E7D32] hover:underline dark:text-green-400"><Plus className="h-3 w-3" /> Add Line</button>
-                  </div>
-                  <div className="space-y-2">
-                    {lines.map((l, i) => (
-                      <div key={i} className="rounded-lg border border-gray-100 p-2.5 dark:border-white/10">
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1 space-y-2">
-                            <AccountSelect value={l.accountCode} onChange={(v) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, accountCode: v } : x))} accounts={accounts} />
-                            <div className="grid grid-cols-3 gap-2">
-                              <input type="number" step="0.01" min="0" placeholder="Debit" value={l.debit}
-                                onChange={(e) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, debit: e.target.value, credit: e.target.value ? "" : x.credit } : x))} className={inp} />
-                              <input type="number" step="0.01" min="0" placeholder="Credit" value={l.credit}
-                                onChange={(e) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, credit: e.target.value, debit: e.target.value ? "" : x.debit } : x))} className={inp} />
-                              <input placeholder="Line note" value={l.description}
-                                onChange={(e) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, description: e.target.value } : x))} className={inp} />
-                            </div>
-                          </div>
-                          {lines.length > 2 && (
-                            <button type="button" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} className="mt-1 rounded p-1 text-gray-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>
+        {/* List */}
+        {loading ? (
+          <div className="face"><SkeletonRows rows={8} cols={5} /></div>
+        ) : loadError ? (
+          <LoadError message="Couldn't load journal entries." onRetry={load} />
+        ) : visibleEntries.length === 0 ? (
+          <div className="face">
+            <EmptyState
+              icon={Calculator}
+              title="No journal entries"
+              description={q || statusFilter || sourceFilter ? "Nothing matches the current filters." : "Manual and automatic vouchers will appear here."}
+              action={canPost && !q && !statusFilter && !sourceFilter ? (
+                <Button variant="primary" size="sm" onClick={() => openNew("journal")}>
+                  <Plus className="h-4 w-4" /> New JV
+                </Button>
+              ) : undefined}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {slice.map((e) => {
+                const open = expanded === e.id;
+                return (
+                  <div key={e.id} className="face overflow-hidden">
+                    <button
+                      onClick={() => setExpanded(open ? null : e.id)}
+                      aria-expanded={open}
+                      className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-well/40"
+                    >
+                      <span className="readout text-xs font-bold text-phos" data-numeric>{e.jvNumber}</span>
+                      <span className="readout text-xs text-faint" data-numeric>{e.date}</span>
+                      <StatusBadge status={e.status} />
+                      <span className="rounded-lamp border border-bezel bg-well px-1.5 py-0.5 text-[10px] font-semibold text-dim">
+                        {e.sourceType}{e.sourceNumber ? ` · ${e.sourceNumber}` : ""}
+                      </span>
+                      {e.attachmentName && <Paperclip aria-label="Has attachment" className="h-3.5 w-3.5 text-faint" />}
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink" title={e.description}>{e.description}</span>
+                      <span className="readout text-sm font-bold text-ink" data-numeric>{fmtNum(e.totalDebit)}</span>
+                      {open ? <ChevronUp aria-hidden className="h-4 w-4 text-faint" /> : <ChevronDown aria-hidden className="h-4 w-4 text-faint" />}
+                    </button>
+                    {open && (
+                      <div className="border-t border-bezel px-4 py-3">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-sm">
+                            <thead>
+                              <tr>
+                                <th className="placard py-1 pr-3 text-left">Account</th>
+                                <th className="placard py-1 pr-3 text-left">Description</th>
+                                <th className="placard py-1 pr-3 text-right">Debit</th>
+                                <th className="placard py-1 text-right">Credit</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {e.lines.map((l, i) => (
+                                <tr key={i} className="border-t border-bezel/60">
+                                  <td className="py-1.5 pr-3">
+                                    <span className="readout text-xs text-faint" data-numeric>{l.accountCode}</span>{" "}
+                                    <span className="text-ink">{l.accountName}</span>
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-xs text-dim">{l.description ?? ""}</td>
+                                  <td className="readout py-1.5 pr-3 text-right" data-numeric>{fmtNum(l.debit)}</td>
+                                  <td className="readout py-1.5 text-right" data-numeric>{fmtNum(l.credit)}</td>
+                                </tr>
+                              ))}
+                              <tr className="border-t border-bezel font-bold">
+                                <td className="py-1.5 pr-3 text-ink" colSpan={2}>Total</td>
+                                <td className="readout py-1.5 pr-3 text-right text-ink" data-numeric>{fmtNum(e.totalDebit)}</td>
+                                <td className="readout py-1.5 text-right text-ink" data-numeric>{fmtNum(e.totalCredit)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-faint">
+                          <span>By {e.createdBy}</span>
+                          {e.postedBy && <span>· Posted by {e.postedBy}</span>}
+                          {e.attachmentName && (
+                            <a href={`/api/accounting/journal-entries/${e.id}?attachment=1`}
+                              className="inline-flex items-center gap-1 font-semibold text-phos underline-offset-2 hover:underline">
+                              <Paperclip className="h-3 w-3" /> {e.attachmentName}
+                            </a>
+                          )}
+                          <span className="flex-1" />
+                          {canPost && e.status === "Draft" && (
+                            <>
+                              <Button variant="secondary" size="sm" onClick={() => openEdit(e)}>
+                                <Pencil className="h-3 w-3" /> Edit
+                              </Button>
+                              <Button variant="primary" size="sm" onClick={() => action(e.id, "post")} disabled={!!actioning}>
+                                {actioning === e.id + "post" ? "…" : "Post"}
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => action(e.id, "cancel")} disabled={!!actioning}>
+                                Cancel JV
+                              </Button>
+                            </>
+                          )}
+                          {canPost && e.status === "Posted" && (
+                            <>
+                              <Button variant="secondary" size="sm" onClick={() => correctEntry(e)} disabled={!!actioning}>
+                                <Pencil className="h-3 w-3" /> Correct
+                              </Button>
+                              <button
+                                type="button"
+                                onClick={() => action(e.id, "reverse")}
+                                disabled={!!actioning}
+                                className="inline-flex h-8 items-center gap-1 rounded-ctl border border-caution/60 px-3 text-xs font-bold uppercase tracking-[0.08em] text-caution transition-colors hover:bg-[var(--lamp-caution-bg)] disabled:pointer-events-none disabled:opacity-40"
+                              >
+                                {actioning === e.id + "reverse" ? "…" : "Reverse (cancel)"}
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })}
+            </div>
+            <div className="face">
+              <TableFooter className="border-t-0">
+                <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+              </TableFooter>
+            </div>
+          </>
+        )}
+      </div>
 
-              {/* Attachment (new entries only) */}
-              {!editingId && (
-                <div>
-                  <label className="label-x">Supporting Document (optional, max 1 MB)</label>
-                  <input type="file" accept="application/pdf,image/*"
-                    onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-sm text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[#E8F5E9] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#1B5E20]" />
-                  {attachError && <p className="mt-1 text-xs text-red-600">{attachError}</p>}
-                  {attachment && (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Paperclip className="h-3 w-3" /> {attachment.name}</p>
-                  )}
-                </div>
-              )}
+      {/* Editor drawer — guarded: backdrop clicks never discard the form */}
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={editingId ? "Edit Draft JV" : `New ${MODE_LABELS[mode]}`}
+        size="xl"
+        footer={
+          <div className="flex w-full gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => submit(false)} disabled={saving || !description}>
+              {editingId ? "Save Draft" : "Save as Draft"}
+            </Button>
+            <Button variant="solid" className="flex-1" onClick={() => submit(true)} disabled={saving || !balanced || !description}>
+              {saving ? "Saving…" : editingId ? "Save & Post" : "Post Now"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {formError && (
+            <p role="alert" className="rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-3 py-2 text-sm font-semibold text-alert">
+              {formError}
+            </p>
+          )}
 
-              <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-bold ${balanced ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400" : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"}`}>
-                <span>Debit: {fmtNum(totalDebit)} · Credit: {fmtNum(totalCredit)}</span>
-                <span>{balanced ? "✓ Balanced" : "Not balanced"}</span>
+          {mode === "receipt" && !editingId && (
+            <p className="rounded-ctl border border-advisory/30 bg-[var(--lamp-advisory-bg)] px-3 py-2 text-xs text-advisory">
+              <strong>Receipt:</strong> money in — debit a cash/bank account, credit the student&apos;s receivable.
+            </p>
+          )}
+          {mode === "invoice" && !editingId && (
+            <p className="rounded-ctl border border-advisory/30 bg-[var(--lamp-advisory-bg)] px-3 py-2 text-xs text-advisory">
+              <strong>Sales Invoice:</strong> revenue recognised — debit the student&apos;s receivable, credit a revenue account.
+            </p>
+          )}
+          {mode === "expense" && !editingId && (
+            <p className="rounded-ctl border border-advisory/30 bg-[var(--lamp-advisory-bg)] px-3 py-2 text-xs text-advisory">
+              <strong>Expense:</strong> debit the expense account, credit the cash/bank paid from. All {expenseAccounts.length} expense accounts are available below.
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Date" required>
+              <DatePicker value={date} onChange={setDate} required />
+            </Field>
+            <Field label="Reference" htmlFor="jv-ref">
+              <Input id="jv-ref" value={reference} onChange={(e) => setReference(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Description" required help={!description ? "Required before saving." : undefined} htmlFor="jv-desc">
+            <Input id="jv-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+
+          {mode !== "journal" ? (
+            <div className="space-y-3">
+              <Field
+                label={mode === "receipt" ? "Debit — received into (current assets)" : mode === "invoice" ? "Debit — student receivable" : "Debit — expense account"}
+                required
+              >
+                <AccountSelect
+                  value={simpleDebit} onChange={setSimpleDebit}
+                  accounts={debitAccounts}
+                  placeholder={mode === "receipt" ? "Cash / Bank / POS…" : mode === "invoice" ? "Student account…" : "Expense account…"}
+                />
+              </Field>
+              <Field
+                label={mode === "receipt" ? "Credit — student receivable" : mode === "invoice" ? "Credit — revenue account" : "Credit — paid from (cash/bank)"}
+                required
+              >
+                <AccountSelect
+                  value={simpleCredit} onChange={setSimpleCredit}
+                  accounts={creditAccounts}
+                  placeholder={mode === "receipt" ? "Student account…" : mode === "invoice" ? "Revenue account…" : "Cash / Bank / Petty Cash…"}
+                />
+              </Field>
+              <Field label="Amount (AED)" required htmlFor="jv-amount">
+                <Input id="jv-amount" type="number" step="0.01" min="0.01" inputMode="decimal" value={simpleAmount} onChange={(e) => setSimpleAmount(e.target.value)} />
+              </Field>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="placard">Lines</span>
+                <Button variant="link" size="sm" type="button" onClick={() => setLines((ls) => [...ls, { accountCode: "", debit: "", credit: "", description: "" }])}>
+                  <Plus className="h-3 w-3" /> Add Line
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {lines.map((l, i) => (
+                  <div key={i} className="rounded-ctl border border-bezel p-2.5">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 space-y-2">
+                        <AccountSelect value={l.accountCode} onChange={(v) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, accountCode: v } : x))} accounts={accounts} />
+                        <div className="grid grid-cols-3 gap-2">
+                          <Input type="number" step="0.01" min="0" inputMode="decimal" placeholder="Debit" aria-label={`Line ${i + 1} debit`} value={l.debit}
+                            onChange={(e) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, debit: e.target.value, credit: e.target.value ? "" : x.credit } : x))} />
+                          <Input type="number" step="0.01" min="0" inputMode="decimal" placeholder="Credit" aria-label={`Line ${i + 1} credit`} value={l.credit}
+                            onChange={(e) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, credit: e.target.value, debit: e.target.value ? "" : x.debit } : x))} />
+                          <Input placeholder="Line note" aria-label={`Line ${i + 1} note`} value={l.description}
+                            onChange={(e) => setLines((ls) => ls.map((x, j) => j === i ? { ...x, description: e.target.value } : x))} />
+                        </div>
+                      </div>
+                      {lines.length > 2 && (
+                        <Button variant="ghost" size="iconSm" type="button" className="mt-1 text-faint hover:text-alert"
+                          onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label={`Remove line ${i + 1}`}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="flex gap-2 border-t border-gray-200 p-4 dark:border-white/10">
-              <button onClick={() => submit(false)} disabled={saving || !description} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-300">
-                {editingId ? "Save Draft" : "Save as Draft"}
-              </button>
-              <button onClick={() => submit(true)} disabled={saving || !balanced || !description} className="flex-1 rounded-lg bg-[#2E7D32] py-2.5 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
-                {saving ? "Saving…" : editingId ? "Save & Post" : "Post Now"}
-              </button>
-            </div>
-          </aside>
+          )}
+
+          {/* Attachment (new entries only) */}
+          {!editingId && (
+            <Field label="Supporting Document" help="PDF or image, max 1 MB" error={attachError || undefined} htmlFor="jv-file">
+              <input
+                id="jv-file"
+                type="file" accept="application/pdf,image/*"
+                onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-dim file:mr-3 file:rounded-ctl file:border-0 file:bg-well file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-phos"
+              />
+              {attachment && (
+                <p className="mt-1 flex items-center gap-1 text-xs text-dim"><Paperclip className="h-3 w-3" /> {attachment.name}</p>
+              )}
+            </Field>
+          )}
+
+          <div
+            role="status"
+            className={`flex items-center justify-between gap-2 rounded-ctl border px-3 py-2 ${
+              balanced ? "border-phos/30 bg-[var(--lamp-ok-bg)]" : "border-caution/30 bg-[var(--lamp-caution-bg)]"
+            }`}
+          >
+            <span className="readout text-sm font-bold text-ink" data-numeric>
+              Debit {fmtNum(totalDebit)} · Credit {fmtNum(totalCredit)}
+            </span>
+            <Lamp variant={balanced ? "ok" : "caution"}>{balanced ? "Balanced" : "Not balanced"}</Lamp>
+          </div>
         </div>
-      )}
+      </Drawer>
 
       {/* Import drawer */}
-      {importOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setImportOpen(false)} />
-          <aside className="relative ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl dark:bg-[#0D1F0E]">
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/10">
-              <h2 className="font-bold text-gray-900 dark:text-white">Import Journal Vouchers</h2>
-              <button onClick={() => setImportOpen(false)} className="rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-4 w-4 text-gray-500" /></button>
-            </div>
-            <div className="flex-1 space-y-4 overflow-y-auto p-5">
-              <div className="rounded-lg bg-gray-50 px-3 py-3 text-xs text-gray-600 dark:bg-white/5 dark:text-gray-400">
-                <p className="mb-1 font-semibold">Paste CSV with a header row. Columns:</p>
-                <code className="block whitespace-pre-wrap break-all text-[11px]">Voucher,Date,Description,AccountCode,Debit,Credit</code>
-                <p className="mt-2">Rows with the same <strong>Voucher</strong> value become one entry. Each voucher must balance (debits = credits). Accounts must exist as active posting accounts.</p>
-              </div>
-              {importMsg && <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:bg-blue-950/30 dark:text-blue-300">{importMsg}</p>}
-              <textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                rows={12}
-                placeholder={"Voucher,Date,Description,AccountCode,Debit,Credit\nV1,2026-01-05,Office rent,5010010035,5000,0\nV1,2026-01-05,Office rent,1010200001,0,5000"}
-                className="w-full rounded-lg border border-slate-200 bg-white p-3 font-mono text-xs outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white"
-              />
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={importPost} onChange={(e) => setImportPost(e.target.checked)} className="h-4 w-4 accent-[#2E7D32]" />
-                <span className="text-gray-700 dark:text-gray-300">Post immediately (otherwise saved as Draft)</span>
-              </label>
-            </div>
-            <div className="border-t border-gray-200 p-4 dark:border-white/10">
-              <button onClick={runImport} disabled={importing || !importText.trim()} className="w-full rounded-lg bg-[#2E7D32] py-2.5 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
-                {importing ? "Importing…" : "Import"}
-              </button>
-            </div>
-          </aside>
+      <Drawer
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Journal Vouchers"
+        size="lg"
+        footer={
+          <Button variant="solid" className="w-full" onClick={runImport} disabled={importing || !importText.trim()}>
+            {importing ? "Importing…" : "Import"}
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-ctl bg-well px-3 py-3 text-xs text-dim">
+            <p className="mb-1 font-bold text-ink">Paste CSV with a header row. Columns:</p>
+            <code className="readout block whitespace-pre-wrap break-all text-[11px]">Voucher,Date,Description,AccountCode,Debit,Credit</code>
+            <p className="mt-2">Rows with the same <strong>Voucher</strong> value become one entry. Each voucher must balance (debits = credits). Accounts must exist as active posting accounts.</p>
+          </div>
+          {importMsg && (
+            <p role="status" className="rounded-ctl border border-advisory/30 bg-[var(--lamp-advisory-bg)] px-3 py-2 text-sm text-advisory">
+              {importMsg}
+            </p>
+          )}
+          <Textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            rows={12}
+            aria-label="CSV rows to import"
+            placeholder={"Voucher,Date,Description,AccountCode,Debit,Credit\nV1,2026-01-05,Office rent,5010010035,5000,0\nV1,2026-01-05,Office rent,1010200001,0,5000"}
+            className="font-mono text-xs"
+          />
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+            <input type="checkbox" checked={importPost} onChange={(e) => setImportPost(e.target.checked)} className="h-4 w-4 accent-phos" />
+            Post immediately (otherwise saved as Draft)
+          </label>
         </div>
-      )}
+      </Drawer>
 
-      <style>{`.label-x { display:block; margin-bottom:0.25rem; font-size:0.75rem; font-weight:600; color:#4B5563; }`}</style>
+      {/* Correct: reverse the posted entry, then open an editable copy */}
+      <ConfirmDialog
+        open={!!confirmCorrect}
+        onClose={() => setConfirmCorrect(null)}
+        onConfirm={() => {
+          const e = confirmCorrect!;
+          setConfirmCorrect(null);
+          doCorrect(e);
+        }}
+        title="Correct Posted Entry"
+        message={confirmCorrect ? `${confirmCorrect.jvNumber} is posted. Correcting will reverse it and open an editable copy. Continue?` : ""}
+        confirmLabel="Reverse & Edit"
+        busy={!!actioning}
+      />
+
+      <ConfirmDialog
+        open={!!confirmReverse}
+        onClose={() => setConfirmReverse(null)}
+        onConfirm={() => {
+          const id = confirmReverse!;
+          setConfirmReverse(null);
+          doAction(id, "reverse");
+        }}
+        title="Reverse Entry"
+        message="Create a reversal entry for this JV?"
+        confirmLabel="Reverse"
+        busy={!!actioning}
+      />
     </div>
   );
 }
 
 export default function JournalPage() {
   return (
-    <Suspense fallback={<div className="flex h-64 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
+    <Suspense fallback={<PanelLoading label="Loading journal" />}>
       <JournalInner />
     </Suspense>
   );

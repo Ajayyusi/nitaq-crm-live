@@ -166,7 +166,7 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-bezel bg-raised shadow-raise outline-none",
+          "fixed inset-y-0 end-0 z-50 flex w-full flex-col border-s border-bezel bg-raised shadow-raise outline-none",
           width
         )}
         style={{ animation: "drawer-in 0.25s cubic-bezier(0.16,1,0.3,1) both" }}

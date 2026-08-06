@@ -1,11 +1,21 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, Download, FileText, AlertCircle, CheckCircle, X, Loader2 } from "lucide-react";
+import {
+  Upload, Download, FileText, AlertCircle, CheckCircle2, X, Target,
+  CalendarClock, GraduationCap, ClipboardList, BookOpen, UserCog,
+  CreditCard, TrendingDown, School, type LucideIcon,
+} from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import Papa from "papaparse";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Field, Select } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/feedback";
+import { Table, THead, Th, Tr, Td } from "@/components/ui/table";
 import { IMPORT_EXPORT_PERMISSIONS, hasRole } from "@/lib/permissions";
 import type { AppRole } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 
 const TEMPLATES: Record<string, { fields: string[]; example: Record<string, string> }> = {
   leads: {
@@ -92,16 +102,16 @@ const TEMPLATES: Record<string, { fields: string[]; example: Record<string, stri
   },
 };
 
-const ALL_ENTITIES = [
-  { key: "leads", label: "Leads", icon: "📊" },
-  { key: "followups", label: "Follow-ups", icon: "📅" },
-  { key: "students", label: "Students", icon: "🎓" },
-  { key: "enrollments", label: "Enrollments", icon: "📋" },
-  { key: "courses", label: "Courses", icon: "📚" },
-  { key: "teachers", label: "Teachers", icon: "👨‍🏫" },
-  { key: "payments", label: "Payments", icon: "💰" },
-  { key: "expenses", label: "Expenses", icon: "📉" },
-  { key: "classes", label: "Classes", icon: "🏫" },
+const ALL_ENTITIES: { key: string; label: string; icon: LucideIcon }[] = [
+  { key: "leads", label: "Leads", icon: Target },
+  { key: "followups", label: "Follow-ups", icon: CalendarClock },
+  { key: "students", label: "Students", icon: GraduationCap },
+  { key: "enrollments", label: "Enrollments", icon: ClipboardList },
+  { key: "courses", label: "Courses", icon: BookOpen },
+  { key: "teachers", label: "Teachers", icon: UserCog },
+  { key: "payments", label: "Payments", icon: CreditCard },
+  { key: "expenses", label: "Expenses", icon: TrendingDown },
+  { key: "classes", label: "Classes", icon: School },
 ];
 
 interface ImportResult {
@@ -130,6 +140,7 @@ export default function ImportExportClient({ role }: { role: AppRole }) {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [exportNotice, setExportNotice] = useState<{ tone: "caution" | "alert"; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function downloadTemplate(entity: string) {
@@ -196,11 +207,16 @@ export default function ImportExportClient({ role }: { role: AppRole }) {
 
   async function handleExport() {
     setExporting(true);
+    setExportNotice(null);
     try {
       const res = await fetch(`/api/export/${exportEntity}`);
       const data = await res.json();
       const rows = data.rows ?? [];
-      if (!rows.length) { alert("No data to export for this section."); setExporting(false); return; }
+      if (!rows.length) {
+        setExportNotice({ tone: "caution", text: "No data to export for this section." });
+        setExporting(false);
+        return;
+      }
       const csv = Papa.unparse(rows);
       const blob = new Blob([csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
@@ -210,7 +226,7 @@ export default function ImportExportClient({ role }: { role: AppRole }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert("Export failed. Please try again.");
+      setExportNotice({ tone: "alert", text: "Export failed. Check your connection and try again." });
     } finally {
       setExporting(false);
     }
@@ -227,245 +243,296 @@ export default function ImportExportClient({ role }: { role: AppRole }) {
   const entityLabel = (key: string) => ALL_ENTITIES.find((e) => e.key === key)?.label ?? key;
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div>
       <PageHeader title="Import / Export" subtitle="Bulk data management via CSV" />
 
       {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-4 sm:px-6">
-        <div className="flex gap-0">
-          {(["import", "export"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-3.5 text-sm font-medium border-b-2 transition capitalize ${
-                activeTab === tab
-                  ? "border-[#2E7D32] text-[#2E7D32]"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              {tab === "import" ? "⬆️" : "⬇️"} {tab === "import" ? "Import Data" : "Export Data"}
-            </button>
-          ))}
-        </div>
+      <div className="mb-5 flex gap-1 border-b border-bezel" role="tablist" aria-label="Import or export">
+        {(["import", "export"] as const).map((tab) => (
+          <button
+            key={tab}
+            role="tab"
+            aria-selected={activeTab === tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              "-mb-px flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] transition-colors",
+              activeTab === tab
+                ? "border-phos text-phos"
+                : "border-transparent text-dim hover:text-ink"
+            )}
+          >
+            {tab === "import"
+              ? <Upload className="h-3.5 w-3.5" aria-hidden />
+              : <Download className="h-3.5 w-3.5" aria-hidden />}
+            {tab === "import" ? "Import Data" : "Export Data"}
+          </button>
+        ))}
       </div>
 
-      <div className="p-4 sm:p-6 max-w-4xl space-y-6">
+      <div className="max-w-4xl space-y-4">
         {activeTab === "import" && (
           <>
             {/* Step 1: Templates */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
-              <h3 className="font-semibold text-slate-800 mb-1">Step 1 — Download Template</h3>
-              <p className="text-sm text-slate-500 mb-4">Download the CSV template for the section you want to import, fill in your data, then upload below. Maximum 500 rows per import.</p>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
-                {importEntities.map((ent) => (
-                  <button
-                    key={ent.key}
-                    onClick={() => downloadTemplate(ent.key)}
-                    className="flex flex-col items-center gap-1.5 p-2.5 sm:p-3 rounded-xl border border-slate-200 hover:border-[#2E7D32] hover:bg-[#E8F5E9]/50 transition group"
-                  >
-                    <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 group-hover:text-[#2E7D32] transition" />
-                    <span className="text-xs font-medium text-slate-600 text-center leading-tight">{ent.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Step 1 — Download Template</CardTitle>
+                  <CardDescription className="mt-0.5">
+                    Download the CSV template for the section you want to import, fill in your data, then upload below. Maximum 500 rows per import.
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
+                  {importEntities.map((ent) => (
+                    <button
+                      key={ent.key}
+                      onClick={() => downloadTemplate(ent.key)}
+                      aria-label={`Download ${ent.label} template`}
+                      className="group flex flex-col items-center gap-1.5 rounded-ctl border border-bezel p-2.5 transition-colors hover:border-phos hover:bg-well sm:p-3"
+                    >
+                      <FileText className="h-4 w-4 text-faint transition-colors group-hover:text-phos sm:h-5 sm:w-5" aria-hidden />
+                      <span className="text-center text-xs font-medium leading-tight text-dim group-hover:text-ink">{ent.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Step 2: Upload */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
-              <h3 className="font-semibold text-slate-800 mb-4">Step 2 — Upload CSV</h3>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Import Type</label>
-                <select
-                  value={importEntity}
-                  onChange={(e) => { setImportEntity(e.target.value); resetImport(); }}
-                  className="w-full sm:w-64 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
-                >
-                  {importEntities.map((e) => (
-                    <option key={e.key} value={e.key}>{e.icon} {e.label}</option>
-                  ))}
-                </select>
-              </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Step 2 — Upload CSV</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Field label="Import Type" htmlFor="importType" className="mb-4 sm:max-w-64">
+                  <Select
+                    id="importType"
+                    value={importEntity}
+                    onChange={(e) => { setImportEntity(e.target.value); resetImport(); }}
+                  >
+                    {importEntities.map((e) => (
+                      <option key={e.key} value={e.key}>{e.label}</option>
+                    ))}
+                  </Select>
+                </Field>
 
-              {["teachers", "followups", "classes"].includes(importEntity) && (
-                <div className="mb-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                  <span><strong>{entityLabel(importEntity)}</strong> has no unique identifier — importing the same file twice will create duplicate records. Make sure you only import each file once.</span>
-                </div>
-              )}
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleFileSelect}
-                className="hidden"
-                id="csvUpload"
-              />
-              <label
-                htmlFor="csvUpload"
-                className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl p-6 sm:p-8 cursor-pointer transition ${
-                  csvFile ? "border-[#2E7D32] bg-[#E8F5E9]/40" : "border-slate-300 hover:border-[#2E7D32] hover:bg-slate-50"
-                }`}
-              >
-                <Upload className={`w-7 h-7 sm:w-8 sm:h-8 ${csvFile ? "text-[#2E7D32]" : "text-slate-400"}`} />
-                {csvFile ? (
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-[#2E7D32]">{csvFile.name}</p>
-                    <p className="text-xs text-[#2E7D32]/70">{parsedRows.length} rows parsed</p>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-slate-700">Tap to upload CSV file</p>
-                    <p className="text-xs text-slate-400">or drag and drop</p>
+                {["teachers", "followups", "classes"].includes(importEntity) && (
+                  <div
+                    role="alert"
+                    className="mb-4 flex items-start gap-2 rounded-ctl border border-caution/30 bg-[var(--lamp-caution-bg)] p-3 text-xs text-caution"
+                  >
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+                    <span><strong>{entityLabel(importEntity)}</strong> has no unique identifier — importing the same file twice will create duplicate records. Make sure you only import each file once.</span>
                   </div>
                 )}
-              </label>
-            </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="csvUpload"
+                />
+                <label
+                  htmlFor="csvUpload"
+                  className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed p-6 transition-colors sm:p-8",
+                    csvFile ? "border-phos/60 bg-well" : "border-bezel-strong hover:border-phos/60 hover:bg-well"
+                  )}
+                >
+                  <Upload className={cn("h-7 w-7 sm:h-8 sm:w-8", csvFile ? "text-phos" : "text-faint")} aria-hidden />
+                  {csvFile ? (
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-phos">{csvFile.name}</p>
+                      <p className="readout text-xs text-dim" data-numeric>{parsedRows.length} rows parsed</p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-ink">Tap to upload CSV file</p>
+                      <p className="text-xs text-faint">or drag and drop</p>
+                    </div>
+                  )}
+                </label>
+              </CardContent>
+            </Card>
 
             {/* Step 3: Review & Import */}
             {(parsedRows.length > 0 || parseErrors.length > 0) && !importResult && (
-              <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
-                <h3 className="font-semibold text-slate-800 mb-4">Step 3 — Review & Import</h3>
-
-                {parseErrors.length > 0 && (
-                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-center gap-2 text-red-700 font-medium text-sm mb-2">
-                      <AlertCircle className="w-4 h-4 flex-shrink-0" /> Validation Errors ({parseErrors.length})
-                    </div>
-                    <ul className="space-y-1">
-                      {parseErrors.slice(0, 10).map((err, i) => (
-                        <li key={i} className="text-xs text-red-600">{err}</li>
-                      ))}
-                      {parseErrors.length > 10 && <li className="text-xs text-red-400">...and {parseErrors.length - 10} more</li>}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 p-4 bg-slate-50 rounded-lg">
-                  <div className="text-sm text-slate-600">
-                    <span className="font-semibold text-slate-800">{parsedRows.length}</span> rows ready to import into <span className="font-semibold">{entityLabel(importEntity)}</span>
-                    {parseErrors.length > 0 && <span className="text-red-500 ml-2">({parseErrors.length} with errors)</span>}
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={resetImport} className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg hover:bg-white transition flex items-center gap-1">
-                      <X className="w-3.5 h-3.5" /> Clear
-                    </button>
-                    <button
-                      onClick={handleImport}
-                      disabled={importing || parsedRows.length === 0}
-                      className="px-4 py-1.5 text-xs bg-[#2E7D32] text-white rounded-lg hover:bg-[#1B5E20] transition disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                      {importing ? "Importing..." : `Import ${parsedRows.length} Rows`}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Preview table */}
-                <div className="overflow-auto rounded-lg border border-slate-200 max-h-56">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        {parsedRows[0] && Object.keys(parsedRows[0]).map((k) => (
-                          <th key={k} className="text-left px-3 py-2 font-semibold text-slate-500 whitespace-nowrap">{k}</th>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Step 3 — Review &amp; Import</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {parseErrors.length > 0 && (
+                    <div role="alert" className="mb-4 rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-alert">
+                        <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden /> Validation Errors ({parseErrors.length})
+                      </div>
+                      <ul className="space-y-1">
+                        {parseErrors.slice(0, 10).map((err, i) => (
+                          <li key={i} className="text-xs text-alert">{err}</li>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {parsedRows.slice(0, 5).map((row, i) => (
-                        <tr key={i}>
-                          {Object.values(row).map((val, j) => (
-                            <td key={j} className="px-3 py-2 text-slate-600 whitespace-nowrap max-w-[8rem] truncate">{String(val)}</td>
+                        {parseErrors.length > 10 && <li className="text-xs text-dim">…and {parseErrors.length - 10} more</li>}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="mb-4 flex flex-col justify-between gap-3 rounded-ctl bg-well p-4 sm:flex-row sm:items-center">
+                    <div className="text-sm text-dim">
+                      <span className="readout font-bold text-ink" data-numeric>{parsedRows.length}</span> rows ready to import into <span className="font-semibold text-ink">{entityLabel(importEntity)}</span>
+                      {parseErrors.length > 0 && <span className="ml-2 text-alert">({parseErrors.length} with errors)</span>}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="secondary" size="sm" onClick={resetImport}>
+                        <X className="h-3.5 w-3.5" aria-hidden /> Clear
+                      </Button>
+                      <Button
+                        variant="solid"
+                        size="sm"
+                        onClick={() => void handleImport()}
+                        disabled={importing || parsedRows.length === 0 || parseErrors.length > 0}
+                      >
+                        {importing ? <Spinner className="h-3.5 w-3.5" /> : <Upload className="h-3.5 w-3.5" aria-hidden />}
+                        {importing ? "Importing…" : `Import ${parsedRows.length} Rows`}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Preview table */}
+                  <div className="max-h-56 overflow-auto rounded-ctl border border-bezel">
+                    <Table className="text-xs">
+                      <THead>
+                        <tr>
+                          {parsedRows[0] && Object.keys(parsedRows[0]).map((k) => (
+                            <Th key={k}>{k}</Th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {parsedRows.length > 5 && (
-                    <p className="text-center text-xs text-slate-400 py-2">...and {parsedRows.length - 5} more rows</p>
-                  )}
-                </div>
-              </div>
+                      </THead>
+                      <tbody>
+                        {parsedRows.slice(0, 5).map((row, i) => (
+                          <Tr key={i}>
+                            {Object.values(row).map((val, j) => (
+                              <Td key={j} className="max-w-32 truncate whitespace-nowrap text-dim" title={String(val)}>
+                                {String(val)}
+                              </Td>
+                            ))}
+                          </Tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                    {parsedRows.length > 5 && (
+                      <p className="py-2 text-center text-xs text-faint">…and {parsedRows.length - 5} more rows</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Import Result */}
             {importResult && (
-              <div className={`bg-white rounded-xl border p-4 sm:p-6 ${importResult.failed === 0 ? "border-green-200" : "border-amber-200"}`}>
-                <div className={`flex items-center gap-2 mb-4 font-semibold ${importResult.failed === 0 ? "text-green-700" : "text-amber-700"}`}>
-                  <CheckCircle className="w-5 h-5" />
-                  Import Complete
-                </div>
-                <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-4">
-                  <div className="bg-slate-50 rounded-lg p-3 text-center">
-                    <p className="text-xl sm:text-2xl font-bold text-slate-800">{importResult.total}</p>
-                    <p className="text-xs text-slate-400">Total</p>
+              <Card className={importResult.failed === 0 ? "border-phos/30" : "border-caution/30"}>
+                <CardHeader>
+                  <CardTitle className={cn("flex items-center gap-2", importResult.failed === 0 ? "text-phos" : "text-caution")}>
+                    <CheckCircle2 className="h-5 w-5" aria-hidden />
+                    Import Complete
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-4 grid grid-cols-3 gap-3">
+                    <div className="rounded-ctl bg-well p-3 text-center">
+                      <p className="readout text-xl font-bold text-ink sm:text-2xl" data-numeric>{importResult.total}</p>
+                      <p className="placard mt-1">Total</p>
+                    </div>
+                    <div className="rounded-ctl border border-phos/30 bg-[var(--lamp-ok-bg)] p-3 text-center">
+                      <p className="readout text-xl font-bold text-phos sm:text-2xl" data-numeric>{importResult.success}</p>
+                      <p className="placard mt-1">Imported</p>
+                    </div>
+                    <div className="rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] p-3 text-center">
+                      <p className="readout text-xl font-bold text-alert sm:text-2xl" data-numeric>{importResult.failed}</p>
+                      <p className="placard mt-1">Failed</p>
+                    </div>
                   </div>
-                  <div className="bg-green-50 rounded-lg p-3 text-center">
-                    <p className="text-xl sm:text-2xl font-bold text-green-700">{importResult.success}</p>
-                    <p className="text-xs text-green-500">Imported</p>
-                  </div>
-                  <div className="bg-red-50 rounded-lg p-3 text-center">
-                    <p className="text-xl sm:text-2xl font-bold text-red-600">{importResult.failed}</p>
-                    <p className="text-xs text-red-400">Failed</p>
-                  </div>
-                </div>
-                {importResult.errors.length > 0 && (
-                  <div className="p-3 bg-red-50 rounded-lg mb-4">
-                    <p className="text-xs font-semibold text-red-700 mb-1">Failed rows:</p>
-                    {importResult.errors.map((e, i) => (
-                      <p key={i} className="text-xs text-red-600">Row {e.row}: {e.error}</p>
-                    ))}
-                  </div>
-                )}
-                <button onClick={resetImport} className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 transition">
-                  Import Another File
-                </button>
-              </div>
+                  {importResult.errors.length > 0 && (
+                    <div role="alert" className="mb-4 rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] p-3">
+                      <p className="mb-1 text-xs font-bold text-alert">Failed rows:</p>
+                      {importResult.errors.map((e, i) => (
+                        <p key={i} className="text-xs text-alert">Row {e.row}: {e.error}</p>
+                      ))}
+                    </div>
+                  )}
+                  <Button variant="secondary" size="sm" onClick={resetImport}>
+                    Import Another File
+                  </Button>
+                </CardContent>
+              </Card>
             )}
           </>
         )}
 
         {activeTab === "export" && (
-          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 space-y-6">
-            <div>
-              <h3 className="font-semibold text-slate-800 mb-1">Export Data as CSV</h3>
-              <p className="text-sm text-slate-500">Select a section and download all records as a CSV file.</p>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {exportEntities.map((entity) => (
-                <button
-                  key={entity.key}
-                  onClick={() => setExportEntity(entity.key)}
-                  className={`flex items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl border-2 transition text-left ${
-                    exportEntity === entity.key
-                      ? "border-[#2E7D32] bg-[#E8F5E9]/50"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <span className="text-xl sm:text-2xl">{entity.icon}</span>
-                  <span className="text-xs sm:text-sm font-medium text-slate-700">{entity.label}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-4 border-t border-slate-100">
-              <div className="flex-1">
-                <p className="text-sm text-slate-600">
-                  Export <strong className="text-slate-800">{entityLabel(exportEntity)}</strong> as CSV
-                </p>
-                <p className="text-xs text-slate-400 mt-0.5">All fields included · UTF-8 encoded</p>
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Export Data as CSV</CardTitle>
+                <CardDescription className="mt-0.5">Select a section and download all records as a CSV file.</CardDescription>
               </div>
-              <button
-                onClick={handleExport}
-                disabled={exporting}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#2E7D32] text-white text-sm font-medium rounded-lg hover:bg-[#1B5E20] transition disabled:opacity-50"
-              >
-                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                {exporting ? "Exporting..." : "Download CSV"}
-              </button>
-            </div>
-          </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Section to export">
+                {exportEntities.map((entity) => {
+                  const EntityIcon = entity.icon;
+                  const selected = exportEntity === entity.key;
+                  return (
+                    <button
+                      key={entity.key}
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => { setExportEntity(entity.key); setExportNotice(null); }}
+                      className={cn(
+                        "flex items-center gap-2 rounded-ctl border p-3 text-left transition-colors sm:gap-3 sm:p-4",
+                        selected
+                          ? "border-phos bg-well shadow-glow"
+                          : "border-bezel hover:border-bezel-strong hover:bg-well"
+                      )}
+                    >
+                      <EntityIcon className={cn("h-5 w-5 flex-shrink-0", selected ? "text-phos" : "text-faint")} aria-hidden />
+                      <span className={cn("text-xs font-semibold sm:text-sm", selected ? "text-ink" : "text-dim")}>{entity.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {exportNotice && (
+                <div
+                  role="alert"
+                  className={cn(
+                    "flex items-start gap-2 rounded-ctl border p-3 text-xs",
+                    exportNotice.tone === "alert"
+                      ? "border-alert/30 bg-[var(--lamp-alert-bg)] text-alert"
+                      : "border-caution/30 bg-[var(--lamp-caution-bg)] text-caution"
+                  )}
+                >
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+                  <span>{exportNotice.text}</span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-4 border-t border-bezel pt-4 sm:flex-row sm:items-center">
+                <div className="flex-1">
+                  <p className="text-sm text-dim">
+                    Export <strong className="text-ink">{entityLabel(exportEntity)}</strong> as CSV
+                  </p>
+                  <p className="mt-0.5 text-xs text-faint">All fields included · UTF-8 encoded</p>
+                </div>
+                <Button variant="solid" onClick={() => void handleExport()} disabled={exporting}>
+                  {exporting ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" aria-hidden />}
+                  {exporting ? "Exporting…" : "Download CSV"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

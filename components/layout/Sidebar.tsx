@@ -186,8 +186,10 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-bezel bg-face transition-transform duration-300 ${
-        isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+      className={`fixed inset-y-0 start-0 z-40 flex w-[248px] flex-col border-e border-bezel bg-face transition-transform duration-300 ${
+        isOpen
+          ? "translate-x-0"
+          : "ltr:-translate-x-full rtl:translate-x-full lg:ltr:translate-x-0 lg:rtl:translate-x-0"
       }`}
       aria-label="Main navigation"
     >
@@ -239,7 +241,7 @@ export default function Sidebar({
                     {/* needle tick for the current position */}
                     <span
                       aria-hidden
-                      className={`absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full transition-all ${
+                      className={`absolute start-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full transition-all ${
                         active ? "bg-phos" : "bg-transparent"
                       }`}
                     />

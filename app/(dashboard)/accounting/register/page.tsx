@@ -3,10 +3,19 @@
 import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, Download, Loader2, RefreshCw, Search } from "lucide-react";
+import { Download, RefreshCw, SearchX } from "lucide-react";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import { AccountSelect, exportCsv, fmtNum, usePostingAccounts } from "@/components/accounting/shared";
 import BackButton from "@/components/shared/BackButton";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import { Button } from "@/components/ui/button";
+import { Lamp } from "@/components/ui/lamp";
+import { Select, SearchInput } from "@/components/ui/input";
+import {
+  TableShell, Table, THead, Th, Tr, Td, TableFooter, usePagination, Pagination,
+} from "@/components/ui/table";
+import { PanelLoading, SkeletonRows, LoadError } from "@/components/ui/feedback";
 
 interface GlRow {
   date: string; jvNumber: string; status: string; sourceType: string; sourceNumber: string;
@@ -23,6 +32,7 @@ function RegisterInner() {
 
   const [rows, setRows] = useState<GlRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [from, setFrom] = useState(params.get("from") ?? "");
   const [to, setTo] = useState(params.get("to") ?? "");
   const [sourceType, setSourceType] = useState(params.get("sourceType") ?? "");
@@ -30,16 +40,24 @@ function RegisterInner() {
   const [group, setGroup] = useState(params.get("group") ?? "");   // cash | bank | ""
   const [drcr, setDrcr] = useState("");                             // debit | credit | ""
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce the free-text search — filtering runs over the full GL dump.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadFailed(false);
     const q = new URLSearchParams();
     if (from) q.set("from", from);
     if (to) q.set("to", to);
     fetch(`/api/accounting/gl-dump?${q}`)
       .then((r) => r.json())
       .then((d) => setRows(d.rows ?? []))
-      .catch(() => {})
+      .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
   }, [from, to]);
 
@@ -53,7 +71,7 @@ function RegisterInner() {
   }, [group, accounts]);
 
   const filtered = useMemo(() => {
-    const s = search.trim().toLowerCase();
+    const s = debouncedSearch.trim().toLowerCase();
     return rows.filter((r) => {
       if (sourceType && r.sourceType !== sourceType) return false;
       if (account && r.accountCode !== account) return false;
@@ -64,7 +82,9 @@ function RegisterInner() {
         .some((v) => (v ?? "").toLowerCase().includes(s))) return false;
       return true;
     });
-  }, [rows, sourceType, account, groupCodes, drcr, search]);
+  }, [rows, sourceType, account, groupCodes, drcr, debouncedSearch]);
+
+  const { slice, page, pages, setPage, total: pageTotal } = usePagination(filtered, 100);
 
   const totalDebit = filtered.reduce((t, r) => t + r.debit, 0);
   const totalCredit = filtered.reduce((t, r) => t + r.credit, 0);
@@ -77,100 +97,112 @@ function RegisterInner() {
     );
   };
 
-  const sel = "h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white";
-
   return (
     <div className="space-y-5 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <BackButton />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Financial Register</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {filtered.length} of {rows.length} lines · Dr {fmtNum(totalDebit)} / Cr {fmtNum(totalCredit)}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
-          <button onClick={doExport} disabled={filtered.length === 0} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
-            <Download className="h-4 w-4" /> Excel / CSV
-          </button>
-        </div>
-      </div>
+      <BackButton />
+      <PageHeader
+        title="Financial Register"
+        subtitle={`${filtered.length} of ${rows.length} lines · Dr ${fmtNum(totalDebit)} / Cr ${fmtNum(totalCredit)}`}
+        actions={
+          <>
+            <Button variant="ghost" size="icon" onClick={load} aria-label="Reload register">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button variant="solid" onClick={doExport} disabled={filtered.length === 0}>
+              <Download className="h-4 w-4" /> Excel / CSV
+            </Button>
+          </>
+        }
+      />
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
-        <select value={sourceType} onChange={(e) => setSourceType(e.target.value)} className={sel}>
+      <div className="face flex flex-wrap items-center gap-2 p-3">
+        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(0); }} />
+        <Select value={sourceType} onChange={(e) => { setSourceType(e.target.value); setPage(0); }} aria-label="Source type" className="w-auto">
           <option value="">All Types</option>
           {SOURCE_TYPES.map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select value={group} onChange={(e) => { setGroup(e.target.value); setAccount(""); }} className={sel}>
+        </Select>
+        <Select value={group} onChange={(e) => { setGroup(e.target.value); setAccount(""); setPage(0); }} aria-label="Account group" className="w-auto">
           <option value="">All Groups</option>
           <option value="cash">Cash accounts</option>
           <option value="bank">Bank accounts</option>
-        </select>
+        </Select>
         <div className="w-56">
-          <AccountSelect value={account} onChange={(v) => { setAccount(v); setGroup(""); }} accounts={accounts} placeholder="Any account" />
+          <AccountSelect value={account} onChange={(v) => { setAccount(v); setGroup(""); setPage(0); }} accounts={accounts} placeholder="Any account" />
         </div>
-        <select value={drcr} onChange={(e) => setDrcr(e.target.value)} className={sel}>
+        <Select value={drcr} onChange={(e) => { setDrcr(e.target.value); setPage(0); }} aria-label="Debit or credit" className="w-auto">
           <option value="">Debit + Credit</option>
           <option value="debit">Debits only</option>
           <option value="credit">Credits only</option>
-        </select>
-        <div className="relative min-w-[180px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input placeholder="Voucher no, name, description…" value={search} onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white" />
-        </div>
+        </Select>
+        <SearchInput
+          placeholder="Voucher no, name, description…"
+          aria-label="Search register lines"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+          className="min-w-[180px] flex-1"
+        />
       </div>
 
       {/* Table */}
       {loading ? (
-        <div className="flex h-40 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
+        <TableShell><SkeletonRows rows={10} cols={7} /></TableShell>
+      ) : loadFailed ? (
+        <LoadError message="Couldn't load the financial register. Check your connection and retry." onRetry={load} />
       ) : filtered.length === 0 ? (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">No lines match these filters.</div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100 text-sm dark:divide-white/10">
-              <thead className="bg-gray-50 dark:bg-white/5">
-                <tr>
-                  {["Date", "Voucher", "Type", "Account", "Description", "Party", "Debit", "Credit"].map((h) => (
-                    <th key={h} className={`whitespace-nowrap px-3 py-2.5 text-xs font-bold uppercase text-gray-500 ${["Debit", "Credit"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-                {filtered.slice(0, 1000).map((r, i) => (
-                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/5">
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">{r.date}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs">
-                      <span className="font-mono font-semibold text-[#2E7D32] dark:text-green-400">{r.jvNumber}</span>
-                      {r.sourceNumber && <span className="text-gray-400"> · {r.sourceNumber}</span>}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-white/10 dark:text-gray-400">{r.sourceType}</span>
-                    </td>
-                    <td className="max-w-[200px] truncate px-3 py-2 text-gray-700 dark:text-gray-300">
-                      <Link href={`/accounting/ledger?account=${encodeURIComponent(r.accountCode)}`} className="hover:text-[#2E7D32] hover:underline dark:hover:text-green-400">
-                        {r.accountName}
-                      </Link>
-                    </td>
-                    <td className="max-w-[240px] truncate px-3 py-2 text-xs text-gray-500">{r.description}</td>
-                    <td className="max-w-[140px] truncate px-3 py-2 text-xs text-gray-500">{r.student || r.supplier || ""}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtNum(r.debit)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtNum(r.credit)}</td>
-                  </tr>
-                ))}
-                <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold dark:border-white/20 dark:bg-white/5">
-                  <td className="px-3 py-2.5 text-gray-900 dark:text-white" colSpan={6}>TOTAL ({filtered.length} lines{filtered.length > 1000 ? ", showing first 1000 — export for all" : ""})</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(totalDebit)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(totalCredit)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div className="face">
+          <EmptyState
+            icon={SearchX}
+            title="No lines match these filters"
+            description="Widen the date range or clear a filter to see more of the ledger."
+          />
         </div>
+      ) : (
+        <TableShell>
+          <Table>
+            <THead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Voucher</Th>
+                <Th>Type</Th>
+                <Th>Account</Th>
+                <Th>Description</Th>
+                <Th>Party</Th>
+                <Th numeric>Debit</Th>
+                <Th numeric>Credit</Th>
+              </tr>
+            </THead>
+            <tbody>
+              {slice.map((r, i) => (
+                <Tr key={`${page}-${i}`}>
+                  <Td className="readout whitespace-nowrap text-xs text-dim" data-numeric>{r.date}</Td>
+                  <Td className="whitespace-nowrap text-xs">
+                    <span className="readout font-semibold text-phos" data-numeric>{r.jvNumber}</span>
+                    {r.sourceNumber && <span className="text-faint"> · {r.sourceNumber}</span>}
+                  </Td>
+                  <Td className="whitespace-nowrap"><Lamp variant="off">{r.sourceType}</Lamp></Td>
+                  <Td className="max-w-[200px] truncate" title={r.accountName}>
+                    <Link href={`/accounting/ledger?account=${encodeURIComponent(r.accountCode)}`} className="text-ink underline-offset-4 hover:text-phos hover:underline">
+                      {r.accountName}
+                    </Link>
+                  </Td>
+                  <Td className="max-w-[240px] truncate text-xs text-dim" title={r.description}>{r.description}</Td>
+                  <Td className="max-w-[140px] truncate text-xs text-dim" title={r.student || r.supplier || ""}>{r.student || r.supplier || ""}</Td>
+                  <Td numeric className="whitespace-nowrap">{fmtNum(r.debit)}</Td>
+                  <Td numeric className="whitespace-nowrap">{fmtNum(r.credit)}</Td>
+                </Tr>
+              ))}
+              <tr className="border-t-2 border-bezel-strong bg-well font-bold">
+                <Td colSpan={6} className="placard">Total · {filtered.length} lines</Td>
+                <Td numeric>{fmtNum(totalDebit)}</Td>
+                <Td numeric>{fmtNum(totalCredit)}</Td>
+              </tr>
+            </tbody>
+          </Table>
+          <TableFooter>
+            <Pagination page={page} pages={pages} setPage={setPage} total={pageTotal} shown={slice.length} />
+          </TableFooter>
+        </TableShell>
       )}
     </div>
   );
@@ -178,7 +210,7 @@ function RegisterInner() {
 
 export default function FinancialRegisterPage() {
   return (
-    <Suspense fallback={<div className="flex h-64 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
+    <Suspense fallback={<PanelLoading label="Loading register" />}>
       <RegisterInner />
     </Suspense>
   );

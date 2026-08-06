@@ -12,10 +12,14 @@ const lampVariants = cva(
   {
     variants: {
       variant: {
-        ok: "border-phos/30 bg-[var(--lamp-ok-bg)] text-phos",
-        caution: "border-caution/30 bg-[var(--lamp-caution-bg)] text-caution",
-        alert: "border-alert/30 bg-[var(--lamp-alert-bg)] text-alert",
-        advisory: "border-advisory/30 bg-[var(--lamp-advisory-bg)] text-advisory",
+        // Lit lamps carry a faint bloom — the difference between "lit" and "printed"
+        ok: "border-phos/30 bg-[var(--lamp-ok-bg)] text-phos shadow-[0_0_8px_var(--glow-ok)]",
+        caution:
+          "border-caution/30 bg-[var(--lamp-caution-bg)] text-caution shadow-[0_0_8px_var(--glow-caution)]",
+        alert:
+          "border-alert/30 bg-[var(--lamp-alert-bg)] text-alert shadow-[0_0_8px_var(--glow-alert)]",
+        advisory:
+          "border-advisory/30 bg-[var(--lamp-advisory-bg)] text-advisory shadow-[0_0_8px_var(--glow-advisory)]",
         off: "border-bezel bg-[var(--lamp-off-bg)] text-dim",
       },
       pulse: {

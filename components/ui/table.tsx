@@ -44,8 +44,8 @@ export function Th({
   return (
     <th
       className={cn(
-        "placard whitespace-nowrap border-b border-bezel px-3 py-2.5 text-left first:pl-4 last:pr-4",
-        numeric && "text-right",
+        "placard whitespace-nowrap border-b border-bezel px-3 py-2.5 text-start first:ps-4 last:pe-4",
+        numeric && "text-end",
         className
       )}
       {...props}
@@ -81,8 +81,8 @@ export function Td({
   return (
     <td
       className={cn(
-        "px-3 py-2.5 align-middle text-ink first:pl-4 last:pr-4",
-        numeric && "readout text-right",
+        "px-3 py-2.5 align-middle text-ink first:ps-4 last:pe-4",
+        numeric && "readout text-end",
         className
       )}
       data-numeric={numeric || undefined}

@@ -1,31 +1,59 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, UserCog, Phone } from "lucide-react";
+import { Phone, Plus, UserCog } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import EmptyState from "@/components/shared/EmptyState";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate, getInitials } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
+import {
+  TableShell,
+  Table,
+  THead,
+  Th,
+  Tr,
+  Td,
+  TableFooter,
+  usePagination,
+  Pagination,
+} from "@/components/ui/table";
+import { SkeletonRows, LoadError } from "@/components/ui/feedback";
+
+type AllocationRow = {
+  _id: string;
+  leadId?: { studentName?: string; studentPhone?: string };
+  teacherId?: { fullName?: string };
+  backupTeacherId?: { fullName?: string };
+  status: string;
+  allocatedBy?: { name?: string };
+  allocationDate?: string;
+};
 
 export default function AllocationsPage() {
-  const [allocations, setAllocations] = useState<any[]>([]);
+  const [allocations, setAllocations] = useState<AllocationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [status, setStatus] = useState("");
 
   const fetchAllocations = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params = new URLSearchParams();
       if (status) params.set("status", status);
       const res = await fetch(`/api/allocations?${params}`);
       const d = await res.json();
       if (res.status === 501) {
+        // Module intentionally not implemented on the server yet.
         setAllocations([]);
       } else {
         setAllocations(d.allocations || []);
       }
     } catch {
+      setLoadError("Couldn't load allocations. Check your connection and retry.");
       setAllocations([]);
     } finally {
       setLoading(false);
@@ -34,28 +62,33 @@ export default function AllocationsPage() {
 
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
 
+  const { slice, page, pages, setPage, total } = usePagination(allocations);
+
   return (
-    <div className="flex flex-col min-h-screen">
+    <div>
       <PageHeader
         title="Teacher Allocations"
         subtitle="Manual teacher-to-lead assignments"
         actions={
-          <Link href="/allocations/new" className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition">
-            <Plus className="w-4 h-4" /> New Allocation
+          <Link href="/allocations/new" className={cn(buttonVariants({ variant: "secondary" }))}>
+            <Plus className="h-4 w-4" aria-hidden /> New Allocation
           </Link>
         }
       />
 
-      <div className="mx-6 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-        <p className="text-sm font-semibold text-amber-800">This module is not implemented yet.</p>
-        <p className="text-xs text-amber-600 mt-0.5">Teacher allocation management will be available in a future update.</p>
+      <div role="status" className="mb-4 rounded-card border border-advisory/30 bg-[var(--lamp-advisory-bg)] px-4 py-3">
+        <p className="text-sm font-bold text-advisory">This module is not yet available.</p>
+        <p className="mt-0.5 text-xs text-dim">
+          Teacher allocation is planned for a later release. Nothing recorded here yet.
+        </p>
       </div>
 
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex gap-3">
-        <select
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Select
+          className="w-44"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Filter by status"
         >
           <option value="">All Statuses</option>
           <option value="pending">Pending</option>
@@ -63,72 +96,76 @@ export default function AllocationsPage() {
           <option value="active">Active</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
-        </select>
+        </Select>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        {loading ? (
-          <div className="p-6 space-y-2">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-20 bg-slate-100 rounded-lg animate-pulse" />)}
-          </div>
-        ) : allocations.length === 0 ? (
-          <EmptyState
-            icon={UserCog}
-            title="No allocations yet"
-            description="Start by allocating a teacher to a lead."
-            action={
-              <Link href="/allocations/new" className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg">
-                Create First Allocation
-              </Link>
-            }
-          />
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Lead</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Teacher</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Backup</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Allocated By</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {allocations.map((a) => (
-                <tr key={a._id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <p className="font-medium text-slate-800">{a.leadId?.studentName}</p>
-                    <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                      <Phone className="w-3 h-3" />{a.leadId?.studentPhone}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
-                        {a.teacherId?.fullName?.[0]}
-                      </div>
-                      <span className="text-slate-700 font-medium">{a.teacherId?.fullName}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 hidden md:table-cell text-slate-500 text-xs">
-                    {a.backupTeacherId?.fullName || "—"}
-                  </td>
-                  <td className="px-4 py-4">
-                    <StatusBadge status={a.status} />
-                  </td>
-                  <td className="px-4 py-4 hidden lg:table-cell text-slate-500 text-xs">
-                    {a.allocatedBy?.name || "—"}
-                  </td>
-                  <td className="px-4 py-4 hidden lg:table-cell text-slate-500 text-xs">
-                    {formatDate(a.allocationDate)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {loadError ? (
+        <LoadError message={loadError} onRetry={() => void fetchAllocations()} />
+      ) : (
+        <TableShell>
+          {loading ? (
+            <SkeletonRows rows={5} cols={5} />
+          ) : allocations.length === 0 ? (
+            <EmptyState
+              icon={UserCog}
+              title="Not yet available"
+              description="Allocations will appear here once the module ships. No action is needed."
+            />
+          ) : (
+            <>
+              <Table>
+                <THead>
+                  <tr>
+                    <Th>Lead</Th>
+                    <Th>Teacher</Th>
+                    <Th className="hidden md:table-cell">Backup</Th>
+                    <Th>Status</Th>
+                    <Th className="hidden lg:table-cell">Allocated By</Th>
+                    <Th className="hidden lg:table-cell">Date</Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {slice.map((a) => (
+                    <Tr key={a._id}>
+                      <Td>
+                        <p className="font-semibold">{a.leadId?.studentName}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-faint">
+                          <Phone className="h-3 w-3" aria-hidden />
+                          <span className="readout" data-numeric>{a.leadId?.studentPhone}</span>
+                        </p>
+                      </Td>
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <span
+                            aria-hidden
+                            className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full border border-bezel bg-well text-[10px] font-bold text-dim"
+                          >
+                            {a.teacherId?.fullName ? getInitials(a.teacherId.fullName) : "—"}
+                          </span>
+                          <span className="font-medium">{a.teacherId?.fullName}</span>
+                        </div>
+                      </Td>
+                      <Td className="hidden text-xs text-dim md:table-cell">
+                        {a.backupTeacherId?.fullName || "—"}
+                      </Td>
+                      <Td><StatusBadge status={a.status} /></Td>
+                      <Td className="hidden text-xs text-dim lg:table-cell">
+                        {a.allocatedBy?.name || "—"}
+                      </Td>
+                      <Td className="hidden text-xs text-dim lg:table-cell">
+                        {a.allocationDate ? formatDate(a.allocationDate) : "—"}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+              <TableFooter>
+                <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+              </TableFooter>
+            </>
+          )}
+        </TableShell>
+      )}
     </div>
   );
 }

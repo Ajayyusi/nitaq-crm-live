@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, BellOff, Calendar, CheckCircle, CreditCard, Sparkles, X } from "lucide-react";
+import { Bell, BellOff, CheckCircle, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Lamp } from "@/components/ui/lamp";
+import { Spinner } from "@/components/ui/feedback";
 
 type FollowUpItem = {
   id: string;
@@ -71,6 +74,7 @@ export function NotificationPanel() {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Data>({ followUps: [], payments: [], system: [] });
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [muted, setMuted] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem(MUTE_KEY) === "1";
@@ -80,13 +84,16 @@ export function NotificationPanel() {
 
   async function load(notify = false) {
     setLoading(true);
+    let failures = 0;
+    const safeJson = (p: Promise<Response>) =>
+      p.then((r) => r.json()).catch(() => { failures++; return {}; });
     try {
       // Follow-ups / payments are sales+finance only; system alerts are for
       // every role. Any that the role can't read just come back empty.
       const [fuRes, payRes, sysRes] = await Promise.all([
-        fetch("/api/follow-ups?view=today&status=Pending").then((r) => r.json()).catch(() => ({})),
-        fetch("/api/payments?status=Overdue").then((r) => r.json()).catch(() => ({})),
-        fetch("/api/notifications").then((r) => r.json()).catch(() => ({})),
+        safeJson(fetch("/api/follow-ups?view=today&status=Pending")),
+        safeJson(fetch("/api/payments?status=Overdue")),
+        safeJson(fetch("/api/notifications")),
       ]);
       const followUps: FollowUpItem[] = (fuRes.followUps ?? []).map((f: Record<string, unknown>) => ({
         id: f.id,
@@ -105,6 +112,9 @@ export function NotificationPanel() {
         read: n.read, createdAt: n.createdAt,
       }));
       setData({ followUps, payments, system });
+      // Only an all-endpoints failure is a real outage; role-restricted
+      // endpoints legitimately return empty payloads.
+      setFailed(failures >= 3);
 
       // Browser notification when new items appear
       const unreadSystem = system.filter((s) => !s.read).length;
@@ -118,7 +128,7 @@ export function NotificationPanel() {
       }
       prevCountRef.current = total;
     } catch {
-      // silently ignore
+      setFailed(true);
     } finally {
       setLoading(false);
     }
@@ -185,59 +195,73 @@ export function NotificationPanel() {
     } catch { /* optimistic — ignore */ }
   }
 
+  const rowCls =
+    "flex w-full items-start gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-well";
+
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={toggle}
-        aria-label="Notifications"
-        className="relative grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32] dark:border-slate-700 dark:bg-[#112013] dark:text-slate-300 dark:hover:border-[#2E7D32] dark:hover:bg-[#1a2e1b] dark:hover:text-[#4CAF50]"
+        aria-label={muted ? "Notifications (muted)" : "Notifications"}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        className="relative grid h-10 w-10 place-items-center rounded-ctl border border-bezel-strong bg-face text-dim shadow-card transition-colors hover:border-phos hover:text-phos focus-visible:outline-none focus-visible:shadow-glow"
       >
-        {muted ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+        {muted ? <BellOff className="h-4 w-4" aria-hidden /> : <Bell className="h-4 w-4" aria-hidden />}
         {!muted && total > 0 && (
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#2E7D32] ring-2 ring-white dark:ring-[#112013]" />
+          <span className="absolute right-2 top-2 h-2 w-2 rounded-lamp bg-phos shadow-glow" aria-hidden />
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[#112013]">
+        <div
+          role="dialog"
+          aria-label="Notifications"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 w-80 overflow-hidden rounded-card border border-bezel bg-raised shadow-raise"
+          style={{ animation: "power-on 0.2s cubic-bezier(0.16,1,0.3,1) both" }}
+        >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+          <div className="flex items-center justify-between border-b border-bezel px-4 py-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-[#0D1F0E] dark:text-[#e8f5e9]">Notifications</span>
+              <span className="text-sm font-bold text-ink">Notifications</span>
               {total > 0 && !muted && (
-                <span className="rounded-full bg-[#2E7D32] px-2 py-0.5 text-[10px] font-bold text-white">
-                  {total}
-                </span>
+                <Lamp variant="ok">
+                  <span data-numeric>{total}</span>
+                </Lamp>
               )}
             </div>
             <div className="flex items-center gap-1">
-              <button
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={toggleMute}
                 title={muted ? "Unmute auto-reminders" : "Mute auto-reminders"}
-                className={`grid h-7 w-7 place-items-center rounded-lg transition ${muted ? "bg-slate-100 text-slate-500 hover:bg-slate-200" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"}`}
+                aria-label={muted ? "Unmute auto-reminders" : "Mute auto-reminders"}
               >
                 {muted ? <Bell className="h-3.5 w-3.5" /> : <BellOff className="h-3.5 w-3.5" />}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="iconSm"
                 onClick={() => setOpen(false)}
-                className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                aria-label="Close notifications"
               >
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Mute banner */}
           {muted && (
-            <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
-              Auto-reminders are muted. Click <BellOff className="inline h-3 w-3" /> to re-enable.
+            <div className="border-b border-bezel bg-well px-4 py-2 text-xs text-dim">
+              Auto-reminders are muted. Use the bell above to re-enable.
             </div>
           )}
 
           {/* Poll interval label */}
           {!muted && (
-            <div className="border-b border-slate-100 bg-slate-50 px-4 py-1.5 text-[10px] text-slate-400 dark:border-slate-700 dark:bg-slate-800/50">
+            <div className="border-b border-bezel bg-well px-4 py-1.5 text-[10px] text-faint">
               Auto-checks every 5 min · browser alerts on
             </div>
           )}
@@ -246,22 +270,33 @@ export function NotificationPanel() {
           <div className="max-h-[400px] overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-10">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#2E7D32] border-t-transparent" />
+                <Spinner className="h-5 w-5" />
+              </div>
+            ) : failed && total === 0 ? (
+              <div role="alert" className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                <p className="text-sm font-semibold text-ink">Couldn&apos;t check for notifications.</p>
+                <p className="text-xs text-dim">Check your connection, then try again.</p>
+                <Button variant="secondary" size="sm" onClick={() => load()}>
+                  Retry
+                </Button>
               </div>
             ) : total === 0 ? (
               <div className="flex flex-col items-center gap-2 py-10">
-                <CheckCircle className="h-8 w-8 text-[#2E7D32]" />
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">All caught up!</p>
-                <p className="text-xs text-slate-400">No pending follow-ups or overdue payments</p>
+                <CheckCircle className="h-8 w-8 text-phos" aria-hidden />
+                <p className="text-sm font-semibold text-ink">All caught up</p>
+                <p className="text-xs text-faint">No pending follow-ups or overdue payments</p>
               </div>
             ) : (
               <>
                 {data.system.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between px-4 pb-1 pt-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Alerts</p>
+                      <p className="placard">Alerts</p>
                       {unreadSystem > 0 && (
-                        <button onClick={() => markRead()} className="text-[10px] font-bold text-[#2E7D32] hover:underline">
+                        <button
+                          onClick={() => markRead()}
+                          className="text-[10px] font-bold uppercase tracking-[0.08em] text-phos hover:underline"
+                        >
                           Mark all read
                         </button>
                       )}
@@ -269,26 +304,24 @@ export function NotificationPanel() {
                     {data.system.slice(0, 8).map((n) => {
                       const Row = (
                         <>
-                          <div className={`mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-full ${n.read ? "bg-slate-100 text-slate-400 dark:bg-slate-800" : "bg-[#E8F5E9] text-[#2E7D32] dark:bg-green-900/30 dark:text-green-400"}`}>
-                            <Sparkles className="h-3.5 w-3.5" />
-                          </div>
+                          <Lamp variant={n.read ? "off" : "advisory"} className="mt-0.5 flex-shrink-0">
+                            {n.read ? "Read" : "New"}
+                          </Lamp>
                           <div className="min-w-0 flex-1">
-                            <p className={`truncate text-sm ${n.read ? "font-medium text-slate-500 dark:text-slate-400" : "font-semibold text-[#0D1F0E] dark:text-[#e8f5e9]"}`}>
+                            <p className={`truncate text-sm ${n.read ? "font-medium text-dim" : "font-semibold text-ink"}`}>
                               {n.title}
                             </p>
-                            {n.body && <p className="truncate text-xs text-slate-500 dark:text-slate-400">{n.body}</p>}
-                            <p className="text-[10px] text-slate-400">{timeAgo(n.createdAt)}</p>
+                            {n.body && <p className="truncate text-xs text-dim">{n.body}</p>}
+                            <p className="text-[10px] text-faint">{timeAgo(n.createdAt)}</p>
                           </div>
-                          {!n.read && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-[#2E7D32]" />}
                         </>
                       );
-                      const cls = "flex w-full items-start gap-3 px-4 py-2.5 text-left transition hover:bg-[#E8F5E9]/60 dark:hover:bg-[#1a2e1b]";
                       return n.link ? (
-                        <Link key={n.id} href={n.link} onClick={() => { markRead([n.id]); setOpen(false); }} className={cls}>
+                        <Link key={n.id} href={n.link} onClick={() => { markRead([n.id]); setOpen(false); }} className={rowCls}>
                           {Row}
                         </Link>
                       ) : (
-                        <button key={n.id} onClick={() => markRead([n.id])} className={cls}>
+                        <button key={n.id} onClick={() => markRead([n.id])} className={rowCls}>
                           {Row}
                         </button>
                       );
@@ -298,31 +331,20 @@ export function NotificationPanel() {
 
                 {data.followUps.length > 0 && (
                   <div>
-                    <p className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Follow-ups Today
-                    </p>
+                    <p className="placard px-4 pb-1 pt-3">Follow-ups Today</p>
                     {data.followUps.slice(0, 6).map((f) => (
-                      <Link
-                        key={f.id}
-                        href="/follow-ups"
-                        onClick={() => setOpen(false)}
-                        className="flex items-start gap-3 px-4 py-2.5 transition hover:bg-[#E8F5E9]/60 dark:hover:bg-[#1a2e1b]"
-                      >
-                        <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-                          <Calendar className="h-3.5 w-3.5" />
-                        </div>
+                      <Link key={f.id} href="/follow-ups" onClick={() => setOpen(false)} className={rowCls}>
+                        <Lamp variant="caution" className="mt-0.5 flex-shrink-0">Due</Lamp>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[#0D1F0E] dark:text-[#e8f5e9]">
-                            {f.contactName}
-                          </p>
-                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                          <p className="truncate text-sm font-semibold text-ink">{f.contactName}</p>
+                          <p className="truncate text-xs text-dim">
                             {f.type}{f.course ? ` · ${f.course}` : ""}
                           </p>
                         </div>
                       </Link>
                     ))}
                     {data.followUps.length > 6 && (
-                      <p className="px-4 pb-1.5 text-xs text-slate-400">
+                      <p className="px-4 pb-1.5 text-xs text-faint" data-numeric>
                         +{data.followUps.length - 6} more
                       </p>
                     )}
@@ -331,31 +353,21 @@ export function NotificationPanel() {
 
                 {data.payments.length > 0 && (
                   <div>
-                    <p className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Overdue Payments
-                    </p>
+                    <p className="placard px-4 pb-1 pt-3">Overdue Payments</p>
                     {data.payments.slice(0, 6).map((p) => (
-                      <Link
-                        key={p.id}
-                        href="/payments?status=Overdue"
-                        onClick={() => setOpen(false)}
-                        className="flex items-start gap-3 px-4 py-2.5 transition hover:bg-[#E8F5E9]/60 dark:hover:bg-[#1a2e1b]"
-                      >
-                        <div className="mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400">
-                          <CreditCard className="h-3.5 w-3.5" />
-                        </div>
+                      <Link key={p.id} href="/payments?status=Overdue" onClick={() => setOpen(false)} className={rowCls}>
+                        <Lamp variant="alert" className="mt-0.5 flex-shrink-0">Ovd</Lamp>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[#0D1F0E] dark:text-[#e8f5e9]">
-                            {p.studentName}
-                          </p>
-                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                            {fmt(p.amount)}{p.dueDate ? ` · Due ${p.dueDate}` : ""}
+                          <p className="truncate text-sm font-semibold text-ink">{p.studentName}</p>
+                          <p className="truncate text-xs text-dim">
+                            <span className="readout" data-numeric>{fmt(p.amount)}</span>
+                            {p.dueDate ? ` · Due ${p.dueDate}` : ""}
                           </p>
                         </div>
                       </Link>
                     ))}
                     {data.payments.length > 6 && (
-                      <p className="px-4 pb-1.5 text-xs text-slate-400">
+                      <p className="px-4 pb-1.5 text-xs text-faint" data-numeric>
                         +{data.payments.length - 6} more
                       </p>
                     )}
@@ -366,18 +378,18 @@ export function NotificationPanel() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2.5 dark:border-slate-700">
+          <div className="flex items-center justify-between border-t border-bezel px-4 py-2.5">
             <Link
               href="/follow-ups"
               onClick={() => setOpen(false)}
-              className="text-xs font-semibold text-[#2E7D32] hover:underline"
+              className="text-xs font-semibold text-phos hover:underline"
             >
               All follow-ups →
             </Link>
             <Link
               href="/payments?status=Overdue"
               onClick={() => setOpen(false)}
-              className="text-xs font-semibold text-rose-500 hover:underline"
+              className="text-xs font-semibold text-alert hover:underline"
             >
               Overdue payments →
             </Link>

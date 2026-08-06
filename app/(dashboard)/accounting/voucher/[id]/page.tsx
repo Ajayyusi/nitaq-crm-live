@@ -1,12 +1,15 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronLeft, Loader2, Paperclip, Pencil, Printer } from "lucide-react";
-import { fmtNum, jvStatusBadge } from "@/components/accounting/shared";
-import BackButton from "@/components/shared/BackButton";
+import { ChevronLeft, FileQuestion, Paperclip, Pencil, Printer } from "lucide-react";
+import { fmtNum } from "@/components/accounting/shared";
+import StatusBadge from "@/components/shared/StatusBadge";
+import EmptyState from "@/components/shared/EmptyState";
+import { Button } from "@/components/ui/button";
+import { PanelLoading } from "@/components/ui/feedback";
 
 interface JvLine {
   accountCode: string; accountName: string; debit: number; credit: number;
@@ -38,7 +41,9 @@ export default function VoucherPage({ params }: { params: Promise<{ id: string }
     else router.push("/accounting/journal");
   };
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setNotFound(false);
     fetch(`/api/accounting/journal-entries/${id}`)
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((d) => setV(d.entry))
@@ -46,115 +51,168 @@ export default function VoucherPage({ params }: { params: Promise<{ id: string }
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(load, [load]);
+
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>;
+    return <PanelLoading label="Loading voucher" />;
   }
   if (notFound || !v) {
     return (
-      <div className="p-6">
-        <BackButton fallback="/accounting/journal" />
-        <p className="mt-4 text-sm text-gray-500">Voucher not found.</p>
+      <div className="p-4 sm:p-6">
+        <button
+          type="button"
+          onClick={goBack}
+          className="mb-1 inline-flex items-center gap-1 text-xs text-dim transition-colors hover:text-ink"
+        >
+          <ChevronLeft className="h-3 w-3" aria-hidden /> Back
+        </button>
+        <div className="face mt-4">
+          <EmptyState
+            icon={FileQuestion}
+            title="Voucher not found"
+            description="It may have been deleted, or the link is wrong. Retry, or go back to the journal."
+            action={
+              <Button variant="secondary" size="sm" onClick={load}>
+                Retry
+              </Button>
+            }
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 p-4 sm:p-6 max-w-3xl">
-      <div>
-        <button onClick={goBack} className="no-print mb-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"><ChevronLeft className="h-3 w-3" /> Back</button>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">{v.jvNumber}</h1>
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${jvStatusBadge[v.status] ?? ""}`}>{v.status}</span>
-          <span className="flex-1" />
-          <button onClick={() => window.print()} className="no-print inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300">
-            <Printer className="h-3.5 w-3.5" /> Print
+    <div className="max-w-3xl space-y-5 p-4 sm:p-6">
+      {/* Printed vouchers stay black-on-white paper regardless of theme. */}
+      <style>{`@media print {
+        .print-area, .print-area * {
+          background: #fff !important;
+          color: #000 !important;
+          border-color: #cfcfcf !important;
+          box-shadow: none !important;
+          text-shadow: none !important;
+        }
+      }`}</style>
+
+      <div className="print-area space-y-5">
+        <div>
+          <button
+            type="button"
+            onClick={goBack}
+            className="no-print mb-1 inline-flex items-center gap-1 text-xs text-dim transition-colors hover:text-ink"
+          >
+            <ChevronLeft className="h-3 w-3" aria-hidden /> Back
           </button>
-          {canEdit && v.status === "Draft" && (
-            <Link href={`/accounting/journal?edit=${v.id}`}
-              className="no-print inline-flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#1B5E20]">
-              <Pencil className="h-3.5 w-3.5" /> Edit JV
-            </Link>
-          )}
-          {canEdit && v.status === "Posted" && (
-            <Link href={`/accounting/journal?correct=${v.id}`}
-              className="no-print inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-300">
-              <Pencil className="h-3.5 w-3.5" /> Edit / Correct
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* Header details */}
-      <div className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:grid-cols-3">
-        {[
-          ["Date", v.date],
-          ["Source", `${v.sourceType}${v.sourceNumber ? ` · ${v.sourceNumber}` : ""}`],
-          ["Reference", v.reference || "—"],
-          ["Created by", v.createdBy],
-          ["Posted by", v.postedBy || "—"],
-          ["Amount", fmtNum(v.totalDebit)],
-        ].map(([label, value]) => (
-          <div key={label as string}>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{label}</p>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{value}</p>
+          <div className="flex flex-wrap items-center gap-3 border-b border-bezel pb-4">
+            <h1 className="readout text-lg font-bold tracking-tight text-ink" data-numeric>{v.jvNumber}</h1>
+            <StatusBadge status={v.status} />
+            <span className="flex-1" />
+            <span className="no-print flex flex-wrap items-center gap-2">
+              <Button variant="primary" size="sm" onClick={() => window.print()}>
+                <Printer className="h-3.5 w-3.5" /> Print
+              </Button>
+              {canEdit && v.status === "Draft" && (
+                <Link
+                  href={`/accounting/journal?edit=${v.id}`}
+                  className="inline-flex h-8 select-none items-center justify-center gap-2 whitespace-nowrap rounded-ctl border border-transparent bg-phos px-3 text-xs font-bold uppercase tracking-[0.08em] text-phos-ink shadow-glow transition-all duration-150 hover:bg-phos-bright"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit JV
+                </Link>
+              )}
+              {canEdit && v.status === "Posted" && (
+                <Link
+                  href={`/accounting/journal?correct=${v.id}`}
+                  className="inline-flex h-8 select-none items-center justify-center gap-2 whitespace-nowrap rounded-ctl border border-bezel-strong px-3 text-xs font-bold uppercase tracking-[0.08em] text-ink transition-all duration-150 hover:bg-well"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit / Correct
+                </Link>
+              )}
+            </span>
           </div>
-        ))}
-      </div>
+        </div>
 
-      <p className="text-sm text-gray-600 dark:text-gray-300">{v.description}</p>
+        {/* Header details */}
+        <div className="face grid grid-cols-2 gap-3 p-4 sm:grid-cols-3">
+          {[
+            ["Date", v.date],
+            ["Source", `${v.sourceType}${v.sourceNumber ? ` · ${v.sourceNumber}` : ""}`],
+            ["Reference", v.reference || "—"],
+            ["Created by", v.createdBy],
+            ["Posted by", v.postedBy || "—"],
+            ["Amount", fmtNum(v.totalDebit)],
+          ].map(([label, value]) => (
+            <div key={label as string}>
+              <p className="placard">{label}</p>
+              <p className="text-sm font-medium text-ink">{value}</p>
+            </div>
+          ))}
+        </div>
 
-      {/* Reversal cross-links */}
-      {v.reversedByEntryId && (
-        <Link href={`/accounting/voucher/${v.reversedByEntryId}`} className="block rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-400">
-          This voucher was reversed → view the reversal entry
-        </Link>
-      )}
-      {v.reversesEntryId && (
-        <Link href={`/accounting/voucher/${v.reversesEntryId}`} className="block rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-400">
-          This is a reversal → view the original voucher
-        </Link>
-      )}
+        {v.description && <p className="text-sm text-dim">{v.description}</p>}
 
-      {/* Lines */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100 text-sm dark:divide-white/10">
-            <thead className="bg-gray-50 dark:bg-white/5">
-              <tr>
-                <th className="px-3 py-2.5 text-left text-xs font-bold uppercase text-gray-500">Account</th>
-                <th className="px-3 py-2.5 text-left text-xs font-bold uppercase text-gray-500">Description</th>
-                <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Debit</th>
-                <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Credit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-              {v.lines.map((l, i) => (
-                <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/5">
-                  <td className="px-3 py-2">
-                    <Link href={`/accounting/ledger?account=${encodeURIComponent(l.accountCode)}`} className="hover:text-[#2E7D32] hover:underline dark:hover:text-green-400">
-                      <span className="font-mono text-xs text-gray-400">{l.accountCode}</span>{" "}
-                      <span className="text-gray-800 dark:text-gray-200">{l.accountName}</span>
-                    </Link>
-                    {(l.studentRef || l.supplierRef) && <span className="ml-1 text-[11px] text-gray-400">· {l.studentRef || l.supplierRef}</span>}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-400">{l.description ?? ""}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtNum(l.debit)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtNum(l.credit)}</td>
+        {/* Reversal cross-links */}
+        {v.reversedByEntryId && (
+          <Link
+            href={`/accounting/voucher/${v.reversedByEntryId}`}
+            className="block rounded-ctl border border-caution/30 bg-[var(--lamp-caution-bg)] px-4 py-2 text-sm font-medium text-caution underline-offset-4 hover:underline"
+          >
+            This voucher was reversed → view the reversal entry
+          </Link>
+        )}
+        {v.reversesEntryId && (
+          <Link
+            href={`/accounting/voucher/${v.reversesEntryId}`}
+            className="block rounded-ctl border border-caution/30 bg-[var(--lamp-caution-bg)] px-4 py-2 text-sm font-medium text-caution underline-offset-4 hover:underline"
+          >
+            This is a reversal → view the original voucher
+          </Link>
+        )}
+
+        {/* Lines */}
+        <div className="face overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-well">
+                <tr>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-left first:pl-4">Account</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-left">Description</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Debit</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-right last:pr-4">Credit</th>
                 </tr>
-              ))}
-              <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold dark:border-white/20 dark:bg-white/5">
-                <td className="px-3 py-2.5" colSpan={2}>Total</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(v.totalDebit)}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(v.totalCredit)}</td>
-              </tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {v.lines.map((l, i) => (
+                  <tr key={i} className="border-b border-bezel/60">
+                    <td className="px-3 py-2 pl-4">
+                      <Link href={`/accounting/ledger?account=${encodeURIComponent(l.accountCode)}`} className="text-ink underline-offset-4 hover:text-phos hover:underline">
+                        <span className="readout text-xs text-faint" data-numeric>{l.accountCode}</span>{" "}
+                        {l.accountName}
+                      </Link>
+                      {(l.studentRef || l.supplierRef) && <span className="ml-1 text-[11px] text-faint">· {l.studentRef || l.supplierRef}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-dim">{l.description ?? ""}</td>
+                    <td className="readout whitespace-nowrap px-3 py-2 text-right" data-numeric>{fmtNum(l.debit)}</td>
+                    <td className="readout whitespace-nowrap px-3 py-2 pr-4 text-right" data-numeric>{fmtNum(l.credit)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-bezel-strong bg-well font-bold">
+                  <td className="placard px-3 py-2.5 pl-4" colSpan={2}>Total</td>
+                  <td className="readout px-3 py-2.5 text-right" data-numeric>{fmtNum(v.totalDebit)}</td>
+                  <td className="readout px-3 py-2.5 pr-4 text-right" data-numeric>{fmtNum(v.totalCredit)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       {v.attachment?.name && (
-        <a href={`/api/accounting/journal-entries/${v.id}?attachment=1`} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:border-white/10 dark:text-green-400">
-          <Paperclip className="h-4 w-4" /> {v.attachment.name}
+        <a
+          href={`/api/accounting/journal-entries/${v.id}?attachment=1`}
+          className="inline-flex items-center gap-1.5 rounded-ctl border border-bezel-strong px-3 py-2 text-sm font-semibold text-phos transition-colors hover:bg-well"
+        >
+          <Paperclip className="h-4 w-4" aria-hidden /> {v.attachment.name}
         </a>
       )}
     </div>

@@ -5,13 +5,22 @@ import FollowUp from "@/models/FollowUp";
 import Enrollment from "@/models/Enrollment";
 import { Payment, Expense } from "@/models/Financial";
 import { getSettings } from "@/models/Settings";
+import AttendanceSession from "@/models/Attendance";
 import {
   BarChart3, TrendingUp, Users, CreditCard, TrendingDown,
-  GraduationCap, BookOpen, PhoneCall, Target,
+  GraduationCap, BookOpen, PhoneCall, Target, AlertTriangle,
 } from "lucide-react";
 import { Suspense } from "react";
+import Link from "next/link";
 import ReportFilter from "./ReportFilter";
 import ExportButtons from "./ExportButtons";
+import PageHeader from "@/components/shared/PageHeader";
+import { Instrument } from "@/components/ui/instrument";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { TableShell, Table, THead, Th, Tr, Td, TableFooter } from "@/components/ui/table";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/permissions";
 
 const fmt = (n: number) =>
@@ -163,51 +172,66 @@ async function getReportData(from?: string, to?: string) {
   }
 }
 
-function StatCard({ icon: Icon, label, value, sub, color = "text-[#2E7D32]" }: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string; value: string | number; sub?: string; color?: string;
+/** Honest horizontal bar: width is the real percentage, no cosmetic floor. */
+function BarRow({ label, value, max, color = "var(--chart-1)", money }: {
+  label: string; value: number; max: number; color?: string; money?: boolean;
 }) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  const display = money ? fmt(value) : value;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-9 h-9 rounded-lg bg-[#E8F5E9] flex items-center justify-center">
-          <Icon className={`w-4 h-4 ${color}`} />
-        </div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</p>
+    <div className="flex items-center gap-3">
+      <span className="w-36 flex-shrink-0 truncate text-sm text-dim" title={label}>{label}</span>
+      <div
+        className="h-2 flex-1 overflow-hidden rounded-sm bg-well"
+        role="img"
+        aria-label={`${label}: ${display}`}
+      >
+        <div className="h-full rounded-sm" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+      <span className="readout w-24 flex-shrink-0 text-right text-sm font-semibold text-ink" data-numeric>
+        {display}
+      </span>
     </div>
   );
 }
 
-function BarRow({ label, value, max, color = "bg-[#2E7D32]", suffix }: {
-  label: string; value: number; max: number; color?: string; suffix?: string;
+function SectionHeading({ icon: Icon, children }: {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
 }) {
-  const pct = max > 0 ? Math.max(4, Math.round((value / max) * 100)) : 0;
-  const display = suffix ? fmt(value) : value;
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-36 text-sm text-slate-600 truncate flex-shrink-0">{label}</span>
-      <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-sm font-semibold text-[#0D1F0E] w-20 text-right">{display}</span>
-    </div>
+    <h2 className="placard mb-3 flex items-center gap-2">
+      <Icon className="h-3.5 w-3.5" aria-hidden /> {children}
+    </h2>
   );
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  Lead: "bg-sky-400", Contacted: "bg-blue-400", Interested: "bg-[#2E7D32]",
-  Enrolled: "bg-[#00897B]", Paid: "bg-emerald-500", Lost: "bg-rose-400",
+  Lead: "var(--chart-2)", Contacted: "var(--chart-4)", Interested: "var(--chart-3)",
+  Enrolled: "var(--chart-1)", Paid: "var(--chart-1)", Lost: "var(--chart-5)",
 };
 
 const FOLLOW_UP_COLORS: Record<string, string> = {
-  Pending: "bg-amber-400", Done: "bg-[#2E7D32]",
-  "No Response": "bg-rose-400", Rescheduled: "bg-slate-400",
+  Pending: "var(--chart-3)", Done: "var(--chart-1)",
+  "No Response": "var(--chart-5)", Rescheduled: "var(--chart-4)",
 };
 
-import AttendanceSession from "@/models/Attendance";
+const BALANCE_LAMP = (paymentStatus: string): LampVariant =>
+  paymentStatus === "Overdue" ? "alert" : paymentStatus === "Paid Full" ? "ok" : "caution";
+
+/* Print: the report stays black-on-white paper regardless of theme. */
+const PRINT_OVERRIDES = `@media print{
+  [data-report-root]{
+    --panel:#fff;--face:#fff;--raised:#fff;--well:#f3f3f3;
+    --bezel:#d5d5d5;--bezel-strong:#aaa;
+    --ink:#000;--dim:#333;--faint:#555;
+    --phos:#0b6b43;--phos-bright:#0b6b43;--phos-ink:#fff;
+    --caution:#8a5a00;--caution-fill:#8a5a00;--alert:#b3261e;--advisory:#0c5a78;
+    --lamp-ok-bg:#eef7f1;--lamp-caution-bg:#fbf3e2;--lamp-alert-bg:#fdecea;
+    --lamp-advisory-bg:#e8f4f9;--lamp-off-bg:#f0f0f0;
+    --shadow-card:none;--shadow-raise:none;--shadow-glow:none;
+  }
+}`;
 
 export default async function ReportsPage({
   searchParams,
@@ -234,9 +258,19 @@ export default async function ReportsPage({
 
   if (!data) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-[#0D1F0E] mb-2">Reports</h1>
-        <p className="text-sm text-slate-500">Could not load report data. Please check your database connection.</p>
+      <div>
+        <PageHeader title="Reports" subtitle={academyName} />
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center gap-3 rounded-card border border-alert/30 bg-[var(--lamp-alert-bg)] px-6 py-14 text-center"
+        >
+          <AlertTriangle className="h-5 w-5 text-alert" aria-hidden />
+          <p className="text-sm font-semibold text-ink">Couldn&apos;t load report data.</p>
+          <p className="text-xs text-dim">Try again, or contact your administrator if this keeps happening.</p>
+          <Link href="/reports" className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
+            Retry
+          </Link>
+        </div>
       </div>
     );
   }
@@ -251,113 +285,120 @@ export default async function ReportsPage({
     : null;
 
   return (
-    <div className="p-4 sm:p-6 space-y-8 max-w-5xl">
-      {/* Header + Filter */}
-      <div className="flex flex-col gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">{academyName}</p>
-          <h1 className="text-2xl font-bold text-[#0D1F0E]">Reports</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {data.isFiltered ? `Filtered: ${periodLabel}` : "All time — use filters to narrow by date"}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Suspense fallback={null}>
-            <ReportFilter />
-          </Suspense>
-          <Suspense fallback={null}>
-            <ExportButtons />
-          </Suspense>
-        </div>
+    <div className="space-y-8" data-report-root>
+      <style>{PRINT_OVERRIDES}</style>
+
+      <div>
+        <PageHeader
+          title="Reports"
+          subtitle={`${academyName} · ${data.isFiltered ? `Filtered: ${periodLabel}` : "All time — use the date filter to narrow the period"}`}
+          actions={
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              <Suspense fallback={null}>
+                <ReportFilter />
+              </Suspense>
+              <Suspense fallback={null}>
+                <ExportButtons />
+              </Suspense>
+            </div>
+          }
+        />
       </div>
 
       {/* Financial Summary — admin, manager, finance */}
       {showFinance && (
         <section>
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-            <CreditCard className="w-4 h-4" /> Financial Summary
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard
-              icon={TrendingUp}
+          <SectionHeading icon={CreditCard}>Financial Summary</SectionHeading>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Instrument
               label="This Month"
               value={fmt(data.revenueThisMonth)}
               sub={momChange != null ? `${momChange >= 0 ? "+" : ""}${momChange}% vs last month` : "First month"}
-              color="text-[#2E7D32]"
+              tone="phos"
+              corner={<TrendingUp className="h-4 w-4 text-faint" aria-hidden />}
             />
-            <StatCard
-              icon={TrendingUp}
-              label={data.isFiltered ? "Revenue (period)" : "Total Revenue"}
+            <Instrument
+              label={data.isFiltered ? "Revenue (Period)" : "Total Revenue"}
               value={fmt(data.revenueTotal)}
-              color="text-[#2E7D32]"
+              tone="phos"
+              corner={<TrendingUp className="h-4 w-4 text-faint" aria-hidden />}
             />
-            <StatCard
-              icon={TrendingDown}
-              label={data.isFiltered ? "Expenses (period)" : "Total Expenses"}
+            <Instrument
+              label={data.isFiltered ? "Expenses (Period)" : "Total Expenses"}
               value={fmt(data.expenseTotal)}
-              color="text-red-700"
+              tone="ink"
+              corner={<TrendingDown className="h-4 w-4 text-faint" aria-hidden />}
             />
-            <StatCard
-              icon={BarChart3}
+            <Instrument
               label="Net Income"
               value={fmt(data.net)}
-              color={data.net >= 0 ? "text-[#2E7D32]" : "text-red-700"}
+              tone={data.net >= 0 ? "phos" : "alert"}
+              corner={<BarChart3 className="h-4 w-4 text-faint" aria-hidden />}
             />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4 mt-4">
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
             {/* Outstanding & Pending */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-              <p className="text-sm font-semibold text-[#0D1F0E]">Outstanding Balances</p>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-sm text-slate-600">Total outstanding (enrollments)</span>
-                <span className="text-sm font-bold text-amber-700">{fmt(data.outstandingBalance)}</span>
-              </div>
-              <div className="flex justify-between items-center py-2">
-                <span className="text-sm text-slate-600">Pending payment records</span>
-                <span className="text-sm font-bold text-slate-700">{data.pendingPayments}</span>
-              </div>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Outstanding Balances</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="flex items-center justify-between border-b border-bezel/60 py-2">
+                  <span className="text-sm text-dim">Total outstanding (enrollments)</span>
+                  <span className="readout text-sm font-bold text-caution" data-numeric>
+                    {fmt(data.outstandingBalance)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-dim">Pending payment records</span>
+                  <span className="readout text-sm font-bold text-ink" data-numeric>
+                    {data.pendingPayments}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Revenue by Payment Method */}
             {data.paymentsByMethod.length > 0 && (
-              <div className="bg-white border border-slate-200 rounded-xl p-5">
-                <p className="text-sm font-semibold text-[#0D1F0E] mb-4">Revenue by Payment Method</p>
-                <div className="space-y-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Revenue by Payment Method</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   {data.paymentsByMethod.map((r) => (
-                    <div key={r._id} className="flex items-center gap-3">
-                      <span className="w-32 text-sm text-slate-600 flex-shrink-0">{r._id}</span>
-                      <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-[#2E7D32]"
-                          style={{ width: `${data.revenueTotal > 0 ? Math.max(4, Math.round((r.total / data.revenueTotal) * 100)) : 0}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-semibold text-[#0D1F0E] w-24 text-right">{fmt(r.total)}</span>
-                    </div>
+                    <BarRow
+                      key={r._id}
+                      label={r._id}
+                      value={r.total}
+                      max={data.revenueTotal}
+                      money
+                    />
                   ))}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
           </div>
 
           {/* Expenses by Category */}
           {data.expensesByCategory.length > 0 && (
-            <div className="mt-4 bg-white border border-slate-200 rounded-xl p-5">
-              <p className="text-sm font-semibold text-[#0D1F0E] mb-4">Expenses by Category</p>
-              <div className="space-y-3">
+            <Card className="mt-3">
+              <CardHeader>
+                <CardTitle>Expenses by Category</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 {data.expensesByCategory.map((r) => (
                   <BarRow
                     key={r._id}
                     label={r._id ?? "Other"}
                     value={r.total}
                     max={data.expensesByCategory[0]?.total ?? 1}
-                    color="bg-red-400"
-                    suffix="AED"
+                    color="var(--chart-5)"
+                    money
                   />
                 ))}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
         </section>
       )}
@@ -365,100 +406,94 @@ export default async function ReportsPage({
       {/* Revenue by Course — finance / admin / manager */}
       {showFinance && data.revenueByCourse.length > 0 && (
         <section>
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-            <BookOpen className="w-4 h-4" /> Revenue by Course
-          </h2>
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm font-semibold text-[#0D1F0E]">
+          <SectionHeading icon={BookOpen}>Revenue by Course</SectionHeading>
+          <Card>
+            <CardHeader>
+              <CardTitle>
                 {data.isFiltered ? `Revenue per course (${periodLabel})` : "All-time revenue per course"}
-              </p>
-              <span className="text-xs text-slate-400">{data.revenueByCourse.length} courses</span>
-            </div>
-            <div className="space-y-3">
+              </CardTitle>
+              <span className="readout text-xs text-faint" data-numeric>
+                {data.revenueByCourse.length} courses
+              </span>
+            </CardHeader>
+            <CardContent className="space-y-3">
               {data.revenueByCourse.map((r) => {
                 const maxRev = data.revenueByCourse[0]?.revenue ?? 1;
-                const pct = Math.max(4, Math.round((r.revenue / maxRev) * 100));
+                const pct = maxRev > 0 ? (r.revenue / maxRev) * 100 : 0;
                 return (
                   <div key={r._id} className="flex items-center gap-3">
-                    <span className="w-44 text-sm text-slate-600 truncate flex-shrink-0">{r._id || "—"}</span>
-                    <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-[#2E7D32]" style={{ width: `${pct}%` }} />
+                    <span className="w-44 flex-shrink-0 truncate text-sm text-dim" title={r._id || undefined}>
+                      {r._id || "—"}
+                    </span>
+                    <div
+                      className="h-2 flex-1 overflow-hidden rounded-sm bg-well"
+                      role="img"
+                      aria-label={`${r._id || "Unnamed course"}: ${fmt(r.revenue)}`}
+                    >
+                      <div className="h-full rounded-sm" style={{ width: `${pct}%`, background: "var(--chart-1)" }} />
                     </div>
                     <div className="w-36 flex-shrink-0 text-right">
-                      <span className="text-sm font-semibold text-[#0D1F0E]">{fmt(r.revenue)}</span>
-                      <span className="ml-2 text-xs text-slate-400">({r.payments})</span>
+                      <span className="readout text-sm font-semibold text-ink" data-numeric>{fmt(r.revenue)}</span>
+                      <span className="readout ml-2 text-xs text-faint" data-numeric>({r.payments})</span>
                     </div>
                   </div>
                 );
               })}
+            </CardContent>
+            <div className="flex items-center justify-between border-t border-bezel bg-well px-4 py-2.5 sm:px-5">
+              <span className="text-sm text-dim">Total across all courses</span>
+              <span className="readout text-sm font-bold text-phos" data-numeric>
+                {fmt(data.revenueByCourse.reduce((s, r) => s + r.revenue, 0))}
+              </span>
             </div>
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2.5">
-              <span className="text-sm text-slate-600">Total across all courses</span>
-              <span className="text-sm font-bold text-[#2E7D32]">{fmt(data.revenueByCourse.reduce((s, r) => s + r.revenue, 0))}</span>
-            </div>
-          </div>
+          </Card>
         </section>
       )}
 
       {/* Student Balance Report — finance / admin / manager */}
       {showFinance && data.studentBalances.length > 0 && (
         <section>
-          <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-            <CreditCard className="w-4 h-4" /> Student Balances
-          </h2>
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <p className="text-sm font-semibold text-[#0D1F0E]">Enrollments with outstanding balance</p>
-              <span className="text-xs text-slate-400">{data.studentBalances.length} students</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[580px] text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    {["Student", "Course", "Total Fee", "Paid", "Balance Due", "Payment Status"].map((h) => (
-                      <th
-                        key={h}
-                        className={`px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide ${
-                          ["Total Fee", "Paid", "Balance Due"].includes(h) ? "text-right" : "text-left"
-                        }`}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.studentBalances.map((s) => (
-                    <tr key={s.enrollmentId || String(s._id)} className="hover:bg-[#E8F5E9]/30 transition-colors">
-                      <td className="px-5 py-3 font-semibold text-[#0D1F0E]">{s.fullName}</td>
-                      <td className="px-5 py-3 text-slate-500 max-w-[160px] truncate">{s.course || "—"}</td>
-                      <td className="px-5 py-3 text-right text-slate-600">{fmt(s.totalFee)}</td>
-                      <td className="px-5 py-3 text-right font-semibold text-[#2E7D32]">{fmt(s.amountPaid)}</td>
-                      <td className="px-5 py-3 text-right font-bold text-amber-600">{fmt(s.balanceDue)}</td>
-                      <td className="px-5 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                          s.paymentStatus === "Overdue"
-                            ? "bg-rose-100 text-rose-700"
-                            : s.paymentStatus === "Paid Full"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-amber-100 text-amber-700"
-                        }`}>
-                          {s.paymentStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3">
-              <span className="text-sm text-slate-600">Total outstanding</span>
-              <span className="text-sm font-bold text-amber-600">
-                {fmt(data.studentBalances.reduce((s, r) => s + r.balanceDue, 0))}
+          <SectionHeading icon={CreditCard}>Student Balances</SectionHeading>
+          <TableShell>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-bezel px-4 py-3 sm:px-5">
+              <p className="text-sm font-bold text-ink">Enrollments with outstanding balance</p>
+              <span className="readout text-xs text-faint" data-numeric>
+                {data.studentBalances.length} students
               </span>
             </div>
-          </div>
+            <Table className="min-w-[580px]">
+              <THead>
+                <tr>
+                  <Th>Student</Th>
+                  <Th>Course</Th>
+                  <Th numeric>Total Fee</Th>
+                  <Th numeric>Paid</Th>
+                  <Th numeric>Balance Due</Th>
+                  <Th>Payment Status</Th>
+                </tr>
+              </THead>
+              <tbody>
+                {data.studentBalances.map((s) => (
+                  <Tr key={s.enrollmentId || String(s._id)}>
+                    <Td className="font-semibold">{s.fullName}</Td>
+                    <Td className="max-w-40 truncate text-dim" title={s.course || undefined}>{s.course || "—"}</Td>
+                    <Td numeric>{fmt(s.totalFee)}</Td>
+                    <Td numeric className="text-phos">{fmt(s.amountPaid)}</Td>
+                    <Td numeric className="font-bold text-caution">{fmt(s.balanceDue)}</Td>
+                    <Td>
+                      <Lamp variant={BALANCE_LAMP(s.paymentStatus)}>{s.paymentStatus}</Lamp>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+            <TableFooter>
+              <span>Total outstanding</span>
+              <span className="readout font-bold text-caution" data-numeric>
+                {fmt(data.studentBalances.reduce((s, r) => s + r.balanceDue, 0))}
+              </span>
+            </TableFooter>
+          </TableShell>
         </section>
       )}
 
@@ -466,123 +501,141 @@ export default async function ReportsPage({
       {showSales && (
         <>
           <section>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" /> Lead Pipeline ({leadTotal})
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <StatCard icon={Users} label="Total Leads" value={leadTotal} />
-              <StatCard
-                icon={Target}
+            <SectionHeading icon={TrendingUp}>Lead Pipeline ({leadTotal})</SectionHeading>
+            <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Instrument
+                label="Total Leads"
+                value={leadTotal}
+                corner={<Users className="h-4 w-4 text-faint" aria-hidden />}
+              />
+              <Instrument
                 label="Conversion Rate"
                 value={`${conversionRate}%`}
                 sub={`${enrolledLeads} enrolled`}
-                color={conversionRate >= 20 ? "text-[#2E7D32]" : "text-amber-700"}
+                tone={conversionRate >= 20 ? "phos" : "caution"}
+                corner={<Target className="h-4 w-4 text-faint" aria-hidden />}
               />
-              <StatCard
-                icon={TrendingUp}
+              <Instrument
                 label="New This Period"
                 value={data.leadsInPeriod}
-                sub={data.isFiltered ? "in selected range" : "all time"}
+                sub={data.isFiltered ? "In selected range" : "All time"}
+                corner={<TrendingUp className="h-4 w-4 text-faint" aria-hidden />}
               />
-              <StatCard
-                icon={PhoneCall}
-                label="Overdue Follow-ups"
+              <Instrument
+                label="Overdue Follow-Ups"
                 value={data.overdueFollowUps}
-                color={data.overdueFollowUps > 0 ? "text-rose-600" : "text-[#2E7D32]"}
+                tone={data.overdueFollowUps > 0 ? "alert" : "phos"}
+                corner={<PhoneCall className="h-4 w-4 text-faint" aria-hidden />}
               />
             </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-white border border-slate-200 rounded-xl p-5">
-                <p className="text-sm font-semibold text-[#0D1F0E] mb-4">Leads by Stage</p>
-                <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Leads by Stage</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   {data.leadsByStage.sort((a, b) => b.count - a.count).map((r) => (
                     <BarRow
                       key={r._id}
                       label={r._id ?? "Unknown"}
                       value={r.count}
                       max={leadTotal}
-                      color={STAGE_COLORS[r._id ?? ""] ?? "bg-slate-400"}
+                      color={STAGE_COLORS[r._id ?? ""] ?? "var(--chart-4)"}
                     />
                   ))}
-                </div>
-              </div>
-              <div className="bg-white border border-slate-200 rounded-xl p-5">
-                <p className="text-sm font-semibold text-[#0D1F0E] mb-4">Leads by Source</p>
-                <div className="space-y-3">
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Leads by Source</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   {data.leadsBySource.sort((a, b) => b.count - a.count).map((r) => (
-                    <BarRow key={r._id} label={r._id ?? "Unknown"} value={r.count} max={leadTotal} color="bg-[#00897B]" />
+                    <BarRow
+                      key={r._id}
+                      label={r._id ?? "Unknown"}
+                      value={r.count}
+                      max={leadTotal}
+                      color="var(--chart-2)"
+                    />
                   ))}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </div>
           </section>
 
           {/* Follow-ups */}
           <section>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <PhoneCall className="w-4 h-4" /> Follow-ups ({followUpTotal})
-            </h2>
-            <div className="bg-white border border-slate-200 rounded-xl p-5">
-              <div className="space-y-3">
+            <SectionHeading icon={PhoneCall}>Follow-Ups ({followUpTotal})</SectionHeading>
+            <Card>
+              <CardContent className="space-y-3">
                 {data.followUpsByStatus.sort((a, b) => b.count - a.count).map((r) => (
                   <BarRow
                     key={r._id}
                     label={r._id ?? "Unknown"}
                     value={r.count}
                     max={followUpTotal}
-                    color={FOLLOW_UP_COLORS[r._id ?? ""] ?? "bg-slate-400"}
+                    color={FOLLOW_UP_COLORS[r._id ?? ""] ?? "var(--chart-4)"}
                   />
                 ))}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </section>
         </>
       )}
 
       {/* Enrollments — all roles that can access reports */}
       <section>
-        <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-          <GraduationCap className="w-4 h-4" /> Enrollments ({enrollTotal})
-        </h2>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <p className="text-sm font-semibold text-[#0D1F0E] mb-4">By Status</p>
-            <div className="space-y-3">
+        <SectionHeading icon={GraduationCap}>Enrollments ({enrollTotal})</SectionHeading>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>By Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
               {data.enrollmentsByStatus.sort((a, b) => b.count - a.count).map((r) => (
                 <BarRow key={r._id} label={r._id ?? "Unknown"} value={r.count} max={enrollTotal} />
               ))}
-            </div>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <p className="text-sm font-semibold text-[#0D1F0E] mb-4">Top Courses by Enrollment</p>
-            <div className="space-y-3">
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Courses by Enrollment</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
               {data.enrollmentsByCourse.map((r) => (
                 <BarRow
                   key={r._id}
                   label={r._id ?? "Unknown"}
                   value={r.count}
                   max={data.enrollmentsByCourse[0]?.count ?? 1}
-                  color="bg-[#00897B]"
+                  color="var(--chart-2)"
                 />
               ))}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </section>
 
       {/* Attendance */}
       <section>
-        <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-          <BookOpen className="w-4 h-4" /> Attendance & Classes
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <StatCard icon={BookOpen} label="Sessions Recorded" value={data.attendanceSessions} />
-          <StatCard icon={Users} label="Active Enrollments" value={enrollTotal} />
-          <StatCard
-            icon={GraduationCap}
+        <SectionHeading icon={BookOpen}>Attendance &amp; Classes</SectionHeading>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <Instrument
+            label="Sessions Recorded"
+            value={data.attendanceSessions}
+            corner={<BookOpen className="h-4 w-4 text-faint" aria-hidden />}
+          />
+          <Instrument
+            label="Active Enrollments"
+            value={enrollTotal}
+            corner={<Users className="h-4 w-4 text-faint" aria-hidden />}
+          />
+          <Instrument
             label="Enrolled Leads"
             value={enrolledLeads}
             sub={`${conversionRate}% conversion rate`}
+            corner={<GraduationCap className="h-4 w-4 text-faint" aria-hidden />}
           />
         </div>
       </section>

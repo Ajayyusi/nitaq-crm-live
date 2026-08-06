@@ -1,9 +1,29 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { BookOpen, Edit3, Loader2, Plus, Search, Trash2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Fragment, FormEvent, useCallback, useEffect, useState } from "react";
+import { BookOpen, ChevronDown, ChevronUp, Edit3, Plus, Trash2, X } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { courseCategories, courseStatuses, batchFormats } from "@/constants/modelConstants";
+import { courseCategories, courseStatuses } from "@/constants/modelConstants";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import StatusBadge from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
+import { Input, Textarea, Select, Field, SearchInput } from "@/components/ui/input";
+import { Drawer, ConfirmDialog } from "@/components/ui/dialog";
+import {
+  TableShell,
+  Table,
+  THead,
+  Th,
+  Tr,
+  Td,
+  TableFooter,
+  usePagination,
+  Pagination,
+} from "@/components/ui/table";
+import { SkeletonRows, LoadError, Spinner } from "@/components/ui/feedback";
+import { formatCurrency } from "@/lib/utils";
 
 type Batch = {
   id: string; batchId: string; batchName: string; startDate: string; endDate: string;
@@ -39,13 +59,28 @@ function getErr(v: unknown, fb: string) {
   return fb;
 }
 
-const statusColors: Record<string, string> = {
-  Active: "bg-[#E8F5E9] text-[#2E7D32] ring-green-200",
-  "Coming Soon": "bg-amber-50 text-amber-800 ring-amber-200",
-  Inactive: "bg-slate-100 text-slate-600 ring-slate-200",
+/** Batch lifecycle states missing from the shared StatusBadge map. */
+const BATCH_LAMP: Record<string, LampVariant> = {
+  Open: "ok",
+  "In Progress": "advisory",
+  Completed: "off",
+  Cancelled: "alert",
 };
 
-const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]";
+function CourseStatusLamp({ status }: { status: string }) {
+  if (status === "Coming Soon") return <Lamp variant="advisory">Coming Soon</Lamp>;
+  return <StatusBadge status={status} />;
+}
+
+/** Debounce a value so typing doesn't refetch on every keystroke. */
+function useDebounced<T>(value: T, ms = 300) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
 
 export default function CoursesPage() {
   const { data: session } = useSession();
@@ -55,41 +90,59 @@ export default function CoursesPage() {
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [teacherOptions, setTeacherOptions] = useState<{ id: string; fullName: string }[]>([]);
-  useEffect(() => {
-    fetch("/api/teachers")
-      .then((r) => r.json())
-      .then((d) => setTeacherOptions((d.trainers ?? []).map((t: { id: string; fullName: string }) => ({ id: t.id, fullName: t.fullName }))))
-      .catch(() => {});
-  }, []);
+  const [teachersFailed, setTeachersFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounced(search);
   const [statusFilter, setStatusFilter] = useState("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Course | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  async function load() {
+  const loadTeachers = useCallback(async () => {
+    setTeachersFailed(false);
+    try {
+      const r = await fetch("/api/teachers");
+      const d = await r.json();
+      setTeacherOptions(
+        (d.trainers ?? []).map((t: { id: string; fullName: string }) => ({ id: t.id, fullName: t.fullName }))
+      );
+    } catch {
+      setTeachersFailed(true);
+    }
+  }, []);
+  useEffect(() => { void loadTeachers(); }, [loadTeachers]);
+
+  const load = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params = new URLSearchParams();
-      if (search.trim()) params.set("search", search.trim());
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
       if (statusFilter !== "all") params.set("status", statusFilter);
       const res = await fetch(`/api/courses?${params}`, { cache: "no-store" });
       const data = await res.json();
       setCourses(data.courses ?? []);
-    } catch { setError("Failed to load courses."); }
-    finally { setLoading(false); }
-  }
+    } catch {
+      setLoadError("Couldn't load courses. Check your connection and retry.");
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedSearch, statusFilter]);
 
-  useEffect(() => { void load(); }, [search, statusFilter]);
+  useEffect(() => { void load(); }, [load]);
 
   function openCreate() {
-    setEditingCourse(null); setForm(emptyForm); setFormError(""); setDrawerOpen(true);
+    setEditingCourse(null); setForm(emptyForm); setFormError(""); setFieldErrors({}); setDrawerOpen(true);
   }
   function openEdit(c: Course) {
     setEditingCourse(c);
@@ -103,11 +156,16 @@ export default function CoursesPage() {
       totalHours: c.totalHours != null ? String(c.totalHours) : "",
       deliveryMethod: c.deliveryMethod ?? "", assignedTeacherIds: c.assignedTeacherIds ?? [],
     });
-    setFormError(""); setDrawerOpen(true);
+    setFormError(""); setFieldErrors({}); setDrawerOpen(true);
   }
 
   async function save(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setSaving(true); setFormError("");
+    e.preventDefault();
+    const errs: Record<string, string> = {};
+    if (!form.courseName.trim()) errs.courseName = "Course name is required.";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    setSaving(true); setFormError("");
     try {
       const body = {
         ...form,
@@ -127,247 +185,359 @@ export default function CoursesPage() {
       setNotice(editingCourse ? "Course updated." : "Course created.");
       setDrawerOpen(false);
       await load();
-    } catch (caught) { setFormError(getErr(caught, "Failed to save course.")); }
+    } catch (caught) { setFormError(getErr(caught, "Couldn't save the course. Check the fields and retry.")); }
     finally { setSaving(false); }
   }
 
   async function deleteCourse(c: Course) {
-    if (!window.confirm(`Delete course "${c.courseName}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    setActionError("");
     try {
-      await fetch(`/api/courses/${c.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/courses/${c.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       setNotice("Course deleted.");
+      setConfirmDelete(null);
       await load();
-    } catch { setError("Failed to delete course."); }
+    } catch {
+      setConfirmDelete(null);
+      setActionError("Couldn't delete the course. Retry, or contact your administrator.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
+  const { slice, page, pages, setPage, total } = usePagination(courses);
+  const colCount = isReadOnly ? 7 : 8;
+
   return (
-    <>
-      {drawerOpen && (
-        <>
-          <div className="fixed inset-0 z-40 bg-[#0D1F0E]/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-          <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[580px] flex-col bg-white shadow-2xl">
-            <div className="border-b bg-[#0D1F0E] px-6 py-5 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">Courses</p>
-                  <h2 className="mt-1 text-xl font-bold">{editingCourse ? "Edit Course" : "Add Course"}</h2>
-                </div>
-                <button onClick={() => setDrawerOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 hover:bg-white/20"><X className="h-4 w-4" /></button>
-              </div>
-            </div>
-            <form onSubmit={save} className="flex flex-1 flex-col min-h-0">
-              <div className="flex-1 overflow-y-auto space-y-4 p-6">
-                {formError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{formError}</div>}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Course name *</label>
-                    <input required value={form.courseName} onChange={(e) => setForm((f) => ({ ...f, courseName: e.target.value }))} className={inp} placeholder="e.g. AI for Professionals" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Course code</label>
-                    <input value={form.courseCode} onChange={(e) => setForm((f) => ({ ...f, courseCode: e.target.value }))} className={inp} placeholder="Auto-generated if blank" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Category *</label>
-                    <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className={inp}>
-                      {courseCategories.map((c) => <option key={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Price (AED excl. VAT)</label>
-                    <input type="number" min="0" value={form.priceExVat} onChange={(e) => setForm((f) => ({ ...f, priceExVat: e.target.value }))} className={inp} placeholder="0" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">VAT rate (%)</label>
-                    <input type="number" min="0" max="100" value={form.vatRate} onChange={(e) => setForm((f) => ({ ...f, vatRate: e.target.value }))} className={inp} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Duration (weeks)</label>
-                    <input type="number" min="1" value={form.durationWeeks} onChange={(e) => setForm((f) => ({ ...f, durationWeeks: e.target.value }))} className={inp} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Total sessions</label>
-                    <input type="number" min="1" value={form.totalSessions} onChange={(e) => setForm((f) => ({ ...f, totalSessions: e.target.value }))} className={inp} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Sessions / week</label>
-                    <input type="number" min="1" value={form.sessionsPerWeek} onChange={(e) => setForm((f) => ({ ...f, sessionsPerWeek: e.target.value }))} className={inp} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Hours / session</label>
-                    <input type="number" min="0.5" step="0.5" value={form.hoursPerSession} onChange={(e) => setForm((f) => ({ ...f, hoursPerSession: e.target.value }))} className={inp} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Max students / batch</label>
-                    <input type="number" min="1" value={form.maxStudentsPerBatch} onChange={(e) => setForm((f) => ({ ...f, maxStudentsPerBatch: e.target.value }))} className={inp} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Status</label>
-                    <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={inp}>
-                      {courseStatuses.map((s) => <option key={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-1">SPEA activity</label>
-                    <input value={form.speaActivity} onChange={(e) => setForm((f) => ({ ...f, speaActivity: e.target.value }))} className={inp} placeholder="Licensed activity name" />
-                    <div className="grid gap-4 sm:grid-cols-2 mt-4">
-                      <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Default Training Hours</label>
-                        <input type="number" min="0" value={form.totalHours} onChange={(e) => setForm((f) => ({ ...f, totalHours: e.target.value }))} className={inp} placeholder="e.g. 40" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-1">Delivery Method</label>
-                        <select value={form.deliveryMethod} onChange={(e) => setForm((f) => ({ ...f, deliveryMethod: e.target.value }))} className={inp}>
-                          <option value="">— Not set —</option>
-                          <option>In-Person</option><option>Online</option><option>Hybrid</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <label className="block text-sm font-bold text-slate-700 mb-1">Assigned Teachers</label>
-                      <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 p-3">
-                        {teacherOptions.length === 0 && <span className="text-xs text-slate-400">No trainers found.</span>}
-                        {teacherOptions.map((t) => {
-                          const on = form.assignedTeacherIds.includes(t.id);
-                          return (
-                            <button key={t.id} type="button"
-                              onClick={() => setForm((f) => ({ ...f, assignedTeacherIds: on ? f.assignedTeacherIds.filter((x) => x !== t.id) : [...f.assignedTeacherIds, t.id] }))}
-                              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${on ? "bg-[#2E7D32] text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
-                              {t.fullName}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
-                    <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={inp} />
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-3 border-t border-slate-200 bg-slate-50 p-5">
-                <button type="button" onClick={() => setDrawerOpen(false)} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-                <button type="submit" disabled={saving} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {editingCourse ? "Save Changes" : "Create Course"}
-                </button>
-              </div>
-            </form>
-          </aside>
-        </>
-      )}
+    <div>
+      <PageHeader
+        title="Courses"
+        subtitle="Course catalog, pricing, and batch scheduling"
+        actions={
+          !isReadOnly && (
+            <Button variant="solid" onClick={openCreate}>
+              <Plus className="h-4 w-4" aria-hidden /> Add Course
+            </Button>
+          )
+        }
+      />
 
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">Academy Ops</p>
-              <h1 className="mt-2 text-3xl font-bold text-[#0D1F0E]">Courses</h1>
-              <p className="mt-2 text-sm text-slate-500">Manage the course catalog, pricing, and batch scheduling.</p>
-            </div>
-            {!isReadOnly && (
-              <button onClick={openCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white shadow transition hover:bg-[#1B5E20]">
-                <Plus className="h-4 w-4" /> Add Course
-              </button>
-            )}
-          </div>
-        </section>
-
-        {(notice || error) && (
-          <div className="space-y-2">
-            {notice && <div className="flex items-center justify-between rounded-xl border border-green-200 bg-[#E8F5E9] px-4 py-3 text-sm font-semibold text-[#2E7D32]"><span>{notice}</span><button onClick={() => setNotice("")}><X className="h-4 w-4" /></button></div>}
-            {error && <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"><span>{error}</span><button onClick={() => setError("")}><X className="h-4 w-4" /></button></div>}
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <label className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
-            <Search className="h-4 w-4 text-slate-400" />
-            <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search courses..." />
-          </label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-[#2E7D32]">
-            <option value="all">All statuses</option>
-            {courseStatuses.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </div>
-
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {loading ? (
-            <div className="flex min-h-60 items-center justify-center gap-3 text-slate-500">
-              <Loader2 className="h-6 w-6 animate-spin text-[#2E7D32]" />
-              <span className="text-sm font-semibold">Loading...</span>
-            </div>
-          ) : courses.length === 0 ? (
-            <div className="flex min-h-60 flex-col items-center justify-center gap-3 text-center">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#E8F5E9] text-[#2E7D32]"><BookOpen className="h-6 w-6" /></div>
-              <p className="text-lg font-bold text-[#0D1F0E]">No courses yet</p>
-              {!isReadOnly && <button onClick={openCreate} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-sm font-bold text-white"><Plus className="h-4 w-4" />Add Course</button>}
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {courses.map((c) => (
-                <div key={c.id}>
-                  <div className="flex items-center gap-4 px-6 py-4 hover:bg-slate-50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-bold text-[#0D1F0E]">{c.courseName}</p>
-                        <span className="font-mono text-xs text-slate-400">{c.courseCode}</span>
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${statusColors[c.status] ?? "bg-slate-100 text-slate-600 ring-slate-200"}`}>{c.status}</span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-                        <span>{c.category}</span>
-                        <span>·</span>
-                        <span>AED {c.priceExVat.toLocaleString()} + VAT → AED {c.priceInclVat.toLocaleString()}</span>
-                        {c.totalHours ? <><span>·</span><span>{c.totalHours}h default</span></> : null}
-                        {c.deliveryMethod && <><span>·</span><span>{c.deliveryMethod}</span></>}
-                        <span>·</span>
-                        <span className="font-semibold text-[#2E7D32]">{c.registeredStudents} student{c.registeredStudents !== 1 ? "s" : ""}</span>
-                        <span>·</span>
-                        <span>{c.batches.length} batch{c.batches.length !== 1 ? "es" : ""}</span>
-                      </div>
-                      {c.assignedTeacherNames?.length > 0 && (
-                        <p className="mt-0.5 text-xs text-slate-400">Teachers: {c.assignedTeacherNames.join(", ")}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button onClick={() => setExpandedId(expandedId === c.id ? null : c.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100" title="Toggle batches">
-                        {expandedId === c.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </button>
-                      {!isReadOnly && <button onClick={() => openEdit(c)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"><Edit3 className="h-4 w-4" /></button>}
-                      {!isReadOnly && <button onClick={() => void deleteCourse(c)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>}
-                    </div>
-                  </div>
-                  {expandedId === c.id && (
-                    <div className="border-t border-slate-100 bg-slate-50 px-8 py-4">
-                      {c.batches.length === 0 ? (
-                        <p className="text-sm text-slate-500">No batches yet. Add via the course edit form.</p>
-                      ) : (
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                          {c.batches.map((b) => (
-                            <div key={b.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-bold text-[#0D1F0E]">{b.batchName}</p>
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{b.status}</span>
-                              </div>
-                              <div className="mt-1 space-y-0.5 text-xs text-slate-500">
-                                {b.trainerName && <p>Trainer: {b.trainerName}</p>}
-                                {b.schedule && <p>{b.schedule}</p>}
-                                {b.startDate && <p>{b.startDate} → {b.endDate}</p>}
-                                <p>{b.format}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+      {(notice || actionError) && (
+        <div className="mb-4 space-y-2">
+          {notice && (
+            <div role="status" className="flex items-center justify-between gap-2 rounded-ctl border border-phos/30 bg-[var(--lamp-ok-bg)] px-4 py-2 text-sm font-semibold text-phos">
+              <span>{notice}</span>
+              <Button variant="ghost" size="iconSm" onClick={() => setNotice("")} aria-label="Dismiss message">
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
-        </section>
+          {actionError && (
+            <div role="alert" className="flex items-center justify-between gap-2 rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-2 text-sm font-semibold text-alert">
+              <span>{actionError}</span>
+              <Button variant="ghost" size="iconSm" onClick={() => setActionError("")} aria-label="Dismiss error">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SearchInput
+          className="w-full sm:w-72"
+          placeholder="Search courses"
+          aria-label="Search courses"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select
+          className="w-44"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
+        >
+          <option value="all">All Statuses</option>
+          {courseStatuses.map((s) => <option key={s}>{s}</option>)}
+        </Select>
       </div>
-    </>
+
+      {loadError ? (
+        <LoadError message={loadError} onRetry={() => void load()} />
+      ) : (
+        <TableShell>
+          {loading ? (
+            <SkeletonRows rows={6} cols={6} />
+          ) : courses.length === 0 ? (
+            <EmptyState
+              icon={BookOpen}
+              title="No courses found"
+              description={
+                debouncedSearch.trim() || statusFilter !== "all"
+                  ? "No courses match the current filters. Clear them to see the full catalog."
+                  : "Add the first course to start building the catalog."
+              }
+              action={
+                !isReadOnly && (
+                  <Button variant="primary" onClick={openCreate}>
+                    <Plus className="h-4 w-4" aria-hidden /> Add Course
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <THead>
+                  <tr>
+                    <Th className="w-10"><span className="sr-only">Expand</span></Th>
+                    <Th>Course</Th>
+                    <Th>Category</Th>
+                    <Th numeric>Price</Th>
+                    <Th numeric>Students</Th>
+                    <Th numeric>Batches</Th>
+                    <Th>Status</Th>
+                    {!isReadOnly && <Th className="text-right"><span className="sr-only">Actions</span></Th>}
+                  </tr>
+                </THead>
+                <tbody>
+                  {slice.map((c) => {
+                    const expanded = expandedId === c.id;
+                    return (
+                      <Fragment key={c.id}>
+                        <Tr clickable onClick={() => setExpandedId(expanded ? null : c.id)}>
+                          <Td className="w-10 pr-0">
+                            <Button
+                              variant="ghost"
+                              size="iconSm"
+                              aria-expanded={expanded}
+                              aria-label={expanded ? `Collapse batches for ${c.courseName}` : `Expand batches for ${c.courseName}`}
+                              onClick={(e) => { e.stopPropagation(); setExpandedId(expanded ? null : c.id); }}
+                            >
+                              {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </Td>
+                          <Td>
+                            <p className="font-semibold">{c.courseName}</p>
+                            <p className="mt-0.5 text-xs text-faint">
+                              <span className="readout">{c.courseCode}</span>
+                              {c.deliveryMethod && <> · {c.deliveryMethod}</>}
+                              {c.totalHours ? <> · {c.totalHours}h default</> : null}
+                            </p>
+                            {c.assignedTeacherNames?.length > 0 && (
+                              <p className="mt-0.5 max-w-xs truncate text-xs text-faint" title={c.assignedTeacherNames.join(", ")}>
+                                Trainers: {c.assignedTeacherNames.join(", ")}
+                              </p>
+                            )}
+                          </Td>
+                          <Td className="text-dim">{c.category}</Td>
+                          <Td numeric>
+                            {formatCurrency(c.priceExVat)}
+                            <span className="block text-[11px] text-faint">incl. VAT {formatCurrency(c.priceInclVat)}</span>
+                          </Td>
+                          <Td numeric>{c.registeredStudents}</Td>
+                          <Td numeric>{c.batches.length}</Td>
+                          <Td><CourseStatusLamp status={c.status} /></Td>
+                          {!isReadOnly && (
+                            <Td className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="iconSm"
+                                  aria-label={`Edit ${c.courseName}`}
+                                  onClick={(e) => { e.stopPropagation(); openEdit(c); }}
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="iconSm"
+                                  className="text-alert hover:text-alert"
+                                  aria-label={`Delete ${c.courseName}`}
+                                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(c); }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </Td>
+                          )}
+                        </Tr>
+                        {expanded && (
+                          <Tr>
+                            <Td colSpan={colCount} className="bg-well/60 px-4 py-3">
+                              {c.batches.length === 0 ? (
+                                <p className="text-xs text-dim">No batches yet. Add them from the course edit form.</p>
+                              ) : (
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                  {c.batches.map((b) => (
+                                    <div key={b.id} className="rounded-ctl border border-bezel bg-face p-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="truncate text-sm font-semibold text-ink" title={b.batchName}>{b.batchName}</p>
+                                        <Lamp variant={BATCH_LAMP[b.status] ?? "off"}>{b.status}</Lamp>
+                                      </div>
+                                      <div className="mt-1.5 space-y-0.5 text-xs text-dim">
+                                        {b.trainerName && <p>Trainer: {b.trainerName}</p>}
+                                        {b.schedule && <p>{b.schedule}</p>}
+                                        {b.startDate && (
+                                          <p className="readout" data-numeric>{b.startDate} → {b.endDate}</p>
+                                        )}
+                                        <p>{b.format}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </Td>
+                          </Tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </Table>
+              <TableFooter>
+                <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+              </TableFooter>
+            </>
+          )}
+        </TableShell>
+      )}
+
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={editingCourse ? "Edit Course" : "Add Course"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="solid" type="submit" form="course-form" disabled={saving}>
+              {saving && <Spinner className="h-3.5 w-3.5" />}
+              {editingCourse ? "Save Changes" : "Create Course"}
+            </Button>
+          </>
+        }
+      >
+        <form id="course-form" onSubmit={save} noValidate className="space-y-4">
+          {formError && (
+            <div role="alert" className="rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-3 text-sm font-semibold text-alert">
+              {formError}
+            </div>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Course Name" required error={fieldErrors.courseName} htmlFor="course-name" className="sm:col-span-2">
+              <Input
+                id="course-name"
+                value={form.courseName}
+                aria-invalid={fieldErrors.courseName ? true : undefined}
+                onChange={(e) => setForm((f) => ({ ...f, courseName: e.target.value }))}
+                placeholder="e.g. AI for Professionals"
+              />
+            </Field>
+            <Field label="Course Code" htmlFor="course-code" help="Auto-generated if blank">
+              <Input id="course-code" value={form.courseCode} onChange={(e) => setForm((f) => ({ ...f, courseCode: e.target.value }))} />
+            </Field>
+            <Field label="Category" required htmlFor="course-category">
+              <Select id="course-category" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+                {courseCategories.map((c) => <option key={c}>{c}</option>)}
+              </Select>
+            </Field>
+            <Field label="Price (AED excl. VAT)" htmlFor="course-price">
+              <Input id="course-price" type="number" min="0" value={form.priceExVat} onChange={(e) => setForm((f) => ({ ...f, priceExVat: e.target.value }))} placeholder="0" />
+            </Field>
+            <Field label="VAT Rate (%)" htmlFor="course-vat">
+              <Input id="course-vat" type="number" min="0" max="100" value={form.vatRate} onChange={(e) => setForm((f) => ({ ...f, vatRate: e.target.value }))} />
+            </Field>
+            <Field label="Duration (Weeks)" htmlFor="course-weeks">
+              <Input id="course-weeks" type="number" min="1" value={form.durationWeeks} onChange={(e) => setForm((f) => ({ ...f, durationWeeks: e.target.value }))} />
+            </Field>
+            <Field label="Total Sessions" htmlFor="course-sessions">
+              <Input id="course-sessions" type="number" min="1" value={form.totalSessions} onChange={(e) => setForm((f) => ({ ...f, totalSessions: e.target.value }))} />
+            </Field>
+            <Field label="Sessions / Week" htmlFor="course-spw">
+              <Input id="course-spw" type="number" min="1" value={form.sessionsPerWeek} onChange={(e) => setForm((f) => ({ ...f, sessionsPerWeek: e.target.value }))} />
+            </Field>
+            <Field label="Hours / Session" htmlFor="course-hps">
+              <Input id="course-hps" type="number" min="0.5" step="0.5" value={form.hoursPerSession} onChange={(e) => setForm((f) => ({ ...f, hoursPerSession: e.target.value }))} />
+            </Field>
+            <Field label="Max Students / Batch" htmlFor="course-max">
+              <Input id="course-max" type="number" min="1" value={form.maxStudentsPerBatch} onChange={(e) => setForm((f) => ({ ...f, maxStudentsPerBatch: e.target.value }))} />
+            </Field>
+            <Field label="Status" htmlFor="course-status">
+              <Select id="course-status" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
+                {courseStatuses.map((s) => <option key={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="SPEA Activity" htmlFor="course-spea" className="sm:col-span-2">
+              <Input id="course-spea" value={form.speaActivity} onChange={(e) => setForm((f) => ({ ...f, speaActivity: e.target.value }))} placeholder="Licensed activity name" />
+            </Field>
+            <Field label="Default Training Hours" htmlFor="course-hours">
+              <Input id="course-hours" type="number" min="0" value={form.totalHours} onChange={(e) => setForm((f) => ({ ...f, totalHours: e.target.value }))} placeholder="e.g. 40" />
+            </Field>
+            <Field label="Delivery Method" htmlFor="course-delivery">
+              <Select id="course-delivery" value={form.deliveryMethod} onChange={(e) => setForm((f) => ({ ...f, deliveryMethod: e.target.value }))}>
+                <option value="">Not set</option>
+                <option>In-Person</option><option>Online</option><option>Hybrid</option>
+              </Select>
+            </Field>
+            <div className="sm:col-span-2">
+              <span className="mb-1.5 block text-xs font-bold text-dim">Assigned Trainers</span>
+              <div className="flex flex-wrap gap-2 rounded-ctl border border-bezel-strong bg-well p-3">
+                {teachersFailed ? (
+                  <span className="flex items-center gap-2 text-xs text-alert">
+                    Couldn't load trainers.
+                    <Button variant="ghost" size="sm" type="button" onClick={() => void loadTeachers()}>Retry</Button>
+                  </span>
+                ) : teacherOptions.length === 0 ? (
+                  <span className="text-xs text-faint">No trainers found.</span>
+                ) : (
+                  teacherOptions.map((t) => {
+                    const on = form.assignedTeacherIds.includes(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            assignedTeacherIds: on
+                              ? f.assignedTeacherIds.filter((x) => x !== t.id)
+                              : [...f.assignedTeacherIds, t.id],
+                          }))
+                        }
+                        className={
+                          on
+                            ? "rounded-ctl border border-transparent bg-phos px-3 py-1 text-xs font-semibold text-phos-ink"
+                            : "rounded-ctl border border-bezel-strong bg-face px-3 py-1 text-xs font-semibold text-dim transition-colors hover:text-ink"
+                        }
+                      >
+                        {t.fullName}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+            <Field label="Description" htmlFor="course-desc" className="sm:col-span-2">
+              <Textarea id="course-desc" rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+            </Field>
+          </div>
+        </form>
+      </Drawer>
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onClose={() => { if (!deleting) setConfirmDelete(null); }}
+        onConfirm={() => { if (confirmDelete) void deleteCourse(confirmDelete); }}
+        title="Delete Course"
+        message={confirmDelete ? `Delete "${confirmDelete.courseName}"? This cannot be undone.` : ""}
+        confirmLabel="Delete"
+        busy={deleting}
+      />
+    </div>
   );
 }

@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  FileWarning,
-  RefreshCw,
-  ShieldCheck,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import PageHeader from "@/components/shared/PageHeader";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
+import { Instrument } from "@/components/ui/instrument";
+import { Dial } from "@/components/ui/dial";
+import { LoadError, PanelLoading } from "@/components/ui/feedback";
 
 interface DashboardData {
   total: number;
@@ -21,10 +21,16 @@ interface DashboardData {
   healthScore: number;
 }
 
-function healthColor(score: number) {
-  if (score >= 80) return "text-green-600 dark:text-green-400";
-  if (score >= 55) return "text-amber-600 dark:text-amber-400";
-  return "text-red-600 dark:text-red-400";
+function healthTone(score: number): "phos" | "caution" | "alert" {
+  if (score >= 80) return "phos";
+  if (score >= 55) return "caution";
+  return "alert";
+}
+
+function healthLamp(score: number): LampVariant {
+  if (score >= 80) return "ok";
+  if (score >= 55) return "caution";
+  return "alert";
 }
 
 function healthLabel(score: number) {
@@ -33,195 +39,179 @@ function healthLabel(score: number) {
   return "At Risk";
 }
 
-function healthBg(score: number) {
-  if (score >= 80) return "bg-green-500";
-  if (score >= 55) return "bg-amber-500";
-  return "bg-red-500";
-}
+const HEALTH_TEXT: Record<"phos" | "caution" | "alert", string> = {
+  phos: "text-phos",
+  caution: "text-caution",
+  alert: "text-alert",
+};
+
+const RISK_FILL: Record<"Low" | "Medium" | "High", string> = {
+  Low: "bg-phos",
+  Medium: "bg-caution-fill",
+  High: "bg-alert",
+};
 
 export default function CompliancePage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const load = () => {
+  const load = useCallback(async () => {
     setLoading(true);
-    fetch("/api/compliance/dashboard")
-      .then((r) => r.json())
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
+    setError("");
+    try {
+      const res = await fetch("/api/compliance/dashboard");
+      if (!res.ok) throw new Error();
+      setData(await res.json());
+    } catch {
+      setError("Couldn't load the compliance overview. Check your connection and retry.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  useEffect(load, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  if (loading || !data) {
-    return (
-      <div className="flex h-64 items-center justify-center text-gray-400">
-        <RefreshCw className="h-5 w-5 animate-spin mr-2" /> Loading…
-      </div>
-    );
-  }
-
-  const { total, missingDocCount, avgDocCompletion, riskCounts, highRisk, healthScore } = data;
-  const compliantCount = total - missingDocCount;
+  const total = data?.total ?? 0;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Compliance Dashboard</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Centre-wide compliance overview · {total} active learner{total !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10"
-          >
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh
-          </button>
-          <Link
-            href="/learner-profiles"
-            className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-[#1B5E20]"
-          >
-            <Users className="h-3.5 w-3.5" /> View Profiles
-          </Link>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Compliance"
+        subtitle={
+          data
+            ? `Centre-wide compliance overview · ${total} active learner${total !== 1 ? "s" : ""}`
+            : "Centre-wide compliance overview"
+        }
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Refresh
+            </Button>
+            <Link href="/learner-profiles" className={buttonVariants({ variant: "primary" })}>
+              <Users className="h-3.5 w-3.5" aria-hidden /> View Profiles
+            </Link>
+          </>
+        }
+      />
 
-      {/* Health score banner */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className={`grid h-16 w-16 flex-shrink-0 place-items-center rounded-2xl ${healthScore >= 80 ? "bg-green-50 dark:bg-green-950/40" : healthScore >= 55 ? "bg-amber-50 dark:bg-amber-950/40" : "bg-red-50 dark:bg-red-950/40"}`}>
-              <ShieldCheck className={`h-8 w-8 ${healthColor(healthScore)}`} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Centre Health Score</p>
-              <p className={`text-4xl font-extrabold ${healthColor(healthScore)}`}>{healthScore}%</p>
-              <p className={`text-sm font-semibold ${healthColor(healthScore)}`}>{healthLabel(healthScore)}</p>
-            </div>
-          </div>
-          <div className="w-full sm:w-64">
-            <div className="mb-1.5 flex justify-between text-xs text-gray-500">
-              <span>0%</span><span>100%</span>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
-              <div
-                className={`h-full rounded-full transition-all ${healthBg(healthScore)}`}
-                style={{ width: `${healthScore}%` }}
+      {error ? (
+        <LoadError message={error} onRetry={() => void load()} />
+      ) : loading || !data ? (
+        <PanelLoading label="Loading compliance data" />
+      ) : (
+        <>
+          {/* Centre health score — the panel's master instrument */}
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 sm:justify-start">
+              <Dial
+                value={data.healthScore}
+                label="Centre Health"
+                cautionBelow={79}
+                alertBelow={54}
               />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard
-          label="Total Learners"
-          value={total}
-          icon={<Users className="h-5 w-5 text-blue-500" />}
-          bg="bg-blue-50 dark:bg-blue-950/30"
-        />
-        <StatCard
-          label="Docs Complete"
-          value={`${avgDocCompletion}%`}
-          icon={<CheckCircle2 className="h-5 w-5 text-green-500" />}
-          bg="bg-green-50 dark:bg-green-950/30"
-          sub={`${compliantCount} of ${total} learners`}
-        />
-        <StatCard
-          label="Missing Docs"
-          value={missingDocCount}
-          icon={<FileWarning className="h-5 w-5 text-amber-500" />}
-          bg="bg-amber-50 dark:bg-amber-950/30"
-          highlight={missingDocCount > 0}
-        />
-        <StatCard
-          label="High Risk"
-          value={riskCounts.High ?? 0}
-          icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
-          bg="bg-red-50 dark:bg-red-950/30"
-          highlight={(riskCounts.High ?? 0) > 0}
-        />
-      </div>
-
-      {/* Risk breakdown */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Risk Breakdown
-        </h2>
-        <div className="space-y-3">
-          {(["Low", "Medium", "High"] as const).map((level) => {
-            const count = riskCounts[level] ?? 0;
-            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-            const color = level === "Low" ? "bg-green-500" : level === "Medium" ? "bg-amber-500" : "bg-red-500";
-            const textColor = level === "Low" ? "text-green-700 dark:text-green-400" : level === "Medium" ? "text-amber-700 dark:text-amber-400" : "text-red-700 dark:text-red-400";
-            return (
-              <div key={level} className="flex items-center gap-3">
-                <span className={`w-16 text-xs font-semibold ${textColor}`}>{level}</span>
-                <div className="flex-1 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
-                  <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+              <div>
+                <div className="flex items-center gap-3">
+                  <ShieldCheck
+                    className={`h-6 w-6 ${HEALTH_TEXT[healthTone(data.healthScore)]}`}
+                    aria-hidden
+                  />
+                  <Lamp variant={healthLamp(data.healthScore)}>{healthLabel(data.healthScore)}</Lamp>
                 </div>
-                <span className="w-16 text-right text-xs text-gray-500">{count} ({pct}%)</span>
+                <p className="mt-3 max-w-md text-sm leading-6 text-dim">
+                  Weighted across document completion, assessment currency, IQA sampling
+                  coverage, and staff compliance. Sweep the readings below for the
+                  contributing measures.
+                </p>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            </CardContent>
+          </Card>
 
-      {/* High-risk learners */}
-      {highRisk.length > 0 && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-5 shadow-sm dark:border-red-800/40 dark:bg-red-950/20">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-red-700 dark:text-red-400">
-            <AlertTriangle className="h-4 w-4" /> High Risk Learners ({highRisk.length})
-          </h2>
-          <div className="space-y-2">
-            {highRisk.map((l) => (
-              <Link
-                key={l.id}
-                href={`/learner-profiles/${l.id}`}
-                className="flex items-center justify-between rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm hover:bg-red-50 dark:border-red-800/30 dark:bg-red-950/30 dark:hover:bg-red-900/30"
-              >
-                <span className="font-medium text-gray-900 dark:text-white">{l.fullName}</span>
-                {l.missingDocs.length > 0 && (
-                  <span className="text-xs text-red-600 dark:text-red-400">
-                    Missing: {l.missingDocs.join(", ")}
-                  </span>
-                )}
-              </Link>
-            ))}
+          {/* Key readings */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Instrument label="Total Learners" value={total} sub="Active compliance profiles" />
+            <Instrument
+              label="Docs Complete"
+              value={`${data.avgDocCompletion}%`}
+              sub={`${total - data.missingDocCount} of ${total} learners`}
+              tone={data.avgDocCompletion === 100 ? "phos" : "ink"}
+            />
+            <Instrument
+              label="Missing Docs"
+              value={data.missingDocCount}
+              sub="Learners with gaps"
+              tone={data.missingDocCount > 0 ? "caution" : "ink"}
+              corner={data.missingDocCount > 0 ? <Lamp variant="caution">Check</Lamp> : undefined}
+            />
+            <Instrument
+              label="High Risk"
+              value={data.riskCounts.High ?? 0}
+              sub="Require intervention"
+              tone={(data.riskCounts.High ?? 0) > 0 ? "alert" : "ink"}
+              corner={(data.riskCounts.High ?? 0) > 0 ? <Lamp variant="alert">Alert</Lamp> : undefined}
+            />
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
-function StatCard({
-  label,
-  value,
-  icon,
-  bg,
-  sub,
-  highlight,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  bg: string;
-  sub?: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className={`rounded-xl border p-4 shadow-sm ${highlight ? "border-red-200 dark:border-red-800/40" : "border-gray-200 dark:border-white/10"} bg-white dark:bg-white/5`}>
-      <div className={`mb-3 grid h-9 w-9 place-items-center rounded-lg ${bg}`}>{icon}</div>
-      <p className="text-2xl font-extrabold text-gray-900 dark:text-white">{value}</p>
-      <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-      {sub && <p className="mt-0.5 text-[10px] text-gray-400">{sub}</p>}
+          {/* Risk breakdown */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Risk Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {(["Low", "Medium", "High"] as const).map((level) => {
+                const count = data.riskCounts[level] ?? 0;
+                const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                return (
+                  <div key={level} className="flex items-center gap-3">
+                    <span className="placard w-16">{level}</span>
+                    <div
+                      role="progressbar"
+                      aria-valuenow={pct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${level} risk share`}
+                      className="h-2 flex-1 overflow-hidden rounded-sm bg-well"
+                    >
+                      <div className={`h-full rounded-sm ${RISK_FILL[level]}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="readout w-20 text-right text-xs text-dim" data-numeric>
+                      {count} ({pct}%)
+                    </span>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* High-risk learners */}
+          {data.highRisk.length > 0 && (
+            <Card className="border-alert/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-alert">
+                  <AlertTriangle className="h-4 w-4" aria-hidden /> High Risk Learners
+                </CardTitle>
+                <Lamp variant="alert">{data.highRisk.length}</Lamp>
+              </CardHeader>
+              <CardContent className="space-y-1.5">
+                {data.highRisk.map((l) => (
+                  <Link
+                    key={l.id}
+                    href={`/learner-profiles/${l.id}`}
+                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-ctl border border-bezel px-3 py-2 text-sm transition-colors hover:border-bezel-strong hover:bg-well"
+                  >
+                    <span className="font-semibold text-ink">{l.fullName}</span>
+                    {l.missingDocs.length > 0 && (
+                      <span className="text-xs text-alert">Missing: {l.missingDocs.join(", ")}</span>
+                    )}
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }

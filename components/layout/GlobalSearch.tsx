@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/feedback";
 
 interface Hit { type: string; title: string; subtitle: string; href: string }
 
@@ -18,8 +20,10 @@ export default function GlobalSearch() {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // ⌘K / Ctrl-K to open, Escape to close
@@ -37,27 +41,57 @@ export default function GlobalSearch() {
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 30);
-    else { setQ(""); setHits([]); setActive(0); }
+    else { setQ(""); setHits([]); setActive(0); setFailed(false); }
+  }, [open]);
+
+  // Keep keyboard focus inside the palette while it is open
+  useEffect(() => {
+    if (!open) return;
+    function onTab(e: KeyboardEvent) {
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const items = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute("disabled"));
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", onTab);
+    return () => document.removeEventListener("keydown", onTab);
   }, [open]);
 
   // Debounced search
   const search = useCallback((term: string) => {
     abortRef.current?.abort();
-    if (term.trim().length < 2) { setHits([]); setLoading(false); return; }
+    if (term.trim().length < 2) { setHits([]); setLoading(false); setFailed(false); return; }
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setLoading(true);
+    setFailed(false);
     fetch(`/api/search?q=${encodeURIComponent(term.trim())}`, { signal: ctrl.signal })
       .then((r) => r.json())
-      .then((d) => { setHits(d.hits ?? []); setActive(0); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then((d) => { setHits(d.hits ?? []); setActive(0); setLoading(false); })
+      .catch((err) => {
+        if ((err as Error)?.name === "AbortError") return; // superseded by a newer keystroke
+        setHits([]);
+        setFailed(true);
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => search(q), 250);
+    const t = setTimeout(() => search(q), 300);
     return () => clearTimeout(t);
   }, [q, search]);
+
+  // Keep the active option visible while arrowing through results
+  useEffect(() => {
+    document.getElementById(`gs-option-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   const go = (hit: Hit) => { setOpen(false); router.push(hit.href); };
 
@@ -75,6 +109,8 @@ export default function GlobalSearch() {
   }
   let flatIndex = -1;
 
+  const showList = q.trim().length >= 2 && !failed;
+
   return (
     <>
       <button
@@ -82,67 +118,97 @@ export default function GlobalSearch() {
         onClick={() => setOpen(true)}
         aria-label="Search"
         title="Search (⌘K)"
-        className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32] dark:border-slate-700 dark:bg-[#112013] dark:text-slate-300 dark:hover:border-[#2E7D32] dark:hover:bg-[#1a2e1b] sm:h-10 sm:w-auto sm:gap-2 sm:px-3"
+        className="grid h-10 w-10 place-items-center rounded-ctl border border-bezel-strong bg-face text-dim shadow-card transition-colors hover:border-phos hover:text-phos focus-visible:outline-none focus-visible:shadow-glow sm:h-10 sm:w-auto sm:gap-2 sm:px-3"
       >
-        <Search className="h-4 w-4" />
-        <span className="hidden text-xs font-medium text-slate-400 sm:inline">Search…</span>
-        <kbd className="hidden rounded border border-slate-200 px-1 text-[10px] text-slate-400 dark:border-slate-600 lg:inline">⌘K</kbd>
+        <Search className="h-4 w-4" aria-hidden />
+        <span className="hidden text-xs font-medium text-faint sm:inline">Search…</span>
+        <kbd className="hidden rounded-lamp border border-bezel px-1 font-mono text-[10px] text-faint lg:inline">⌘K</kbd>
       </button>
 
       {open && (
         <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[10vh]">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[#112013]">
-            <div className="flex items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-700">
-              <Search className="h-4 w-4 flex-shrink-0 text-slate-400" />
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Global search"
+            className="relative w-full max-w-lg overflow-hidden rounded-card border border-bezel bg-raised shadow-raise"
+            style={{ animation: "power-on 0.25s cubic-bezier(0.16,1,0.3,1) both" }}
+          >
+            <div className="flex items-center gap-2 border-b border-bezel px-4">
+              <Search className="h-4 w-4 flex-shrink-0 text-faint" aria-hidden />
               <input
                 ref={inputRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={onInputKey}
                 placeholder="Search students, leads, courses, vouchers…"
-                className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400 dark:text-white"
+                role="combobox"
+                aria-expanded={showList && hits.length > 0}
+                aria-controls="gs-listbox"
+                aria-activedescendant={hits[active] ? `gs-option-${active}` : undefined}
+                aria-autocomplete="list"
+                aria-label="Search the CRM"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-12 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
               />
-              {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-              <button onClick={() => setOpen(false)} className="rounded p-1 text-slate-400 hover:text-slate-600">
+              {loading && <Spinner />}
+              <Button variant="ghost" size="iconSm" onClick={() => setOpen(false)} aria-label="Close search">
                 <X className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto">
-              {q.trim().length < 2 ? (
-                <p className="px-4 py-8 text-center text-xs text-slate-400">
+              {failed ? (
+                <div role="alert" className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-ink">Search is unavailable right now.</p>
+                  <p className="text-xs text-dim">Check your connection, then try again.</p>
+                  <Button variant="secondary" size="sm" onClick={() => search(q)}>
+                    Retry
+                  </Button>
+                </div>
+              ) : q.trim().length < 2 ? (
+                <p className="px-4 py-8 text-center text-xs text-faint">
                   Type at least 2 characters — search by name, phone, ID, voucher or account.
                 </p>
               ) : !loading && hits.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-slate-400">No matches for “{q}”.</p>
+                <p className="px-4 py-8 text-center text-sm text-dim">No matches for “{q}”.</p>
               ) : (
-                groups.map((g) => (
-                  <div key={g.type}>
-                    <p className="px-4 pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">{g.type}</p>
-                    {g.items.map((h) => {
-                      flatIndex++;
-                      const idx = flatIndex;
-                      return (
-                        <button
-                          key={`${h.type}-${idx}`}
-                          onClick={() => go(h)}
-                          onMouseEnter={() => setActive(idx)}
-                          className={`flex w-full flex-col items-start px-4 py-2.5 text-left transition ${
-                            idx === active ? "bg-[#E8F5E9] dark:bg-[#1a2e1b]" : "hover:bg-slate-50 dark:hover:bg-white/5"
-                          }`}
-                        >
-                          <span className="truncate text-sm font-semibold text-[#0D1F0E] dark:text-[#e8f5e9]">{h.title}</span>
-                          <span className="truncate text-xs text-slate-500 dark:text-slate-400">{h.subtitle}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))
+                <div id="gs-listbox" role="listbox" aria-label="Search results">
+                  {groups.map((g) => (
+                    <div key={g.type} role="group" aria-label={g.type}>
+                      <p className="placard px-4 pb-1 pt-3" role="presentation">{g.type}</p>
+                      {g.items.map((h) => {
+                        flatIndex++;
+                        const idx = flatIndex;
+                        return (
+                          <button
+                            key={`${h.type}-${idx}`}
+                            id={`gs-option-${idx}`}
+                            role="option"
+                            aria-selected={idx === active}
+                            onClick={() => go(h)}
+                            onMouseEnter={() => setActive(idx)}
+                            className={`flex w-full flex-col items-start border-l-2 px-4 py-2.5 text-left transition-colors ${
+                              idx === active
+                                ? "border-phos bg-well"
+                                : "border-transparent hover:bg-well"
+                            }`}
+                          >
+                            <span className="w-full truncate text-sm font-semibold text-ink">{h.title}</span>
+                            <span className="w-full truncate text-xs text-dim">{h.subtitle}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-            <div className="hidden items-center gap-3 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-400 dark:border-slate-700 sm:flex">
+            <div className="hidden items-center gap-3 border-t border-bezel px-4 py-2 text-[10px] text-faint sm:flex">
               <span>↑↓ navigate</span><span>↵ open</span><span>esc close</span>
             </div>
           </div>

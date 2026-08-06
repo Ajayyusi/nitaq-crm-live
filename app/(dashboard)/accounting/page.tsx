@@ -4,9 +4,13 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowRight, BookOpen, Building2, Calculator, Database, FileSpreadsheet,
-  Landmark, ListChecks, Loader2, Receipt, RefreshCw, Scale, Settings2, Users, Wallet,
+  Landmark, ListChecks, Receipt, RefreshCw, Scale, Settings2, Users, Wallet,
 } from "lucide-react";
 import { fmtAED } from "@/components/accounting/shared";
+import PageHeader from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Instrument } from "@/components/ui/instrument";
+import { PanelLoading, LoadError } from "@/components/ui/feedback";
 
 interface Dash {
   cashBalance: number; bankBalance: number;
@@ -32,6 +36,7 @@ const MODULES = [
 export default function AccountingDashboardPage() {
   const [data, setData] = useState<Dash | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [coaCount, setCoaCount] = useState<number | null>(null);
   const [entryCount, setEntryCount] = useState<number | null>(null);
   const [seeding, setSeeding] = useState(false);
@@ -41,6 +46,7 @@ export default function AccountingDashboardPage() {
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     Promise.all([
       fetch("/api/accounting/dashboard").then((r) => r.json()),
       fetch("/api/accounting/accounts").then((r) => r.json()),
@@ -51,7 +57,7 @@ export default function AccountingDashboardPage() {
         setCoaCount((coa.accounts ?? []).length);
         setEntryCount((jv.entries ?? []).length);
       })
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -66,7 +72,7 @@ export default function AccountingDashboardPage() {
       setSeedMsg(d.message ?? "Done.");
       load();
     } catch {
-      setSeedMsg("Seeding failed.");
+      setSeedMsg("Seeding failed. Retry, or contact your administrator.");
     } finally {
       setSeeding(false);
     }
@@ -81,125 +87,135 @@ export default function AccountingDashboardPage() {
       setBackfillMsg(d.message ?? "Done.");
       load();
     } catch {
-      setBackfillMsg("Backfill failed.");
+      setBackfillMsg("Backfill failed. Retry, or contact your administrator.");
     } finally {
       setBackfilling(false);
     }
   };
 
+  const header = (
+    <PageHeader
+      title="Accounting"
+      subtitle="Double-entry accounting linked to the CRM"
+      actions={
+        <Button variant="ghost" size="icon" onClick={load} aria-label="Refresh accounting data">
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      }
+    />
+  );
+
   if (loading) {
-    return <div className="flex h-64 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>;
+    return (
+      <div className="p-4 sm:p-6">
+        {header}
+        <PanelLoading label="Reading instruments" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 sm:p-6">
+        {header}
+        <LoadError message="Couldn't load the accounting overview." onRetry={load} />
+      </div>
+    );
   }
 
   const cards = data ? [
-    { label: "Cash Balance",        value: data.cashBalance,       icon: Wallet,   color: "text-green-600", href: "/accounting/register?group=cash" },
-    { label: "Bank Balance",        value: data.bankBalance,       icon: Landmark, color: "text-blue-600", href: "/accounting/register?group=bank" },
-    { label: "Receivable (A/R)",    value: data.accountsReceivable, icon: Receipt, color: "text-teal-600", href: "/accounting/receivables" },
-    { label: "Payable (A/P)",       value: data.accountsPayable,   icon: Building2, color: "text-amber-600", href: "/accounting/suppliers" },
-    { label: "Revenue This Month",  value: data.revenueThisMonth,  icon: Calculator, color: "text-green-600", href: "/accounting/invoices" },
-    { label: "Expenses This Month", value: data.expensesThisMonth, icon: Receipt,  color: "text-red-600", href: "/accounting/register?sourceType=Expense" },
-    { label: "VAT Payable",         value: data.vatPayable,        icon: Landmark, color: data.vatPayable > 0 ? "text-red-600" : "text-green-600", href: "/accounting/vat" },
-    { label: "Net Profit (All)",    value: data.netProfit,         icon: Scale,    color: data.netProfit >= 0 ? "text-green-600" : "text-red-600", href: "/accounting/trial-balance" },
+    { label: "Cash Balance",        value: data.cashBalance,        tone: "phos" as const,                                    href: "/accounting/register?group=cash" },
+    { label: "Bank Balance",        value: data.bankBalance,        tone: "ink" as const,                                     href: "/accounting/register?group=bank" },
+    { label: "Receivable (A/R)",    value: data.accountsReceivable, tone: "ink" as const,                                     href: "/accounting/receivables" },
+    { label: "Payable (A/P)",       value: data.accountsPayable,    tone: "ink" as const,                                     href: "/accounting/suppliers" },
+    { label: "Revenue This Month",  value: data.revenueThisMonth,   tone: "ink" as const,                                     href: "/accounting/invoices" },
+    { label: "Expenses This Month", value: data.expensesThisMonth,  tone: "ink" as const,                                     href: "/accounting/register?sourceType=Expense" },
+    { label: "VAT Payable",         value: data.vatPayable,         tone: data.vatPayable > 0 ? ("caution" as const) : ("ink" as const), href: "/accounting/vat" },
+    { label: "Net Profit (All)",    value: data.netProfit,          tone: data.netProfit >= 0 ? ("phos" as const) : ("alert" as const),  href: "/accounting/trial-balance" },
   ] : [];
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Accounting</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Double-entry accounting linked to the CRM</p>
-        </div>
-        <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-white/5">
-          <RefreshCw className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* First-run: seed COA */}
-      {coaCount === 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-800/40 dark:bg-amber-950/20">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Database className="h-6 w-6 text-amber-600" />
-              <div>
-                <p className="font-semibold text-amber-900 dark:text-amber-300">Chart of Accounts is empty</p>
-                <p className="text-sm text-amber-700 dark:text-amber-500">Load the official NITAQ chart of accounts (114 accounts + 3 suppliers) from the accountant's Excel.</p>
+    <div className="p-4 sm:p-6">
+      {header}
+      <div className="space-y-6">
+        {/* First-run: seed COA */}
+        {coaCount === 0 && (
+          <div role="alert" className="rounded-card border border-caution/30 bg-[var(--lamp-caution-bg)] p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Database className="h-6 w-6 flex-shrink-0 text-caution" aria-hidden />
+                <div>
+                  <p className="text-sm font-bold text-ink">Chart of Accounts is empty</p>
+                  <p className="text-sm text-dim">Load the official NITAQ chart of accounts (114 accounts + 3 suppliers) from the accountant&apos;s Excel.</p>
+                </div>
               </div>
+              <Button variant="solid" onClick={seedCoa} disabled={seeding}>
+                {seeding ? "Seeding…" : "Seed Chart of Accounts"}
+              </Button>
             </div>
-            <button
-              onClick={seedCoa}
-              disabled={seeding}
-              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
-            >
-              {seeding ? "Seeding…" : "Seed Chart of Accounts"}
-            </button>
+            {seedMsg && <p role="status" className="mt-2 text-sm font-semibold text-caution">{seedMsg}</p>}
           </div>
-          {seedMsg && <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-400">{seedMsg}</p>}
-        </div>
-      )}
+        )}
 
-      {/* COA seeded but no entries yet: offer CRM history backfill */}
-      {coaCount !== null && coaCount > 0 && entryCount === 0 && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800/40 dark:bg-blue-950/20">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <Database className="h-6 w-6 text-blue-600" />
-              <div>
-                <p className="font-semibold text-blue-900 dark:text-blue-300">No journal entries yet</p>
-                <p className="text-sm text-blue-700 dark:text-blue-400">
-                  Import your existing CRM history — every enrollment, payment and expense
-                  gets its double-entry journal entry. Safe to run more than once.
-                </p>
+        {/* COA seeded but no entries yet: offer CRM history backfill */}
+        {coaCount !== null && coaCount > 0 && entryCount === 0 && (
+          <div role="status" className="rounded-card border border-advisory/30 bg-[var(--lamp-advisory-bg)] p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Database className="h-6 w-6 flex-shrink-0 text-advisory" aria-hidden />
+                <div>
+                  <p className="text-sm font-bold text-ink">No journal entries yet</p>
+                  <p className="text-sm text-dim">
+                    Import your existing CRM history — every enrollment, payment and expense
+                    gets its double-entry journal entry. Safe to run more than once.
+                  </p>
+                </div>
               </div>
+              <Button variant="primary" onClick={backfill} disabled={backfilling}>
+                {backfilling ? "Importing…" : "Import CRM History"}
+              </Button>
             </div>
-            <button
-              onClick={backfill}
-              disabled={backfilling}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-            >
-              {backfilling ? "Importing…" : "Import CRM History"}
-            </button>
+            {backfillMsg && <p role="status" className="mt-2 text-sm font-semibold text-advisory">{backfillMsg}</p>}
           </div>
-          {backfillMsg && <p className="mt-2 text-sm font-medium text-blue-800 dark:text-blue-400">{backfillMsg}</p>}
+        )}
+        {/* Show result even after entries exist */}
+        {backfillMsg && entryCount !== 0 && (
+          <p role="status" className="rounded-ctl border border-advisory/30 bg-[var(--lamp-advisory-bg)] px-4 py-2 text-sm font-semibold text-advisory">{backfillMsg}</p>
+        )}
+
+        {/* KPI instruments — each drills into its register/report */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {cards.map((c) => (
+            <Instrument
+              key={c.label}
+              label={c.label}
+              value={fmtAED(c.value)}
+              tone={c.tone}
+              href={c.href}
+              corner={<ArrowRight aria-hidden className="h-3.5 w-3.5 text-faint transition-colors group-hover:text-phos" />}
+            />
+          ))}
         </div>
-      )}
-      {/* Show result even after entries exist */}
-      {backfillMsg && entryCount !== 0 && (
-        <p className="rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-800 dark:bg-green-950/30 dark:text-green-400">{backfillMsg}</p>
-      )}
 
-      {/* KPI cards — each drills into its register/report */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cards.map((c) => (
-          <Link key={c.label} href={c.href}
-            className="group rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2E7D32]/40 hover:shadow-md dark:border-white/10 dark:bg-white/5">
-            <div className="flex items-start justify-between">
-              <c.icon className={`mb-2 h-5 w-5 ${c.color}`} />
-              <ArrowRight className="h-3.5 w-3.5 text-gray-200 transition group-hover:text-[#2E7D32]" />
-            </div>
-            <p className={`text-lg font-extrabold ${c.color}`}>{fmtAED(c.value)}</p>
-            <p className="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">{c.label}</p>
-          </Link>
-        ))}
-      </div>
-
-      {/* Module links */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {MODULES.map((m) => (
-          <Link
-            key={m.href}
-            href={m.href}
-            className="group flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-white/10 dark:bg-white/5"
-          >
-            <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-lg bg-[#E8F5E9] dark:bg-green-900/30">
-              <m.icon className="h-5 w-5 text-[#2E7D32] dark:text-green-400" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-900 group-hover:text-[#2E7D32] dark:text-white dark:group-hover:text-green-400">{m.label}</p>
-              <p className="truncate text-xs text-gray-400">{m.desc}</p>
-            </div>
-            <ArrowRight className="h-4 w-4 flex-shrink-0 text-gray-300 group-hover:text-[#2E7D32]" />
-          </Link>
-        ))}
+        {/* Module links */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {MODULES.map((m) => (
+            <Link
+              key={m.href}
+              href={m.href}
+              className="face group flex items-center gap-3 p-4 transition-all duration-150 hover:border-bezel-strong hover:shadow-raise"
+            >
+              <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-ctl border border-bezel bg-well">
+                <m.icon className="h-5 w-5 text-phos" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-ink transition-colors group-hover:text-phos">{m.label}</p>
+                <p className="truncate text-xs text-faint">{m.desc}</p>
+              </div>
+              <ArrowRight aria-hidden className="h-4 w-4 flex-shrink-0 text-faint transition-colors group-hover:text-phos" />
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { GraduationCap, Award, History, MessageCircle, Search, Loader2 } from "lucide-react";
+import { Award, GraduationCap, History, MessageCircle } from "lucide-react";
 import HoursProgress from "@/components/shared/HoursProgress";
 import ClassHistoryDrawer, { type RegistrationInfo } from "@/components/shared/ClassHistoryDrawer";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { Button } from "@/components/ui/button";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
+import { SearchInput, Select } from "@/components/ui/input";
+import {
+  Pagination, Table, TableFooter, TableShell, Td, Th, THead, Tr, usePagination,
+} from "@/components/ui/table";
+import { LoadError, SkeletonRows, Spinner } from "@/components/ui/feedback";
 
 type Enrollment = {
   teacherId: string; teacherName: string;
@@ -20,11 +27,12 @@ type Enrollment = {
 
 const STATUSES = ["Active", "Completed", "On Hold", "Dropped"] as const;
 
-const statusColor: Record<string, string> = {
-  Active:     "bg-[#E8F5E9] text-[#1B5E20]",
-  Completed:  "bg-teal-50 text-teal-700",
-  Dropped:    "bg-red-50 text-red-700",
-  "On Hold":  "bg-amber-50 text-amber-700",
+const PAY_LAMP: Record<string, LampVariant> = {
+  "Paid Full": "ok",
+  "Instalment 1 Paid": "advisory",
+  "Instalment 2 Pending": "caution",
+  Overdue: "alert",
+  Free: "advisory",
 };
 
 const fmt = (n: number) =>
@@ -32,10 +40,12 @@ const fmt = (n: number) =>
 
 function StatusCell({ enrollment, onUpdated }: { enrollment: Enrollment; onUpdated: (id: string, status: string) => void }) {
   const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function change(newStatus: string) {
     if (newStatus === enrollment.status) return;
     setSaving(true);
+    setFailed(false);
     try {
       const res = await fetch(`/api/enrollments/${enrollment.id}`, {
         method: "PATCH",
@@ -43,20 +53,29 @@ function StatusCell({ enrollment, onUpdated }: { enrollment: Enrollment; onUpdat
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) onUpdated(enrollment.id, newStatus);
-    } catch { /* ignore */ }
+      else setFailed(true);
+    } catch { setFailed(true); }
     finally { setSaving(false); }
   }
 
-  if (saving) return <Loader2 className="h-4 w-4 animate-spin text-slate-400" />;
+  if (saving) return <Spinner className="h-4 w-4" />;
 
   return (
-    <select
-      value={enrollment.status}
-      onChange={(e) => void change(e.target.value)}
-      className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 outline-none cursor-pointer ${statusColor[enrollment.status] ?? "bg-slate-100 text-slate-600"}`}
-    >
-      {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-    </select>
+    <div>
+      <Select
+        value={enrollment.status}
+        onChange={(e) => void change(e.target.value)}
+        aria-label={`Status for ${enrollment.fullName}`}
+        className="h-8 w-auto pr-7 text-xs"
+      >
+        {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+      </Select>
+      {failed && (
+        <p role="alert" className="mt-1 text-[11px] font-semibold text-alert">
+          Update failed — try again
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -66,7 +85,14 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("Active");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [fetchError, setFetchError] = useState("");
+
+  // Debounce search — it drives a fetch.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const fetchEnrollments = useCallback(async () => {
     setLoading(true);
@@ -74,19 +100,19 @@ export default function StudentsPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "All") params.set("status", statusFilter);
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       const res = await fetch(`/api/enrollments?${params}`);
       const data = await res.json();
       setEnrollments(data.enrollments ?? []);
     } catch {
-      setFetchError("Could not load students. Please check your connection and try again.");
+      setFetchError("Couldn't load students. Check your connection and try again.");
       setEnrollments([]);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, search]);
+  }, [statusFilter, debouncedSearch]);
 
-  useEffect(() => { fetchEnrollments(); }, [fetchEnrollments]);
+  useEffect(() => { void fetchEnrollments(); }, [fetchEnrollments]);
 
   function handleStatusUpdate(id: string, newStatus: string) {
     setEnrollments((prev) =>
@@ -99,18 +125,19 @@ export default function StudentsPage() {
   );
 
   const tabs = ["Active", "Completed", "On Hold", "Dropped", "All"];
+  const { slice, page, pages, setPage, total } = usePagination(enrollments, 50);
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="space-y-4">
       <PageHeader
         title="Students"
         subtitle="Enrolled students across all courses"
       />
 
       {eligible.length > 0 && (
-        <div className="mx-6 mt-4 p-3 bg-[#E8F5E9] border border-[#2E7D32]/30 rounded-xl flex items-start gap-3">
-          <Award className="w-4 h-4 text-[#2E7D32] mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-[#1B5E20]">
+        <div role="status" className="flex items-start gap-3 rounded-card border border-phos/30 bg-[var(--lamp-ok-bg)] p-3">
+          <Award className="mt-0.5 h-4 w-4 flex-shrink-0 text-phos" aria-hidden />
+          <div className="text-sm text-ink">
             <span className="font-semibold">{eligible.length} student{eligible.length > 1 ? "s" : ""} eligible for certificate:</span>{" "}
             {eligible.slice(0, 4).map((e) => e.fullName).join(", ")}
             {eligible.length > 4 && ` +${eligible.length - 4} more`}
@@ -118,150 +145,148 @@ export default function StudentsPage() {
         </div>
       )}
 
-      <div className="px-6 pt-4 pb-2 flex gap-2 flex-wrap">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setStatusFilter(t)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-              statusFilter === t
-                ? "bg-[#2E7D32] text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:text-[#2E7D32]"
-            }`}
-          >
-            {t}
-          </button>
-        ))}
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by status">
+          {tabs.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setStatusFilter(t)}
+              aria-pressed={statusFilter === t}
+              className={`h-8 rounded-ctl border px-3 text-xs font-bold uppercase tracking-[0.08em] transition-colors ${
+                statusFilter === t
+                  ? "border-transparent bg-phos text-phos-ink shadow-glow"
+                  : "border-bezel-strong bg-transparent text-dim hover:bg-well hover:text-ink"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <SearchInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name, phone, enrollment ID…"
+          aria-label="Search students"
+          className="min-w-56 flex-1"
+        />
       </div>
 
-      <div className="px-6 pb-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="search"
-            placeholder="Search name, phone, enrollment ID…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
-          />
-        </div>
-      </div>
-
-      {fetchError && (
-        <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium">
-          {fetchError}
-        </div>
+      {fetchError ? (
+        <LoadError message={fetchError} onRetry={() => void fetchEnrollments()} />
+      ) : (
+        <TableShell>
+          {loading ? (
+            <SkeletonRows rows={8} cols={6} />
+          ) : enrollments.length === 0 ? (
+            <EmptyState
+              icon={GraduationCap}
+              title="No students found"
+              description="Students appear here once they are enrolled in a course."
+            />
+          ) : (
+            <>
+              <Table className="min-w-[760px]">
+                <THead>
+                  <tr>
+                    <Th>ID</Th>
+                    <Th>Name</Th>
+                    <Th>Course</Th>
+                    <Th>Teacher & Hours</Th>
+                    <Th>Status</Th>
+                    <Th>Payment</Th>
+                    <Th numeric>Balance</Th>
+                    <Th>Contact</Th>
+                    <Th className="text-right"><span className="sr-only">Actions</span></Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {slice.map((e) => {
+                    const certEligible = e.status === "Completed" && e.balanceDue === 0;
+                    return (
+                      <Tr key={e.id}>
+                        <Td className="readout text-xs text-faint" data-numeric>{e.enrollmentId}</Td>
+                        <Td>
+                          <div className="flex items-center gap-1.5 font-semibold text-ink">
+                            {e.fullName}
+                            {certEligible && (
+                              <Award className="h-3.5 w-3.5 text-caution" aria-label="Certificate eligible" />
+                            )}
+                            {!e.registrationComplete && (
+                              <Lamp variant="alert" title={`Missing: ${e.missingFields.join(", ")}`}>
+                                Incomplete
+                              </Lamp>
+                            )}
+                          </div>
+                          {e.email && <div className="text-xs text-faint">{e.email}</div>}
+                        </Td>
+                        <Td>
+                          <div className="max-w-40 truncate text-dim" title={e.course}>{e.course}</div>
+                          {e.batchName && <div className="text-xs text-faint">{e.batchName}</div>}
+                        </Td>
+                        <Td>
+                          <div className="mb-1 text-xs text-dim">
+                            {e.teacherName || <span className="font-medium text-alert">No teacher</span>}
+                          </div>
+                          <HoursProgress total={e.totalRegisteredHours} completed={e.completedHours} compact />
+                        </Td>
+                        <Td>
+                          <StatusCell enrollment={e} onUpdated={handleStatusUpdate} />
+                        </Td>
+                        <Td>
+                          <Lamp variant={PAY_LAMP[e.paymentStatus] ?? "off"}>{e.paymentStatus}</Lamp>
+                          <div className="readout mt-1 text-xs text-faint" data-numeric>Paid: {fmt(e.amountPaid)}</div>
+                        </Td>
+                        <Td numeric>
+                          {e.balanceDue > 0 ? (
+                            <span className="font-semibold text-alert">{fmt(e.balanceDue)}</span>
+                          ) : (
+                            <span className="text-xs font-medium text-phos">Cleared</span>
+                          )}
+                        </Td>
+                        <Td className="readout text-xs text-dim" data-numeric>{e.phone}</Td>
+                        <Td>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="iconSm"
+                              onClick={() => setHistoryReg({
+                                id: e.id, fullName: e.fullName, course: e.course, teacherName: e.teacherName,
+                                totalRegisteredHours: e.totalRegisteredHours, completedHours: e.completedHours, remainingHours: e.remainingHours,
+                              })}
+                              aria-label={`Class history for ${e.fullName}`}
+                              title="Class history / record class"
+                            >
+                              <History className="h-4 w-4" />
+                            </Button>
+                            {e.phone && (
+                              <a
+                                href={(buildWhatsAppUrl(e.phone) ?? "#")}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="grid h-8 w-8 place-items-center rounded-ctl text-dim transition-colors hover:bg-well hover:text-phos"
+                                aria-label={`WhatsApp ${e.fullName}`}
+                                title="WhatsApp"
+                                onClick={(ev) => ev.stopPropagation()}
+                              >
+                                <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+                              </a>
+                            )}
+                          </div>
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+              <TableFooter>
+                <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+              </TableFooter>
+            </>
+          )}
+        </TableShell>
       )}
-
-      <div className="flex-1 px-6 pb-8 overflow-auto">
-        {loading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
-            ))}
-          </div>
-        ) : enrollments.length === 0 ? (
-          <EmptyState
-            icon={GraduationCap}
-            title="No students found"
-            description="Students appear here once they are enrolled in a course."
-          />
-        ) : (
-          <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  {["ID", "Name", "Course", "Teacher & Hours", "Status", "Payment", "Balance", "Contact", ""].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {enrollments.map((e) => {
-                  const certEligible = e.status === "Completed" && e.balanceDue === 0;
-                  return (
-                    <tr key={e.id} className={`transition-colors ${!e.registrationComplete ? "bg-rose-50/60 hover:bg-rose-50" : "hover:bg-[#E8F5E9]/30"}`}>
-                      <td className="px-4 py-3 text-xs font-mono text-slate-400">{e.enrollmentId}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-[#E8F5E9] flex items-center justify-center text-[#1B5E20] font-bold text-xs flex-shrink-0">
-                            {e.fullName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-medium text-[#0D1F0E] flex items-center gap-1.5">
-                              {e.fullName}
-                              {certEligible && (
-                                <Award className="w-3.5 h-3.5 text-amber-500" aria-label="Certificate eligible" />
-                              )}
-                              {!e.registrationComplete && (
-                                <span className="inline-flex rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold text-rose-700 ring-1 ring-rose-200" title={`Missing: ${e.missingFields.join(", ")}`}>
-                                  ⚠ Incomplete
-                                </span>
-                              )}
-                            </div>
-                            {e.email && <div className="text-xs text-slate-400">{e.email}</div>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-slate-700 max-w-[160px] truncate">{e.course}</div>
-                        {e.batchName && <div className="text-xs text-slate-400">{e.batchName}</div>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs text-slate-600 mb-1">{e.teacherName || <span className="text-rose-500 font-medium">No teacher</span>}</div>
-                        <HoursProgress total={e.totalRegisteredHours} completed={e.completedHours} compact />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusCell enrollment={e} onUpdated={handleStatusUpdate} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs text-slate-600">{e.paymentStatus}</div>
-                        <div className="text-xs text-slate-400">Paid: {fmt(e.amountPaid)}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {e.balanceDue > 0 ? (
-                          <span className="text-red-700 font-semibold text-sm">{fmt(e.balanceDue)}</span>
-                        ) : (
-                          <span className="text-[#2E7D32] text-xs font-medium">Cleared</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-slate-600 text-xs">{e.phone}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => setHistoryReg({
-                            id: e.id, fullName: e.fullName, course: e.course, teacherName: e.teacherName,
-                            totalRegisteredHours: e.totalRegisteredHours, completedHours: e.completedHours, remainingHours: e.remainingHours,
-                          })}
-                          title="Class history / record class"
-                          className="p-1.5 text-slate-400 hover:text-[#2E7D32] hover:bg-[#E8F5E9] rounded transition inline-flex"
-                        >
-                          <History className="w-4 h-4" />
-                        </button>
-                        {e.phone && (
-                          <a
-                            href={(buildWhatsAppUrl(e.phone) ?? "#")}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 text-slate-400 hover:text-[#25D366] hover:bg-green-50 rounded transition inline-flex"
-                            title="WhatsApp"
-                            onClick={(ev) => ev.stopPropagation()}
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
       {historyReg && (
         <ClassHistoryDrawer

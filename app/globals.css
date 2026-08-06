@@ -37,7 +37,7 @@ finish review, the verdict, and DESIGN.md
   --bezel-strong: #b9c0c8;
   --ink: #14181d;            /* primary markings */
   --dim: #4d565f;            /* secondary markings */
-  --faint: #838b94;          /* tertiary / placeholder */
+  --faint: #64707c;          /* tertiary / placeholder (≥4.5:1 on face) */
   --phos: #0b7a4b;           /* radio green, day-legible */
   --phos-bright: #0f9a5f;
   --phos-ink: #ffffff;       /* text on phos fill */
@@ -51,6 +51,10 @@ finish review, the verdict, and DESIGN.md
   --lamp-alert-bg: rgba(194, 57, 52, 0.11);
   --lamp-advisory-bg: rgba(12, 122, 166, 0.11);
   --lamp-off-bg: rgba(20, 24, 29, 0.06);
+  --glow-ok: rgba(15, 154, 95, 0.2);
+  --glow-caution: rgba(177, 125, 13, 0.18);
+  --glow-alert: rgba(194, 57, 52, 0.18);
+  --glow-advisory: rgba(12, 122, 166, 0.18);
   --shadow-card: 0 1px 2px rgba(20, 24, 29, 0.06), 0 1px 1px rgba(20, 24, 29, 0.04);
   --shadow-raise: 0 12px 32px rgba(20, 24, 29, 0.16), 0 4px 12px rgba(20, 24, 29, 0.08);
   --shadow-glow: 0 0 0 1px var(--phos), 0 0 10px var(--phos-glow);
@@ -71,7 +75,7 @@ finish review, the verdict, and DESIGN.md
   --bezel-strong: #303740;
   --ink: #f2f5f2;
   --dim: #a4adb6;
-  --faint: #69737e;
+  --faint: #7d8894;
   --phos: #39ff9a;
   --phos-bright: #63ffb1;
   --phos-ink: #06180e;
@@ -85,7 +89,12 @@ finish review, the verdict, and DESIGN.md
   --lamp-alert-bg: rgba(255, 81, 72, 0.11);
   --lamp-advisory-bg: rgba(85, 200, 240, 0.1);
   --lamp-off-bg: rgba(242, 245, 242, 0.05);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --glow-ok: rgba(57, 255, 154, 0.28);
+  --glow-caution: rgba(255, 176, 0, 0.25);
+  --glow-alert: rgba(255, 81, 72, 0.28);
+  --glow-advisory: rgba(85, 200, 240, 0.25);
+  /* inset top edge-light: the machined lip of every instrument face */
+  --shadow-card: inset 0 1px 0 rgba(242, 245, 242, 0.05), 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-raise: 0 16px 40px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 0 1px var(--phos), 0 0 12px var(--phos-glow);
 }
@@ -172,6 +181,27 @@ body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Fine machined grain on the panel ground — the matte material of the world.
+   Pure decoration layer: fixed, non-interactive, invisible to printers. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.05'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+body > * {
+  position: relative;
+  z-index: 1;
+}
+@media print {
+  body::before {
+    display: none;
+  }
 }
 
 ::selection {

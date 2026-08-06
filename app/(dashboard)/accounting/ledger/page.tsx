@@ -3,10 +3,17 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, Download, Loader2, RefreshCw } from "lucide-react";
+import { Download, FileSpreadsheet, RefreshCw } from "lucide-react";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import { AccountSelect, exportCsv, fmtNum, usePostingAccounts } from "@/components/accounting/shared";
 import BackButton from "@/components/shared/BackButton";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
+import { Instrument } from "@/components/ui/instrument";
+import { TableShell, Table, THead, Th, Tr, Td, TableFooter, usePagination, Pagination } from "@/components/ui/table";
+import { PanelLoading, SkeletonRows, LoadError } from "@/components/ui/feedback";
 
 interface LedgerRow {
   entryId: string; date: string; jvNumber: string; sourceType: string; sourceNumber: string;
@@ -24,10 +31,12 @@ function LedgerInner() {
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [accountInfo, setAccountInfo] = useState<{ code: string; name: string; type: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(() => {
     if (!account) { setRows([]); setAccountInfo(null); return; }
     setLoading(true);
+    setLoadError(false);
     const params = new URLSearchParams({ account });
     if (from) params.set("from", from);
     if (to) params.set("to", to);
@@ -36,7 +45,7 @@ function LedgerInner() {
     fetch(`/api/accounting/ledger?${params}`)
       .then((r) => r.json())
       .then((d) => { setRows(d.rows ?? []); setAccountInfo(d.account ?? null); })
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, [account, from, to, sourceType, includeReversed]);
 
@@ -50,115 +59,136 @@ function LedgerInner() {
     );
   };
 
+  const { slice, page, pages, setPage, total } = usePagination(rows, 50);
+
+  const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
+  const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
+  const closing = rows.length > 0 ? rows[rows.length - 1].balance : 0;
+
   return (
-    <div className="space-y-5 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <BackButton />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">General Ledger</h1>
-          {accountInfo && <p className="text-sm text-gray-500 dark:text-gray-400">{accountInfo.code} — {accountInfo.name} ({accountInfo.type})</p>}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
-          <a
-            href={`/api/accounting/gl-dump?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
-            className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-2 text-sm font-semibold text-[#2E7D32] hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
-          >
-            <Download className="h-4 w-4" /> GL Dump (Excel/CSV)
-          </a>
-          <button onClick={doExport} disabled={rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
-            <Download className="h-4 w-4" /> This Account
-          </button>
-        </div>
-      </div>
+    <div className="p-4 sm:p-6">
+      <BackButton />
+      <PageHeader
+        title="General Ledger"
+        subtitle={accountInfo ? `${accountInfo.code} — ${accountInfo.name} (${accountInfo.type})` : "Per-account transactions with a running balance"}
+        actions={
+          <>
+            <Button variant="ghost" size="icon" onClick={load} aria-label="Refresh ledger">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <a
+              href={`/api/accounting/gl-dump?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
+              className={buttonVariants({ variant: "secondary" })}
+            >
+              <Download className="h-4 w-4" /> GL Dump (Excel/CSV)
+            </a>
+            <Button variant="primary" onClick={doExport} disabled={rows.length === 0}>
+              <Download className="h-4 w-4" /> This Account
+            </Button>
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="w-full sm:w-80">
-          <AccountSelect value={account} onChange={setAccount} accounts={accounts} placeholder="Choose an account…" />
-        </div>
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
-        <select value={sourceType} onChange={(e) => setSourceType(e.target.value)} className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-white/10 dark:bg-white/5 dark:text-white">
-          <option value="">All Sources</option>
-          {["JV", "Invoice", "Receipt", "Expense", "SupplierBill", "SupplierPayment", "Refund", "Reversal"].map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <label className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
-          <input type="checkbox" checked={includeReversed} onChange={(e) => setIncludeReversed(e.target.checked)} className="h-3.5 w-3.5 accent-[#2E7D32]" />
-          Show reversed
-        </label>
-      </div>
-
-      {/* Account balance summary */}
-      {account && rows.length > 0 && (() => {
-        const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
-        const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
-        const closing = rows[rows.length - 1].balance;
-        return (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Total Debit</p>
-              <p className="mt-0.5 text-lg font-extrabold tabular-nums text-gray-900 dark:text-white">{fmtNum(totalDebit)}</p>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Total Credit</p>
-              <p className="mt-0.5 text-lg font-extrabold tabular-nums text-gray-900 dark:text-white">{fmtNum(totalCredit)}</p>
-            </div>
-            <div className={`rounded-xl border p-3 shadow-sm ${closing < 0 ? "border-red-200 dark:border-red-800/40" : "border-[#2E7D32]/30"} bg-white dark:bg-white/5`}>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Current Balance</p>
-              <p className={`mt-0.5 text-lg font-extrabold tabular-nums ${closing < 0 ? "text-red-600 dark:text-red-400" : "text-[#2E7D32] dark:text-green-400"}`}>
-                {fmtNum(Math.abs(closing))} {closing < 0 ? "Cr" : "Dr"}
-              </p>
-            </div>
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full sm:w-80">
+            <AccountSelect value={account} onChange={setAccount} accounts={accounts} placeholder="Choose an account…" />
           </div>
-        );
-      })()}
+          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+          <Select
+            value={sourceType}
+            onChange={(e) => setSourceType(e.target.value)}
+            aria-label="Filter by source"
+            className="w-auto"
+          >
+            <option value="">All Sources</option>
+            {["JV", "Invoice", "Receipt", "Expense", "SupplierBill", "SupplierPayment", "Refund", "Reversal"].map((s) => <option key={s}>{s}</option>)}
+          </Select>
+          <label className="flex h-9 cursor-pointer items-center gap-1.5 rounded-ctl border border-bezel-strong px-3 text-xs font-semibold text-dim">
+            <input type="checkbox" checked={includeReversed} onChange={(e) => setIncludeReversed(e.target.checked)} className="h-3.5 w-3.5 accent-phos" />
+            Show reversed
+          </label>
+        </div>
 
-      {!account ? (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">Choose an account to view its ledger.</div>
-      ) : loading ? (
-        <div className="flex h-40 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">No transactions for this account.</div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100 text-sm dark:divide-white/10">
-              <thead className="bg-gray-50 dark:bg-white/5">
+        {/* Account balance summary */}
+        {account && rows.length > 0 && !loading && !loadError && (
+          <div className="grid grid-cols-3 gap-3">
+            <Instrument label="Total Debit" value={fmtNum(totalDebit)} />
+            <Instrument label="Total Credit" value={fmtNum(totalCredit)} />
+            <Instrument
+              label="Current Balance"
+              value={`${fmtNum(Math.abs(closing))} ${closing < 0 ? "Cr" : "Dr"}`}
+              tone={closing < 0 ? "alert" : "phos"}
+            />
+          </div>
+        )}
+
+        {!account ? (
+          <div className="face">
+            <EmptyState
+              icon={FileSpreadsheet}
+              title="Choose an account"
+              description="Pick an account above to view its ledger and running balance."
+            />
+          </div>
+        ) : loading ? (
+          <TableShell><SkeletonRows rows={8} cols={7} /></TableShell>
+        ) : loadError ? (
+          <LoadError message="Couldn't load this account's ledger." onRetry={load} />
+        ) : rows.length === 0 ? (
+          <div className="face">
+            <EmptyState
+              icon={FileSpreadsheet}
+              title="No transactions"
+              description="This account has no transactions for the selected period or filters."
+            />
+          </div>
+        ) : (
+          <TableShell>
+            <Table>
+              <THead>
                 <tr>
-                  {["Date", "Voucher", "Source", "Description", "Debit", "Credit", "Balance"].map((h) => (
-                    <th key={h} className={`px-3 py-2.5 text-xs font-bold uppercase text-gray-500 ${["Debit", "Credit", "Balance"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>
-                  ))}
+                  <Th>Date</Th>
+                  <Th>Voucher</Th>
+                  <Th>Source</Th>
+                  <Th>Description</Th>
+                  <Th numeric>Debit</Th>
+                  <Th numeric>Credit</Th>
+                  <Th numeric>Balance</Th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-                {rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/5">
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">{r.date}</td>
-                    <td className="whitespace-nowrap px-3 py-2">
+              </THead>
+              <tbody>
+                {slice.map((r, i) => (
+                  <Tr key={`${r.entryId}-${i}`}>
+                    <Td className="readout whitespace-nowrap text-xs text-dim" data-numeric>{r.date}</Td>
+                    <Td className="whitespace-nowrap">
                       <Link href={`/accounting/voucher/${r.entryId}`}
-                        className="font-mono text-xs font-semibold text-[#2E7D32] hover:underline dark:text-green-400">
+                        className="readout text-xs font-semibold text-phos underline-offset-2 hover:underline">
                         {r.jvNumber}
                       </Link>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500">{r.sourceType}{r.sourceNumber ? ` · ${r.sourceNumber}` : ""}</td>
-                    <td className="max-w-[280px] truncate px-3 py-2 text-gray-700 dark:text-gray-300">{r.description}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtNum(r.debit)}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmtNum(r.credit)}</td>
-                    <td className={`whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums ${r.balance < 0 ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-white"}`}>{fmtNum(r.balance)}</td>
-                  </tr>
+                    </Td>
+                    <Td className="whitespace-nowrap text-xs text-dim">{r.sourceType}{r.sourceNumber ? ` · ${r.sourceNumber}` : ""}</Td>
+                    <Td className="max-w-[280px] truncate" title={r.description}>{r.description}</Td>
+                    <Td numeric className="whitespace-nowrap">{fmtNum(r.debit)}</Td>
+                    <Td numeric className="whitespace-nowrap">{fmtNum(r.credit)}</Td>
+                    <Td numeric className={`whitespace-nowrap font-semibold ${r.balance < 0 ? "text-alert" : ""}`}>{fmtNum(r.balance)}</Td>
+                  </Tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-          <div className="border-t border-gray-100 px-4 py-2.5 text-xs text-gray-400 dark:border-white/10">{rows.length} transactions</div>
-        </div>
-      )}
+            </Table>
+            <TableFooter>
+              <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+            </TableFooter>
+          </TableShell>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function LedgerPage() {
   return (
-    <Suspense fallback={<div className="flex h-64 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
+    <Suspense fallback={<PanelLoading label="Loading ledger" />}>
       <LedgerInner />
     </Suspense>
   );

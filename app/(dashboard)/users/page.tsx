@@ -1,13 +1,25 @@
-﻿export default function UsersPage() {
+import Link from "next/link";
+import { Users } from "lucide-react";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export default function UsersPage() {
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <p className="text-sm font-medium text-teal-700">Nitaq Academy</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">Users</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-500">User management will be added when authentication and roles are rebuilt.</p>
-      </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-sm text-slate-600">This page is paused for the current Leads-only phase.</p>
+    <div>
+      <PageHeader title="Users" subtitle="Staff accounts and roles" />
+      <div className="face">
+        <EmptyState
+          icon={Users}
+          title="User Management Lives in Settings"
+          description="Add staff accounts, change roles, and reset passwords from the Staff Accounts section in Settings."
+          action={
+            <Link href="/settings" className={cn(buttonVariants({ variant: "primary", size: "sm" }))}>
+              Open Settings
+            </Link>
+          }
+        />
       </div>
     </div>
   );

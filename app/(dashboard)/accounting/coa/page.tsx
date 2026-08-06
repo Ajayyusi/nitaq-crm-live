@@ -4,26 +4,25 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, FolderOpen, Loader2,
-  Minus, Pencil, Plus, RefreshCw, Search, X,
+  ChevronDown, ChevronRight, FolderOpen, Minus, Pencil, Plus, RefreshCw,
 } from "lucide-react";
 import { fmtNum, type CoaAccount } from "@/components/accounting/shared";
 import BackButton from "@/components/shared/BackButton";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Lamp } from "@/components/ui/lamp";
+import { Drawer } from "@/components/ui/dialog";
+import { Input, Select, Field, SearchInput } from "@/components/ui/input";
+import { SkeletonRows, LoadError } from "@/components/ui/feedback";
 
-const typeBadge: Record<string, string> = {
-  Asset:     "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  Liability: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  Equity:    "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
-  Revenue:   "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
-  Expense:   "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-};
-
-const typeAccent: Record<string, string> = {
-  Asset:     "border-l-blue-400",
-  Liability: "border-l-amber-400",
-  Equity:    "border-l-purple-400",
-  Revenue:   "border-l-green-400",
-  Expense:   "border-l-red-400",
+/* Account types keep a stable chart hue for the tree's left-edge accent. */
+const TYPE_CHART: Record<string, string> = {
+  Asset:     "var(--chart-1)",
+  Liability: "var(--chart-2)",
+  Equity:    "var(--chart-3)",
+  Revenue:   "var(--chart-4)",
+  Expense:   "var(--chart-5)",
 };
 
 interface TreeNode extends CoaAccount {
@@ -76,6 +75,7 @@ export default function CoaPage() {
 
   const [accounts, setAccounts] = useState<CoaAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [openNodes, setOpenNodes] = useState<Set<string>>(new Set());
@@ -84,12 +84,14 @@ export default function CoaPage() {
   const [addParent, setAddParent] = useState<CoaAccount | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ code?: string; name?: string }>({});
 
   const [form, setForm] = useState({ code: "", name: "", type: "Expense", parentCode: "", openingDebit: "", openingCredit: "" });
   const [editForm, setEditForm] = useState({ name: "", isActive: true, openingDebit: "", openingCredit: "" });
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     fetch("/api/accounting/accounts")
       .then((r) => r.json())
       .then((d) => {
@@ -98,7 +100,7 @@ export default function CoaPage() {
         // Default: expand the 5 top-level groups only
         setOpenNodes((prev) => prev.size ? prev : new Set(list.filter((a) => !a.parentCode).map((a) => a.code)));
       })
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -136,9 +138,21 @@ export default function CoaPage() {
   const expandAll = () => setOpenNodes(new Set(accounts.filter((a) => !a.isPosting).map((a) => a.code)));
   const collapseAll = () => setOpenNodes(new Set(accounts.filter((a) => !a.parentCode).map((a) => a.code)));
 
+  const closeDrawer = () => {
+    setAddOpen(false);
+    setEditing(null);
+    setAddParent(null);
+    setFieldErrors({});
+    setFormError("");
+  };
+
   const saveNew = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true); setFormError("");
+    const errs: { code?: string; name?: string } = {};
+    if (!form.code.trim()) errs.code = "Enter an account code.";
+    if (!form.name.trim()) errs.name = "Enter an account name.";
+    if (errs.code || errs.name) { setFieldErrors(errs); return; }
+    setSaving(true); setFormError(""); setFieldErrors({});
     try {
       const res = await fetch("/api/accounting/accounts", {
         method: "POST",
@@ -152,7 +166,7 @@ export default function CoaPage() {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.message);
-      setAddOpen(false); setAddParent(null);
+      closeDrawer();
       setForm({ code: "", name: "", type: "Expense", parentCode: "", openingDebit: "", openingCredit: "" });
       load();
     } catch (err) { setFormError((err as Error).message); }
@@ -162,7 +176,8 @@ export default function CoaPage() {
   const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
-    setSaving(true); setFormError("");
+    if (!editForm.name.trim()) { setFieldErrors({ name: "Enter an account name." }); return; }
+    setSaving(true); setFormError(""); setFieldErrors({});
     try {
       const res = await fetch(`/api/accounting/accounts/${encodeURIComponent(editing.code)}`, {
         method: "PATCH",
@@ -175,7 +190,7 @@ export default function CoaPage() {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.message);
-      setEditing(null);
+      closeDrawer();
       load();
     } catch (err) { setFormError((err as Error).message); }
     finally { setSaving(false); }
@@ -190,7 +205,20 @@ export default function CoaPage() {
       openingDebit: "", openingCredit: "",
     });
     setFormError("");
+    setFieldErrors({});
     setAddOpen(true);
+  };
+
+  const openEdit = (node: CoaAccount) => {
+    setEditing(node);
+    setEditForm({
+      name: node.name,
+      isActive: node.isActive,
+      openingDebit: String(node.openingDebit || ""),
+      openingCredit: String(node.openingCredit || ""),
+    });
+    setFormError("");
+    setFieldErrors({});
   };
 
   // Render tree rows recursively (respecting search + open state)
@@ -203,66 +231,70 @@ export default function CoaPage() {
     return (
       <div key={node.code}>
         <div
-          className={`group flex items-center gap-2 border-l-2 px-2 py-2 transition sm:px-3 ${typeAccent[node.type] ?? "border-l-transparent"} ${
-            !node.isPosting
-              ? "bg-gray-50/80 dark:bg-white/[0.04]"
-              : "hover:bg-[#E8F5E9]/50 dark:hover:bg-green-900/10"
-          } ${!node.isActive ? "opacity-50" : ""} ${isMatch ? "bg-yellow-50 dark:bg-yellow-900/10" : ""}`}
-          style={{ paddingLeft: `${node.depth * 20 + 8}px` }}
+          className={`flex items-center gap-2 border-l-2 px-2 py-1.5 transition-colors sm:px-3 ${
+            !node.isPosting ? "bg-well/60" : "hover:bg-well/40"
+          } ${!node.isActive ? "opacity-50" : ""} ${isMatch ? "bg-[var(--lamp-advisory-bg)]" : ""}`}
+          style={{ paddingLeft: `${node.depth * 20 + 8}px`, borderLeftColor: TYPE_CHART[node.type] ?? "transparent" }}
         >
           {/* Expand toggle */}
           {hasChildren ? (
-            <button onClick={() => toggle(node.code)} className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md text-gray-400 hover:bg-white hover:text-[#2E7D32] hover:shadow-sm dark:hover:bg-white/10">
+            <Button
+              variant="ghost" size="iconSm" className="h-6 w-6 flex-shrink-0"
+              onClick={() => toggle(node.code)}
+              aria-expanded={isOpen}
+              aria-label={`${isOpen ? "Collapse" : "Expand"} ${node.name}`}
+            >
               {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
+            </Button>
           ) : (
-            <span className="grid h-6 w-6 flex-shrink-0 place-items-center text-gray-200 dark:text-gray-700"><Minus className="h-3 w-3" /></span>
+            <span aria-hidden className="grid h-6 w-6 flex-shrink-0 place-items-center text-faint"><Minus className="h-3 w-3" /></span>
           )}
 
           {/* Name + code */}
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               {node.isPosting ? (
                 <Link href={`/accounting/ledger?account=${encodeURIComponent(node.code)}`}
-                  className="truncate text-sm text-gray-800 hover:text-[#2E7D32] hover:underline dark:text-gray-200 dark:hover:text-green-400">
+                  className="truncate text-sm text-ink underline-offset-2 hover:text-phos hover:underline">
                   {node.name}
                 </Link>
               ) : (
-                <button onClick={() => toggle(node.code)} className="flex items-center gap-1.5 truncate text-sm font-bold text-gray-900 dark:text-white">
-                  <FolderOpen className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+                <button onClick={() => toggle(node.code)} className="flex items-center gap-1.5 truncate text-sm font-bold text-ink">
+                  <FolderOpen aria-hidden className="h-3.5 w-3.5 flex-shrink-0 text-faint" />
                   {node.name}
                 </button>
               )}
-              <span className="font-mono text-[10px] text-gray-400">{node.code}</span>
-              {!node.isActive && <span className="rounded bg-red-100 px-1.5 text-[9px] font-bold text-red-500 dark:bg-red-900/40">INACTIVE</span>}
+              <span className="readout text-[10px] text-faint" data-numeric>{node.code}</span>
+              {!node.isActive && <Lamp variant="off">Inactive</Lamp>}
               {hasChildren && !isOpen && (
-                <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-400 dark:bg-white/10">{node.children.length}</span>
+                <span className="readout rounded-lamp bg-well px-1.5 py-0.5 text-[10px] font-semibold text-faint" data-numeric>{node.children.length}</span>
               )}
             </div>
           </div>
 
           {/* Balance */}
-          <span className={`whitespace-nowrap text-sm tabular-nums ${
-            !node.isPosting ? "font-bold text-gray-900 dark:text-white" :
-            node.closingBalance === 0 ? "text-gray-300 dark:text-gray-600" :
-            node.closingBalance < 0 ? "font-semibold text-red-600 dark:text-red-400" : "font-semibold text-gray-700 dark:text-gray-300"
-          }`}>
+          <span className={`readout whitespace-nowrap text-sm ${
+            !node.isPosting ? "font-bold text-ink" :
+            node.closingBalance === 0 ? "text-faint" :
+            node.closingBalance < 0 ? "font-semibold text-alert" : "font-semibold text-ink"
+          }`} data-numeric>
             {fmtNum(node.closingBalance)}
           </span>
 
-          {/* Row actions */}
+          {/* Row actions — always visible so keyboard and touch can reach them */}
           {canEdit && (
-            <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+            <div className="flex flex-shrink-0 items-center gap-0.5">
               {!node.isPosting && (
-                <button title="Add account here" onClick={() => openAdd(node)} className="rounded p-1 text-gray-300 hover:bg-white hover:text-[#2E7D32] hover:shadow-sm dark:hover:bg-white/10">
+                <Button variant="ghost" size="iconSm" className="h-7 w-7" onClick={() => openAdd(node)}
+                  aria-label={`Add account under ${node.name}`} title="Add account here">
                   <Plus className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               )}
               {node.isPosting && (
-                <button title="Edit" onClick={() => { setEditing(node); setEditForm({ name: node.name, isActive: node.isActive, openingDebit: String(node.openingDebit || ""), openingCredit: String(node.openingCredit || "") }); setFormError(""); }}
-                  className="rounded p-1 text-gray-300 hover:bg-white hover:text-[#2E7D32] hover:shadow-sm dark:hover:bg-white/10">
+                <Button variant="ghost" size="iconSm" className="h-7 w-7" onClick={() => openEdit(node)}
+                  aria-label={`Edit ${node.name}`} title="Edit">
                   <Pencil className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -272,132 +304,166 @@ export default function CoaPage() {
     );
   };
 
-  const inp = "h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-[#2E7D32] dark:border-white/10 dark:bg-white/5 dark:text-white";
-
   return (
-    <div className="space-y-5 p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <BackButton />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Chart of Accounts</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{accounts.filter((a) => a.isPosting).length} posting accounts in {accounts.filter((a) => !a.isPosting).length} groups</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
-          {canEdit && (
-            <button onClick={() => openAdd()} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20]">
-              <Plus className="h-4 w-4" /> Add Account
+    <div className="p-4 sm:p-6">
+      <BackButton />
+      <PageHeader
+        title="Chart of Accounts"
+        subtitle={`${accounts.filter((a) => a.isPosting).length} posting accounts in ${accounts.filter((a) => !a.isPosting).length} groups`}
+        actions={
+          <>
+            <Button variant="ghost" size="icon" onClick={load} aria-label="Refresh accounts">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            {canEdit && (
+              <Button variant="solid" onClick={() => openAdd()}>
+                <Plus className="h-4 w-4" /> Add Account
+              </Button>
+            )}
+          </>
+        }
+      />
+
+      <div className="space-y-5">
+        {/* Type summary cards */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {(["Asset", "Liability", "Equity", "Revenue", "Expense"] as const).map((t) => (
+            <button
+              key={t} type="button"
+              onClick={() => setTypeFilter(typeFilter === t ? "" : t)}
+              aria-pressed={typeFilter === t}
+              className={`face p-3 text-left transition-all duration-150 ${typeFilter === t ? "border-phos ring-2 ring-phos/25" : "hover:border-bezel-strong"}`}
+            >
+              <span className="flex items-center gap-1.5">
+                <span aria-hidden className="h-2 w-2 flex-shrink-0 rounded-sm" style={{ background: TYPE_CHART[t] }} />
+                <span className="placard">{t}s</span>
+              </span>
+              <p className="readout mt-1.5 truncate text-sm font-bold text-ink" data-numeric>{fmtNum(Math.abs(summary[t] ?? 0))}</p>
             </button>
-          )}
+          ))}
         </div>
-      </div>
 
-      {/* Type summary cards */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {(["Asset", "Liability", "Equity", "Revenue", "Expense"] as const).map((t) => (
-          <button key={t} onClick={() => setTypeFilter(typeFilter === t ? "" : t)}
-            className={`rounded-xl border p-3 text-left shadow-sm transition ${typeFilter === t ? "border-[#2E7D32] ring-2 ring-[#2E7D32]/30" : "border-gray-200 dark:border-white/10"} bg-white dark:bg-white/5`}>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${typeBadge[t]}`}>{t}s</span>
-            <p className="mt-1.5 truncate text-sm font-extrabold tabular-nums text-gray-900 dark:text-white">{fmtNum(Math.abs(summary[t] ?? 0))}</p>
-          </button>
-        ))}
-      </div>
-
-      {/* Search + expand controls */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input placeholder="Search accounts…" value={search} onChange={(e) => setSearch(e.target.value)} className={`${inp} pl-9`} />
-          {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600"><X className="h-4 w-4" /></button>
-          )}
+        {/* Search + expand controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            placeholder="Search accounts…"
+            aria-label="Search accounts"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <Button variant="secondary" size="sm" onClick={expandAll}>Expand All</Button>
+          <Button variant="secondary" size="sm" onClick={collapseAll}>Collapse All</Button>
         </div>
-        <button onClick={expandAll} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">Expand All</button>
-        <button onClick={collapseAll} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">Collapse All</button>
-      </div>
 
-      {/* Tree */}
-      {loading ? (
-        <div className="flex h-40 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
-      ) : tree.length === 0 ? (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">
-          No accounts. Seed the Chart of Accounts from the Accounting dashboard.
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:border-white/10 dark:bg-white/5">
-            <span>Account</span>
-            <span>Closing Balance</span>
+        {/* Tree */}
+        {loading ? (
+          <div className="face"><SkeletonRows rows={10} cols={3} /></div>
+        ) : loadError ? (
+          <LoadError message="Couldn't load the Chart of Accounts." onRetry={load} />
+        ) : tree.length === 0 ? (
+          <div className="face">
+            <EmptyState
+              icon={FolderOpen}
+              title="No accounts yet"
+              description="Seed the Chart of Accounts from the Accounting overview to get started."
+              action={
+                <Link href="/accounting" className={buttonVariants({ variant: "primary", size: "sm" })}>
+                  Open Accounting
+                </Link>
+              }
+            />
           </div>
-          <div className="divide-y divide-gray-50 dark:divide-white/5">
-            {tree.map(renderNode)}
-          </div>
-        </div>
-      )}
-
-      {/* Add / Edit drawer */}
-      {(addOpen || editing) && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="fixed inset-0 bg-black/40" onClick={() => { setAddOpen(false); setEditing(null); setAddParent(null); }} />
-          <aside className="relative ml-auto flex h-full w-full max-w-md flex-col bg-white shadow-2xl dark:bg-[#0D1F0E]">
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-white/10">
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                {editing ? `Edit ${editing.code}` : addParent ? `Add under ${addParent.name}` : "Add Account"}
-              </h2>
-              <button onClick={() => { setAddOpen(false); setEditing(null); setAddParent(null); }} className="rounded-lg p-1.5 hover:bg-gray-100 dark:hover:bg-white/10"><X className="h-4 w-4 text-gray-500" /></button>
+        ) : (
+          <div className="face overflow-hidden">
+            <div className="flex items-center justify-between border-b border-bezel bg-well px-4 py-2">
+              <span className="placard">Account</span>
+              <span className="placard">Closing Balance</span>
             </div>
-            <form onSubmit={editing ? saveEdit : saveNew} className="flex-1 space-y-4 overflow-y-auto p-5">
-              {formError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-400">{formError}</p>}
-              {!editing && (
+            <div className="divide-y divide-bezel/60">
+              {tree.map(renderNode)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Add / Edit drawer — guarded: a stray backdrop click won't discard the form */}
+      <Drawer
+        open={addOpen || !!editing}
+        onClose={closeDrawer}
+        title={editing ? `Edit ${editing.code}` : addParent ? `Add under ${addParent.name}` : "Add Account"}
+        footer={
+          <Button type="submit" form="coa-form" variant="solid" disabled={saving} className="w-full">
+            {saving ? "Saving…" : editing ? "Save Changes" : "Create Account"}
+          </Button>
+        }
+      >
+        <form id="coa-form" onSubmit={editing ? saveEdit : saveNew} noValidate className="space-y-4">
+          {formError && (
+            <p role="alert" className="rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-3 py-2 text-sm font-semibold text-alert">
+              {formError}
+            </p>
+          )}
+          {!editing && (
+            <>
+              {addParent && (
+                <p className="rounded-ctl border border-advisory/30 bg-[var(--lamp-advisory-bg)] px-3 py-2 text-xs text-advisory">
+                  Parent: <strong>{addParent.code} — {addParent.name}</strong> ({addParent.type})
+                </p>
+              )}
+              <Field label="Account Code" required error={fieldErrors.code} htmlFor="coa-code">
+                <Input
+                  id="coa-code"
+                  value={form.code}
+                  onChange={(e) => { setForm((f) => ({ ...f, code: e.target.value })); setFieldErrors((fe) => ({ ...fe, code: undefined })); }}
+                  placeholder="e.g. 5010010049"
+                />
+              </Field>
+              {!addParent && (
                 <>
-                  {addParent && (
-                    <p className="rounded-lg bg-[#E8F5E9] px-3 py-2 text-xs text-[#1B5E20] dark:bg-green-900/30 dark:text-green-300">
-                      Parent: <strong>{addParent.code} — {addParent.name}</strong> ({addParent.type})
-                    </p>
-                  )}
-                  <div><label className="label-x">Account Code *</label><input required value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} className={inp} placeholder="e.g. 5010010049" /></div>
-                  {!addParent && (
-                    <>
-                      <div><label className="label-x">Type *</label>
-                        <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} className={inp}>
-                          {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => <option key={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div><label className="label-x">Parent Account Code</label><input value={form.parentCode} onChange={(e) => setForm((f) => ({ ...f, parentCode: e.target.value }))} className={inp} placeholder="optional, e.g. 5" /></div>
-                    </>
-                  )}
+                  <Field label="Type" required htmlFor="coa-type">
+                    <Select id="coa-type" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
+                      {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => <option key={t}>{t}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Parent Account Code" help="Optional, e.g. 5" htmlFor="coa-parent">
+                    <Input id="coa-parent" value={form.parentCode} onChange={(e) => setForm((f) => ({ ...f, parentCode: e.target.value }))} />
+                  </Field>
                 </>
               )}
-              <div><label className="label-x">Account Name *</label>
-                <input required value={editing ? editForm.name : form.name}
-                  onChange={(e) => editing ? setEditForm((f) => ({ ...f, name: e.target.value })) : setForm((f) => ({ ...f, name: e.target.value }))}
-                  className={inp} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="label-x">Opening Debit</label>
-                  <input type="number" step="0.01" min="0" value={editing ? editForm.openingDebit : form.openingDebit}
-                    onChange={(e) => editing ? setEditForm((f) => ({ ...f, openingDebit: e.target.value })) : setForm((f) => ({ ...f, openingDebit: e.target.value }))} className={inp} />
-                </div>
-                <div><label className="label-x">Opening Credit</label>
-                  <input type="number" step="0.01" min="0" value={editing ? editForm.openingCredit : form.openingCredit}
-                    onChange={(e) => editing ? setEditForm((f) => ({ ...f, openingCredit: e.target.value })) : setForm((f) => ({ ...f, openingCredit: e.target.value }))} className={inp} />
-                </div>
-              </div>
-              {editing && (
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={editForm.isActive} onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))} className="h-4 w-4 accent-[#2E7D32]" />
-                  <span className="text-gray-700 dark:text-gray-300">Active</span>
-                </label>
-              )}
-              <button type="submit" disabled={saving} className="w-full rounded-lg bg-[#2E7D32] py-2.5 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                {saving ? "Saving…" : editing ? "Save Changes" : "Create Account"}
-              </button>
-            </form>
-          </aside>
-        </div>
-      )}
-      <style>{`.label-x { display:block; margin-bottom:0.25rem; font-size:0.75rem; font-weight:600; color:#4B5563; }`}</style>
+            </>
+          )}
+          <Field label="Account Name" required error={fieldErrors.name} htmlFor="coa-name">
+            <Input
+              id="coa-name"
+              value={editing ? editForm.name : form.name}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (editing) setEditForm((f) => ({ ...f, name: v })); else setForm((f) => ({ ...f, name: v }));
+                setFieldErrors((fe) => ({ ...fe, name: undefined }));
+              }}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Opening Debit" htmlFor="coa-od">
+              <Input id="coa-od" type="number" step="0.01" min="0" inputMode="decimal"
+                value={editing ? editForm.openingDebit : form.openingDebit}
+                onChange={(e) => editing ? setEditForm((f) => ({ ...f, openingDebit: e.target.value })) : setForm((f) => ({ ...f, openingDebit: e.target.value }))} />
+            </Field>
+            <Field label="Opening Credit" htmlFor="coa-oc">
+              <Input id="coa-oc" type="number" step="0.01" min="0" inputMode="decimal"
+                value={editing ? editForm.openingCredit : form.openingCredit}
+                onChange={(e) => editing ? setEditForm((f) => ({ ...f, openingCredit: e.target.value })) : setForm((f) => ({ ...f, openingCredit: e.target.value }))} />
+            </Field>
+          </div>
+          {editing && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={editForm.isActive} onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))} className="h-4 w-4 accent-phos" />
+              Active
+            </label>
+          )}
+        </form>
+      </Drawer>
     </div>
   );
 }

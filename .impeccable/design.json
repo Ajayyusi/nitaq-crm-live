@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-06T00:00:00+04:00",
+  "title": "Design System: Nitaq Academy CRM",
+  "extensions": {
+    "colorMeta": {
+      "phos": { "role": "primary", "displayName": "Phosphor Green", "canonical": "#39ff9a", "dayValue": "#0b7a4b", "tonalRamp": ["oklch(15% 0.06 160)", "oklch(27% 0.09 160)", "oklch(39% 0.12 160)", "oklch(51% 0.15 160)", "oklch(63% 0.17 160)", "oklch(75% 0.19 160)", "oklch(87% 0.21 160)", "oklch(95% 0.09 160)"] },
+      "advisory": { "role": "secondary", "displayName": "Advisory Cyan", "canonical": "#55c8f0", "dayValue": "#0c7aa6", "tonalRamp": ["oklch(15% 0.04 220)", "oklch(27% 0.06 220)", "oklch(39% 0.08 220)", "oklch(51% 0.10 220)", "oklch(63% 0.11 220)", "oklch(78% 0.11 220)", "oklch(87% 0.08 220)", "oklch(95% 0.04 220)"] },
+      "caution": { "role": "tertiary", "displayName": "Caution Amber", "canonical": "#ffb000", "dayValue": "#96690a", "tonalRamp": ["oklch(15% 0.04 75)", "oklch(27% 0.07 75)", "oklch(39% 0.10 75)", "oklch(51% 0.12 75)", "oklch(65% 0.14 75)", "oklch(80% 0.17 75)", "oklch(88% 0.13 75)", "oklch(95% 0.06 75)"] },
+      "alert": { "role": "tertiary", "displayName": "Alert Red", "canonical": "#ff5148", "dayValue": "#c23934", "tonalRamp": ["oklch(15% 0.05 25)", "oklch(25% 0.09 25)", "oklch(35% 0.13 25)", "oklch(45% 0.17 25)", "oklch(55% 0.20 25)", "oklch(65% 0.21 25)", "oklch(80% 0.12 25)", "oklch(95% 0.04 25)"] },
+      "panel": { "role": "neutral", "displayName": "Night Panel", "canonical": "#0b0d0f", "dayValue": "#e7e9ec", "tonalRamp": ["oklch(15% 0.006 240)", "oklch(20% 0.007 240)", "oklch(28% 0.008 240)", "oklch(40% 0.009 240)", "oklch(55% 0.010 240)", "oklch(70% 0.008 240)", "oklch(85% 0.006 240)", "oklch(95% 0.004 240)"] },
+      "face": { "role": "neutral", "displayName": "Instrument Face", "canonical": "#111417", "dayValue": "#ffffff" },
+      "raised": { "role": "neutral", "displayName": "Raised Surface", "canonical": "#16191e", "dayValue": "#ffffff" },
+      "well": { "role": "neutral", "displayName": "Sunken Well", "canonical": "#0d1013", "dayValue": "#f1f3f5" },
+      "bezel": { "role": "neutral", "displayName": "Hairline Bezel", "canonical": "#22272e", "dayValue": "#d9dde2" },
+      "bezel-strong": { "role": "neutral", "displayName": "Strong Bezel", "canonical": "#303740", "dayValue": "#b9c0c8" },
+      "ink": { "role": "neutral", "displayName": "Luminous Ink", "canonical": "#f2f5f2", "dayValue": "#14181d", "tonalRamp": ["oklch(15% 0.004 150)", "oklch(27% 0.004 150)", "oklch(39% 0.004 150)", "oklch(51% 0.004 150)", "oklch(63% 0.004 150)", "oklch(75% 0.004 150)", "oklch(87% 0.004 150)", "oklch(96% 0.004 150)"] },
+      "dim": { "role": "neutral", "displayName": "Dim Markings", "canonical": "#a4adb6", "dayValue": "#4d565f" },
+      "faint": { "role": "neutral", "displayName": "Faint Markings", "canonical": "#7d8894", "dayValue": "#64707c" },
+      "phos-ink": { "role": "primary", "displayName": "On-Phosphor Ink", "canonical": "#06180e", "dayValue": "#ffffff" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Panel Lettering", "purpose": "Page titles only (PageHeader). 19px is the current display ceiling; larger lettering is named unspent headroom." },
+      "readout": { "displayName": "Readout", "purpose": "Instrument values — money, counts, page numbers. Always B612 Mono, always tabular." },
+      "placard": { "displayName": "Placard", "purpose": "Engraved caps micro-label under instruments, table headers, nav groups. Never a kicker, never introduces prose." },
+      "lamp": { "displayName": "Lamp Caps", "purpose": "Annunciator text inside Lamp/StatusBadge." },
+      "body": { "displayName": "Body", "purpose": "Default UI text; 12px for secondary lines." }
+    },
+    "shadows": [
+      { "name": "shadow-card", "value": "inset 0 1px 0 rgba(242,245,242,0.05), 0 1px 2px rgba(0,0,0,0.5)", "purpose": "Resting instrument face (night: machined edge-light + drop). Day value: 0 1px 2px rgba(20,24,29,0.06), 0 1px 1px rgba(20,24,29,0.04)." },
+      { "name": "shadow-raise", "value": "0 16px 40px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.5)", "purpose": "Overlays (dialog, drawer, menu) and hover of linked instruments. Day: 0 12px 32px rgba(20,24,29,0.16), 0 4px 12px rgba(20,24,29,0.08)." },
+      { "name": "shadow-glow", "value": "0 0 0 1px var(--phos), 0 0 12px var(--phos-glow)", "purpose": "Phosphor engagement ring: button focus, solid button at rest." },
+      { "name": "lamp-bloom", "value": "0 0 8px var(--glow-ok)", "purpose": "Halo on lit lamps; per-status via --glow-ok/-caution/-alert/-advisory." }
+    ],
+    "motion": [
+      { "name": "needle", "value": "needle 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.08) both", "purpose": "Value elements rise 5px and settle with slight overshoot." },
+      { "name": "power-on", "value": "power-on 0.5s cubic-bezier(0.16, 1, 0.3, 1) both", "purpose": "Panels warm up on first paint; dialogs use the same curve at 0.25s." },
+      { "name": "drawer-in", "value": "drawer-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both", "purpose": "Drawer slides 24px from the logical end." },
+      { "name": "sweep", "value": "sweep 0.9s cubic-bezier(0.2, 0.9, 0.25, 1.04) both", "purpose": "TickGauge fill sweeps from zero." },
+      { "name": "pulse", "value": "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite", "purpose": "Skeletons and actively-demanding lamps." },
+      { "name": "transition-state", "value": "150ms", "purpose": "Default duration for hover/press state transitions. prefers-reduced-motion collapses all animation globally." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Outlined phosphor ENGAGE button; lights up solid with glow on hover. The normal affirmative action.",
+      "html": "<button class=\"ds-btn-primary\">Add Lead</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; background: transparent; border: 1px solid rgba(57,255,154,0.6); border-radius: 6px; color: var(--phos, #39ff9a); font-family: 'B612', ui-sans-serif, sans-serif; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; transition: all 0.15s; } .ds-btn-primary:hover { border-color: var(--phos, #39ff9a); background: var(--phos, #39ff9a); color: var(--phos-ink, #06180e); box-shadow: 0 0 0 1px var(--phos, #39ff9a), 0 0 12px rgba(57,255,154,0.22); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--phos, #39ff9a), 0 0 12px rgba(57,255,154,0.22); } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Solid Button",
+      "kind": "button",
+      "refersTo": "button-solid",
+      "description": "Pre-lit phosphor button with glow at rest — the one most-important action on a screen (max one per screen).",
+      "html": "<button class=\"ds-btn-solid\">Record Payment</button>",
+      "css": ".ds-btn-solid { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; background: var(--phos, #39ff9a); border: 1px solid transparent; border-radius: 6px; color: var(--phos-ink, #06180e); font-family: 'B612', ui-sans-serif, sans-serif; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; box-shadow: 0 0 0 1px var(--phos, #39ff9a), 0 0 12px rgba(57,255,154,0.22); transition: all 0.15s; } .ds-btn-solid:hover { background: var(--phos-bright, #63ffb1); } .ds-btn-solid:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Standby Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined neutral STANDBY button for cancel and alternate actions.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; background: transparent; border: 1px solid var(--bezel-strong, #303740); border-radius: 6px; color: var(--ink, #f2f5f2); font-family: 'B612', ui-sans-serif, sans-serif; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; transition: all 0.15s; } .ds-btn-secondary:hover { background: var(--well, #0d1013); } .ds-btn-secondary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Annunciator Lamps",
+      "kind": "chip",
+      "refersTo": "lamp-ok",
+      "description": "The five-state status vocabulary: lit lamps bloom, off lamps sit dim. Replaces every pastel pill.",
+      "html": "<span class=\"ds-lamp ds-lamp-ok\">Paid</span> <span class=\"ds-lamp ds-lamp-caution\">Pending</span> <span class=\"ds-lamp ds-lamp-alert\">Overdue</span> <span class=\"ds-lamp ds-lamp-advisory\">Scheduled</span> <span class=\"ds-lamp ds-lamp-off\">Completed</span>",
+      "css": ".ds-lamp { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 3px; border: 1px solid; font-family: 'B612', ui-sans-serif, sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; line-height: 16px; } .ds-lamp-ok { border-color: rgba(57,255,154,0.3); background: rgba(57,255,154,0.1); color: var(--phos, #39ff9a); box-shadow: 0 0 8px rgba(57,255,154,0.28); } .ds-lamp-caution { border-color: rgba(255,176,0,0.3); background: rgba(255,176,0,0.1); color: var(--caution, #ffb000); box-shadow: 0 0 8px rgba(255,176,0,0.25); } .ds-lamp-alert { border-color: rgba(255,81,72,0.3); background: rgba(255,81,72,0.11); color: var(--alert, #ff5148); box-shadow: 0 0 8px rgba(255,81,72,0.28); } .ds-lamp-advisory { border-color: rgba(85,200,240,0.3); background: rgba(85,200,240,0.1); color: var(--advisory, #55c8f0); box-shadow: 0 0 8px rgba(85,200,240,0.25); } .ds-lamp-off { border-color: var(--bezel, #22272e); background: rgba(242,245,242,0.05); color: var(--dim, #a4adb6); }"
+    },
+    {
+      "name": "Waypoint Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Sunken-well text input with phosphor focus, under a bold dim label.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-label\">Student Name</label><input class=\"ds-input\" placeholder=\"Full name\" /></div>",
+      "css": ".ds-field { display: block; min-width: 240px; } .ds-label { display: block; margin-bottom: 6px; font-family: 'B612', ui-sans-serif, sans-serif; font-size: 12px; font-weight: 700; color: var(--dim, #a4adb6); } .ds-input { width: 100%; height: 36px; padding: 0 12px; background: var(--well, #0d1013); border: 1px solid var(--bezel-strong, #303740); border-radius: 6px; color: var(--ink, #f2f5f2); font-family: 'B612', ui-sans-serif, sans-serif; font-size: 14px; transition: border-color 0.15s; } .ds-input::placeholder { color: var(--faint, #7d8894); } .ds-input:focus { outline: none; border-color: var(--phos, #39ff9a); box-shadow: 0 0 0 2px rgba(57,255,154,0.25); }"
+    },
+    {
+      "name": "Instrument",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The six-pack stat readout: mono value, hairline divider, engraved placard label on an instrument face.",
+      "html": "<div class=\"ds-instrument\"><span class=\"ds-readout\">AED 42,300</span><div class=\"ds-plate\"><span class=\"ds-placard\">Collected This Month</span><p class=\"ds-sub\">All received payments</p></div></div>",
+      "css": ".ds-instrument { display: block; width: 220px; padding: 16px; background: var(--face, #111417); border: 1px solid var(--bezel, #22272e); border-radius: 10px; box-shadow: inset 0 1px 0 rgba(242,245,242,0.05), 0 1px 2px rgba(0,0,0,0.5); transition: all 0.15s; } .ds-instrument:hover { border-color: var(--bezel-strong, #303740); } .ds-readout { font-family: 'B612 Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink, #f2f5f2); } .ds-plate { margin-top: 8px; border-top: 1px solid var(--bezel, #22272e); padding-top: 8px; } .ds-placard { font-family: 'B612', ui-sans-serif, sans-serif; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim, #a4adb6); } .ds-sub { margin: 2px 0 0; font-size: 12px; color: var(--faint, #7d8894); }"
+    },
+    {
+      "name": "Nav Item",
+      "kind": "nav",
+      "description": "Sidebar navigation row; active item lights lamp-ok background with a phosphor needle tick on the start edge.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-active\" href=\"#\"><span class=\"ds-needle\"></span>Dashboard</a><a class=\"ds-nav-item\" href=\"#\">Leads</a><a class=\"ds-nav-item\" href=\"#\">Finance</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 1px; width: 220px; padding: 8px; background: var(--face, #111417); border: 1px solid var(--bezel, #22272e); border-radius: 10px; } .ds-nav-item { position: relative; display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 8px 12px; border-radius: 6px; color: var(--dim, #a4adb6); font-family: 'B612', ui-sans-serif, sans-serif; font-size: 13px; font-weight: 600; text-decoration: none; transition: color 0.15s, background 0.15s; } .ds-nav-item:hover { background: var(--well, #0d1013); color: var(--ink, #f2f5f2); } .ds-nav-active, .ds-nav-active:hover { background: rgba(57,255,154,0.1); color: var(--phos, #39ff9a); } .ds-needle { position: absolute; inset-inline-start: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 16px; border-radius: 999px; background: var(--phos, #39ff9a); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Flight Deck",
+    "overview": "An academy run like a night flight deck (direction: Night Six-Pack, seed 5b13a029). Every surface is a matte instrument panel; every number is a gauge reading in luminous mono; every status is a rectangular annunciator lamp that is either lit or dim. The world explicitly refuses the white-admin dashboard: no gradient heroes, no tinted icon cards, no pastel status pills. Density is high but calm — hairline bezels separate instruments, and color appears only when it means something. Night is the default theme; day is a daylight-cockpit remap of the same tokens, never a different design. RTL foundations are built in via logical properties. Named unspent headroom: glass-lens / brushed-bezel materials and display lettering beyond 19px.",
+    "keyCharacteristics": [
+      "Matte night panel with fine machined grain; instrument faces raised by an inset edge-light, not by decoration.",
+      "Phosphor radio-green (#39ff9a) means engaged/ok; amber and red are reserved for real caution/alert conditions.",
+      "B612 (an Airbus cockpit typeface) everywhere; B612 Mono tabular numerals for every reading.",
+      "One component vocabulary across all 27 modules: face, placard, readout, lamp."
+    ],
+    "rules": [
+      { "name": "The Reserved-Fire Rule", "body": "Amber and red never decorate. They appear only when a real condition breaches (overdue, expired, no-show, alert threshold). A screen with nothing wrong shows no amber or red.", "section": "colors" },
+      { "name": "The Token-Only Rule", "body": "New code uses token utilities exclusively — no raw hex, no Tailwind palette classes. The legacy-compat remap in app/globals.css is transitional, shrinks as modules migrate, and must never be relied on by new work.", "section": "colors" },
+      { "name": "The Lamp Semantics Rule", "body": "All status maps to exactly five meanings: ok (green), caution (amber), alert (red), advisory (cyan), off (dim neutral).", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Every numeral is tabular; money and counts render in B612 Mono via the readout utility. Numbers align by construction, everywhere.", "section": "typography" },
+      { "name": "The Placard Voice Rule", "body": "Labels are engraved placards: short caps nouns. A placard labels a value or group; it never introduces prose and is never a decorative kicker. Buttons speak in caps imperative verbs.", "section": "typography" },
+      { "name": "The Edge-Light Rule", "body": "Night depth comes from edge-light and darkness, never from colored or blurred decoration.", "section": "elevation" },
+      { "name": "The Lit-vs-Printed Rule", "body": "Anything luminous (lit lamp, solid button, focus ring) blooms; anything printed (text, borders) does not.", "section": "elevation" },
+      { "name": "The One Lit Button Rule", "body": "At most one solid (pre-lit) button per screen.", "section": "components" }
+    ],
+    "dos": [
+      "Do consume tokens only: surfaces from panel/face/raised/well, text from ink/dim/faint, borders from bezel — theme correctness in both worlds falls out automatically.",
+      "Do route every domain status through StatusBadge, and any new status through its map first.",
+      "Do keep the accessibility floor: 2px phosphor :focus-visible outline on everything, faint-on-face >=4.5:1, roles on gauges/dialogs/errors as built, text labels inside every lamp, reduced-motion respected.",
+      "Do use logical properties (start/end, ps/pe, ms/me, border-s/e) for anything horizontal — the Arabic/RTL pass must need no layout rework.",
+      "Do keep printables paper: black-on-white, chrome-free, inside .print-area."
+    ],
+    "donts": [
+      "Don't use raw palette classes or hex in components — and don't lean on the legacy-compat remap; it is scaffolding scheduled for deletion.",
+      "Don't ship pastel status pills, tinted icon cards, or more than one solid (pre-lit) button per screen.",
+      "Don't use gradients as decoration. The only gradient in the world is the TickGauge's functional tick pattern; backgrounds, buttons, and headers stay flat.",
+      "Don't add kickers or decorative eyebrow text above titles; placards label instruments, nothing else.",
+      "Don't light amber/red without a breached condition, and don't invent status colors beyond the five lamp meanings."
+    ]
+  }
+}

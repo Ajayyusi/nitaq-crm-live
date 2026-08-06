@@ -1,12 +1,30 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Plus, BookOpen, Users, CheckCircle2, X, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { BookOpen, ChevronDown, ChevronUp, Edit3, Plus, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import DatePicker from "@/components/shared/DatePicker";
 import { courseList } from "@/constants/leads";
 import { attendanceStatuses } from "@/constants/modelConstants";
+import { Button } from "@/components/ui/button";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
+import { Input, Select, Field } from "@/components/ui/input";
+import { Drawer, ConfirmDialog } from "@/components/ui/dialog";
+import {
+  TableShell,
+  Table,
+  THead,
+  Th,
+  Tr,
+  Td,
+  TableFooter,
+  usePagination,
+  Pagination,
+} from "@/components/ui/table";
+import { SkeletonRows, LoadError, Spinner } from "@/components/ui/feedback";
+import { Instrument, InstrumentRow } from "@/components/ui/instrument";
+import { TickGauge } from "@/components/ui/tick-gauge";
 
 type AttRecord = {
   enrollmentId: string; studentName: string; status: string; notes: string;
@@ -24,45 +42,46 @@ type Enrollment = {
 
 const today = new Date().toISOString().slice(0, 10);
 
-const statusColor: Record<string, string> = {
-  Present: "bg-[#E8F5E9] text-[#1B5E20]",
-  Late: "bg-amber-50 text-amber-700",
-  Absent: "bg-red-50 text-red-700",
-  Excused: "bg-slate-100 text-slate-500",
-};
-
-const cls =
-  "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E7D32] bg-white";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}
-
 const BLANK_SESSION = {
   course: "", batchName: "", sessionDate: today,
   sessionNumber: "", topic: "", trainerName: "",
 };
 
+function attendanceLamp(status: string): LampVariant {
+  switch (status) {
+    case "Present": return "ok";
+    case "Late": return "caution";
+    case "Absent": return "alert";
+    default: return "off"; // Excused
+  }
+}
+
+function rateLamp(pct: number): LampVariant {
+  return pct >= 80 ? "ok" : pct >= 60 ? "caution" : "alert";
+}
+
 export default function ClassesPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [enrollmentsFailed, setEnrollmentsFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [courseFilter, setCourseFilter] = useState("All");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Session | null>(null);
   const [form, setForm] = useState({ ...BLANK_SESSION });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [records, setRecords] = useState<AttRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Session | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params = new URLSearchParams();
       if (courseFilter !== "All") params.set("course", courseFilter);
@@ -70,7 +89,7 @@ export default function ClassesPage() {
       const data = await res.json();
       setSessions(data.sessions ?? []);
     } catch {
-      setError("Could not load sessions. Please check your connection.");
+      setLoadError("Couldn't load sessions. Check your connection and retry.");
       setSessions([]);
     } finally {
       setLoading(false);
@@ -78,12 +97,14 @@ export default function ClassesPage() {
   }, [courseFilter]);
 
   const fetchEnrollments = useCallback(async () => {
+    setEnrollmentsFailed(false);
     try {
       const res = await fetch("/api/enrollments?status=Active");
       const data = await res.json();
       setEnrollments(data.enrollments ?? []);
     } catch {
       setEnrollments([]);
+      setEnrollmentsFailed(true);
     }
   }, []);
 
@@ -95,6 +116,7 @@ export default function ClassesPage() {
     setForm({ ...BLANK_SESSION });
     setRecords([]);
     setError("");
+    setFieldErrors({});
     setDrawerOpen(true);
   }
 
@@ -107,6 +129,7 @@ export default function ClassesPage() {
     });
     setRecords(s.records.map((r) => ({ ...r })));
     setError("");
+    setFieldErrors({});
     setDrawerOpen(true);
   }
 
@@ -132,8 +155,11 @@ export default function ClassesPage() {
   }
 
   async function save() {
-    if (!form.course) { setError("Course is required."); return; }
-    if (!form.sessionDate) { setError("Session date is required."); return; }
+    const errs: Record<string, string> = {};
+    if (!form.course) errs.course = "Select a course.";
+    if (!form.sessionDate) errs.sessionDate = "Choose the session date.";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     setSaving(true);
     setError("");
     try {
@@ -153,20 +179,25 @@ export default function ClassesPage() {
       setDrawerOpen(false);
       fetchSessions();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save session.");
+      setError(e instanceof Error ? e.message : "Couldn't save the session. Check the fields and retry.");
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteSession(s: Session) {
-    const label = s.sessionNumber ? `Session ${s.sessionNumber}` : `session on ${s.sessionDate}`;
-    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+    setDeleting(true);
+    setActionError("");
     try {
-      await fetch(`/api/attendance/${s.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/attendance/${s.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setConfirmDelete(null);
       void fetchSessions();
     } catch {
-      setError("Failed to delete session.");
+      setConfirmDelete(null);
+      setActionError("Couldn't delete the session. Retry, or contact your administrator.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -176,346 +207,367 @@ export default function ClassesPage() {
     present: sessions.reduce((sum, s) => sum + s.presentCount, 0),
   };
   const avgAtt = totals.students > 0 ? Math.round((totals.present / totals.students) * 100) : 0;
+  const absences = totals.students - totals.present;
+
+  const { slice, page, pages, setPage, total } = usePagination(sessions);
+  const presentInDraft = records.filter((r) => r.status === "Present").length;
+  const absentInDraft = records.filter((r) => r.status === "Absent").length;
+  const lateInDraft = records.filter((r) => r.status === "Late").length;
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div>
       <PageHeader
         title="Classes & Attendance"
         subtitle="Record sessions and track student attendance"
         actions={
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 px-4 py-2 bg-[#2E7D32] text-white text-sm font-medium rounded-lg hover:bg-[#1B5E20] transition"
-          >
-            <Plus className="w-4 h-4" /> Record Session
-          </button>
+          <Button variant="solid" onClick={openNew}>
+            <Plus className="h-4 w-4" aria-hidden /> Record Session
+          </Button>
         }
       />
 
-      {/* KPI cards */}
-      <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { icon: BookOpen, label: "Sessions", value: totals.sessions, cls: "text-[#2E7D32]" },
-          { icon: Users, label: "Attendance Records", value: totals.students, cls: "text-teal-600" },
-          { icon: CheckCircle2, label: "Present Rate", value: `${avgAtt}%`, cls: avgAtt >= 80 ? "text-[#2E7D32]" : avgAtt >= 60 ? "text-amber-600" : "text-red-600" },
-          { icon: BookOpen, label: "Absences", value: totals.students - totals.present, cls: "text-red-600" },
-        ].map((k) => (
-          <div key={k.label} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#E8F5E9] flex items-center justify-center">
-              <k.icon className={`w-4 h-4 ${k.cls}`} />
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-500 font-medium">{k.label}</p>
-              <p className={`text-sm font-bold ${k.cls}`}>{k.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <InstrumentRow className="mb-4 md:grid-cols-4 xl:grid-cols-4">
+        <Instrument label="Sessions" value={totals.sessions} sub="Recorded sessions" />
+        <Instrument label="Attendance Records" value={totals.students} sub="Student check-ins" />
+        <Instrument
+          label="Present Rate"
+          value={`${avgAtt}%`}
+          tone={avgAtt >= 80 ? "phos" : avgAtt >= 60 ? "caution" : totals.students > 0 ? "alert" : "ink"}
+        >
+          <TickGauge percent={avgAtt} cautionBelow={79} alertBelow={59} className="mt-2" />
+        </Instrument>
+        <Instrument label="Absences" value={absences} tone={absences > 0 ? "alert" : "ink"} sub="Marked absent" />
+      </InstrumentRow>
 
-      {/* Course filter */}
-      <div className="px-6 pb-3 flex gap-2 flex-wrap">
-        {["All", ...courseList].map((c) => (
-          <button
-            key={c}
-            onClick={() => setCourseFilter(c)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
-              courseFilter === c
-                ? "bg-[#2E7D32] text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:text-[#2E7D32]"
-            }`}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
-
-      {/* Sessions list */}
-      <div className="flex-1 px-6 pb-8 overflow-auto">
-        {loading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
-            ))}
-          </div>
-        ) : sessions.length === 0 ? (
-          <EmptyState
-            icon={BookOpen}
-            title="No sessions recorded"
-            description="Record your first class session and mark attendance."
-            action={
-              <button onClick={openNew} className="px-4 py-2 bg-[#2E7D32] text-white text-sm rounded-lg">
-                Record Session
-              </button>
-            }
-          />
-        ) : (
-          <div className="space-y-2">
-            {sessions.map((s) => {
-              const expanded = expandedId === s.id;
-              return (
-                <div key={s.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                  {/* Session header row */}
-                  <div className="flex items-center gap-4 px-4 py-3">
-                    <button
-                      onClick={() => setExpandedId(expanded ? null : s.id)}
-                      className="text-slate-400 hover:text-[#2E7D32] transition"
-                    >
-                      {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    </button>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-[#0D1F0E] text-sm">
-                          {s.sessionNumber ? `Session ${s.sessionNumber} — ` : ""}{s.course}
-                        </span>
-                        {s.batchName && (
-                          <span className="text-xs bg-[#E8F5E9] text-[#2E7D32] px-2 py-0.5 rounded-full">{s.batchName}</span>
-                        )}
-                        {s.topic && <span className="text-xs text-slate-400">{s.topic}</span>}
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5">
-                        <span className="text-xs text-slate-400">{s.sessionDate}</span>
-                        {s.trainerName && <span className="text-xs text-slate-400">· {s.trainerName}</span>}
-                      </div>
-                    </div>
-
-                    {/* Attendance pill */}
-                    <div className="flex items-center gap-1.5 text-xs font-medium">
-                      <span className={`px-2 py-0.5 rounded-full ${s.attendancePct >= 80 ? "bg-[#E8F5E9] text-[#1B5E20]" : s.attendancePct >= 60 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>
-                        {s.presentCount}/{s.totalCount} present ({s.attendancePct}%)
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => openEdit(s)}
-                      className="text-xs text-[#2E7D32] hover:underline font-medium px-2"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deleteSession(s)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Expanded records */}
-                  {expanded && s.records.length > 0 && (
-                    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 overflow-x-auto">
-                      <table className="w-full min-w-[300px] text-xs">
-                        <thead>
-                          <tr className="text-slate-400 uppercase tracking-wide">
-                            <th className="text-left py-1 pr-4 font-semibold">Student</th>
-                            <th className="text-left py-1 pr-4 font-semibold">Status</th>
-                            <th className="text-left py-1 font-semibold">Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {s.records.map((r, i) => (
-                            <tr key={i}>
-                              <td className="py-1.5 pr-4 text-[#0D1F0E] font-medium">{r.studentName}</td>
-                              <td className="py-1.5 pr-4">
-                                <span className={`inline-flex px-2 py-0.5 rounded-full font-medium ${statusColor[r.status] ?? "bg-slate-100 text-slate-600"}`}>
-                                  {r.status}
-                                </span>
-                              </td>
-                              <td className="py-1.5 text-slate-400">{r.notes || "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Drawer */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-          <div className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#0D1F0E]">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  {editTarget ? "Edit Session" : "Record Session"}
-                </h2>
-                <p className="text-xs text-white/60">
-                  {editTarget ? "Update attendance records" : "Mark attendance for a class session"}
-                </p>
-              </div>
-              <button onClick={() => setDrawerOpen(false)} className="text-white/60 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4 flex-1">
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
-                  {error}
-                </div>
-              )}
-
-              {/* Session details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Field label="Course *">
-                    <select
-                      className={cls}
-                      value={form.course}
-                      onChange={(e) => {
-                        setForm((f) => ({ ...f, course: e.target.value }));
-                        if (!editTarget) loadEnrolleesForCourse(e.target.value);
-                      }}
-                    >
-                      <option value="">— Select course —</option>
-                      {courseList.map((c) => <option key={c}>{c}</option>)}
-                    </select>
-                  </Field>
-                </div>
-                <Field label="Batch Name">
-                  <input
-                    className={cls}
-                    value={form.batchName}
-                    onChange={(e) => setForm((f) => ({ ...f, batchName: e.target.value }))}
-                    placeholder="e.g. Batch A"
-                  />
-                </Field>
-                <Field label="Session No.">
-                  <input
-                    className={cls}
-                    type="number"
-                    min="1"
-                    value={form.sessionNumber}
-                    onChange={(e) => setForm((f) => ({ ...f, sessionNumber: e.target.value }))}
-                    placeholder="1"
-                  />
-                </Field>
-                <Field label="Session Date *">
-                  <DatePicker
-                    value={form.sessionDate}
-                    onChange={(v) => setForm((f) => ({ ...f, sessionDate: v }))}
-                    required
-                  />
-                </Field>
-                <Field label="Trainer">
-                  <input
-                    className={cls}
-                    value={form.trainerName}
-                    onChange={(e) => setForm((f) => ({ ...f, trainerName: e.target.value }))}
-                    placeholder="Trainer name"
-                  />
-                </Field>
-                <div className="col-span-2">
-                  <Field label="Topic / Agenda">
-                    <input
-                      className={cls}
-                      value={form.topic}
-                      onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
-                      placeholder="What was covered?"
-                    />
-                  </Field>
-                </div>
-              </div>
-
-              {/* Attendance records */}
-              {records.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-[#0D1F0E]">
-                      Attendance ({records.length} students)
-                    </p>
-                    <div className="flex gap-2">
-                      {attendanceStatuses.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => markAll(s)}
-                          className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-600"
-                        >
-                          All {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="border border-slate-200 rounded-lg overflow-hidden">
-                    <div className="max-h-64 overflow-y-auto">
-                      <table className="w-full text-xs">
-                        <thead className="sticky top-0 bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            <th className="text-left px-3 py-2 font-semibold text-slate-500">Student</th>
-                            <th className="text-left px-3 py-2 font-semibold text-slate-500">Status</th>
-                            <th className="text-left px-3 py-2 font-semibold text-slate-500">Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {records.map((r, i) => (
-                            <tr key={i} className={`${r.status === "Absent" ? "bg-red-50/40" : r.status === "Late" ? "bg-amber-50/40" : ""}`}>
-                              <td className="px-3 py-2 font-medium text-[#0D1F0E]">{r.studentName}</td>
-                              <td className="px-3 py-2">
-                                <select
-                                  className="text-xs border border-slate-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-[#2E7D32]"
-                                  value={r.status}
-                                  onChange={(e) => updateRecord(i, "status", e.target.value)}
-                                >
-                                  {attendanceStatuses.map((s) => <option key={s}>{s}</option>)}
-                                </select>
-                              </td>
-                              <td className="px-3 py-2">
-                                <input
-                                  className="w-full text-xs border-0 bg-transparent focus:outline-none text-slate-500 placeholder:text-slate-300"
-                                  placeholder="optional note"
-                                  value={r.notes}
-                                  onChange={(e) => updateRecord(i, "notes", e.target.value)}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {records.filter((r) => r.status === "Present").length} present ·{" "}
-                    {records.filter((r) => r.status === "Absent").length} absent ·{" "}
-                    {records.filter((r) => r.status === "Late").length} late
-                  </p>
-                </div>
-              )}
-
-              {records.length === 0 && form.course && (
-                <div className="border border-dashed border-slate-300 rounded-lg p-4 text-center">
-                  <p className="text-xs text-slate-400">
-                    No active enrollments found for this course. Students will appear automatically once enrolled.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
-              <button
-                onClick={save}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-[#2E7D32] text-white text-sm font-semibold rounded-lg hover:bg-[#1B5E20] transition disabled:opacity-50"
-              >
-                {saving ? "Saving…" : editTarget ? "Update Session" : "Save Attendance"}
-              </button>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="px-5 py-2.5 border border-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+      {actionError && (
+        <div role="alert" className="mb-4 rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-2 text-sm font-semibold text-alert">
+          {actionError}
         </div>
       )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Select
+          className="w-full sm:w-72"
+          value={courseFilter}
+          onChange={(e) => setCourseFilter(e.target.value)}
+          aria-label="Filter sessions by course"
+        >
+          {["All", ...courseList].map((c) => (
+            <option key={c} value={c}>{c === "All" ? "All Courses" : c}</option>
+          ))}
+        </Select>
+      </div>
+
+      {loadError ? (
+        <LoadError message={loadError} onRetry={() => void fetchSessions()} />
+      ) : (
+        <TableShell>
+          {loading ? (
+            <SkeletonRows rows={6} cols={6} />
+          ) : sessions.length === 0 ? (
+            <EmptyState
+              icon={BookOpen}
+              title="No sessions recorded"
+              description={
+                courseFilter !== "All"
+                  ? "No sessions match this course filter."
+                  : "Record the first class session and mark attendance."
+              }
+              action={
+                <Button variant="primary" onClick={openNew}>
+                  <Plus className="h-4 w-4" aria-hidden /> Record Session
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <THead>
+                  <tr>
+                    <Th className="w-10"><span className="sr-only">Expand</span></Th>
+                    <Th>Session</Th>
+                    <Th>Batch</Th>
+                    <Th>Date</Th>
+                    <Th>Trainer</Th>
+                    <Th numeric>Attendance</Th>
+                    <Th className="text-right"><span className="sr-only">Actions</span></Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {slice.map((s) => {
+                    const expanded = expandedId === s.id;
+                    const sessionLabel = s.sessionNumber ? `Session ${s.sessionNumber}` : `session on ${s.sessionDate}`;
+                    return (
+                      <Fragment key={s.id}>
+                        <Tr clickable onClick={() => setExpandedId(expanded ? null : s.id)}>
+                          <Td className="w-10 pr-0">
+                            <Button
+                              variant="ghost"
+                              size="iconSm"
+                              aria-expanded={expanded}
+                              aria-label={expanded ? `Collapse attendance for ${sessionLabel}` : `Expand attendance for ${sessionLabel}`}
+                              onClick={(e) => { e.stopPropagation(); setExpandedId(expanded ? null : s.id); }}
+                            >
+                              {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </Td>
+                          <Td>
+                            <p className="font-semibold">
+                              {s.sessionNumber ? `Session ${s.sessionNumber} — ` : ""}{s.course}
+                            </p>
+                            {s.topic && (
+                              <p className="mt-0.5 max-w-xs truncate text-xs text-faint" title={s.topic}>{s.topic}</p>
+                            )}
+                          </Td>
+                          <Td className="text-dim">{s.batchName || "—"}</Td>
+                          <Td><span className="readout text-xs" data-numeric>{s.sessionDate}</span></Td>
+                          <Td className="text-dim">{s.trainerName || "—"}</Td>
+                          <Td numeric>
+                            <span className="mr-2">{s.presentCount}/{s.totalCount}</span>
+                            <Lamp variant={rateLamp(s.attendancePct)}>{s.attendancePct}%</Lamp>
+                          </Td>
+                          <Td className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
+                                aria-label={`Edit ${sessionLabel}`}
+                                onClick={(e) => { e.stopPropagation(); openEdit(s); }}
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
+                                className="text-alert hover:text-alert"
+                                aria-label={`Delete ${sessionLabel}`}
+                                onClick={(e) => { e.stopPropagation(); setConfirmDelete(s); }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </Td>
+                        </Tr>
+                        {expanded && s.records.length > 0 && (
+                          <Tr>
+                            <Td colSpan={7} className="bg-well/60 px-4 py-3">
+                              <table className="w-full min-w-[320px] text-xs">
+                                <thead>
+                                  <tr>
+                                    <th className="placard py-1 pr-4 text-left">Student</th>
+                                    <th className="placard py-1 pr-4 text-left">Status</th>
+                                    <th className="placard py-1 text-left">Notes</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {s.records.map((r, i) => (
+                                    <tr key={i} className="border-t border-bezel/60">
+                                      <td className="py-1.5 pr-4 font-medium text-ink">{r.studentName}</td>
+                                      <td className="py-1.5 pr-4">
+                                        <Lamp variant={attendanceLamp(r.status)}>{r.status}</Lamp>
+                                      </td>
+                                      <td className="py-1.5 text-dim">{r.notes || "—"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </Td>
+                          </Tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </Table>
+              <TableFooter>
+                <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+              </TableFooter>
+            </>
+          )}
+        </TableShell>
+      )}
+
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={editTarget ? "Edit Session" : "Record Session"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="solid" onClick={() => void save()} disabled={saving}>
+              {saving && <Spinner className="h-3.5 w-3.5" />}
+              {editTarget ? "Update Session" : "Save Attendance"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {error && (
+            <div role="alert" className="rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-3 text-sm font-semibold text-alert">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Course" required error={fieldErrors.course} htmlFor="session-course" className="col-span-2">
+              <Select
+                id="session-course"
+                value={form.course}
+                aria-invalid={fieldErrors.course ? true : undefined}
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, course: e.target.value }));
+                  if (!editTarget) loadEnrolleesForCourse(e.target.value);
+                }}
+              >
+                <option value="">Select course</option>
+                {courseList.map((c) => <option key={c}>{c}</option>)}
+              </Select>
+            </Field>
+            <Field label="Batch Name" htmlFor="session-batch">
+              <Input
+                id="session-batch"
+                value={form.batchName}
+                onChange={(e) => setForm((f) => ({ ...f, batchName: e.target.value }))}
+                placeholder="e.g. Batch A"
+              />
+            </Field>
+            <Field label="Session No." htmlFor="session-number">
+              <Input
+                id="session-number"
+                type="number"
+                min="1"
+                value={form.sessionNumber}
+                onChange={(e) => setForm((f) => ({ ...f, sessionNumber: e.target.value }))}
+                placeholder="1"
+              />
+            </Field>
+            <Field label="Session Date" required error={fieldErrors.sessionDate}>
+              <DatePicker
+                value={form.sessionDate}
+                onChange={(v) => setForm((f) => ({ ...f, sessionDate: v }))}
+                required
+              />
+            </Field>
+            <Field label="Trainer" htmlFor="session-trainer">
+              <Input
+                id="session-trainer"
+                value={form.trainerName}
+                onChange={(e) => setForm((f) => ({ ...f, trainerName: e.target.value }))}
+                placeholder="Trainer name"
+              />
+            </Field>
+            <Field label="Topic / Agenda" htmlFor="session-topic" className="col-span-2">
+              <Input
+                id="session-topic"
+                value={form.topic}
+                onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
+                placeholder="What was covered?"
+              />
+            </Field>
+          </div>
+
+          {enrollmentsFailed && !editTarget && (
+            <div role="alert" className="flex items-center justify-between gap-2 rounded-ctl border border-caution/30 bg-[var(--lamp-caution-bg)] px-3 py-2 text-xs font-semibold text-caution">
+              <span>Couldn't load active enrollments — the student list may be incomplete.</span>
+              <Button variant="ghost" size="sm" onClick={() => void fetchEnrollments()}>Retry</Button>
+            </div>
+          )}
+
+          {records.length > 0 && (
+            <div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-bold text-ink">
+                  Attendance <span className="readout text-dim" data-numeric>({records.length} students)</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {attendanceStatuses.map((s) => (
+                    <Button key={s} type="button" variant="secondary" size="sm" onClick={() => markAll(s)}>
+                      All {s}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-ctl border border-bezel">
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 z-10 bg-well">
+                      <tr>
+                        <th className="placard border-b border-bezel px-3 py-2 text-left">Student</th>
+                        <th className="placard border-b border-bezel px-3 py-2 text-left">Status</th>
+                        <th className="placard border-b border-bezel px-3 py-2 text-left">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {records.map((r, i) => (
+                        <tr
+                          key={i}
+                          className={`border-b border-bezel/60 last:border-0 ${
+                            r.status === "Absent"
+                              ? "bg-[var(--lamp-alert-bg)]"
+                              : r.status === "Late"
+                                ? "bg-[var(--lamp-caution-bg)]"
+                                : ""
+                          }`}
+                        >
+                          <td className="px-3 py-2 font-medium text-ink">{r.studentName}</td>
+                          <td className="px-3 py-2">
+                            <Select
+                              className="h-8 w-28 pr-6 text-xs"
+                              value={r.status}
+                              aria-label={`Attendance status for ${r.studentName}`}
+                              onChange={(e) => updateRecord(i, "status", e.target.value)}
+                            >
+                              {attendanceStatuses.map((s) => <option key={s}>{s}</option>)}
+                            </Select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              className="h-8 border-0 bg-transparent px-1 text-xs"
+                              placeholder="Optional note"
+                              aria-label={`Note for ${r.studentName}`}
+                              value={r.notes}
+                              onChange={(e) => updateRecord(i, "notes", e.target.value)}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <p className="readout mt-1.5 text-xs text-dim" data-numeric>
+                {presentInDraft} present · {absentInDraft} absent · {lateInDraft} late
+              </p>
+            </div>
+          )}
+
+          {records.length === 0 && form.course && (
+            <div className="rounded-ctl border border-dashed border-bezel-strong bg-well/50 p-4 text-center">
+              <p className="text-xs text-dim">
+                No active enrollments found for this course. Students will appear automatically once enrolled.
+              </p>
+            </div>
+          )}
+        </div>
+      </Drawer>
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onClose={() => { if (!deleting) setConfirmDelete(null); }}
+        onConfirm={() => { if (confirmDelete) void deleteSession(confirmDelete); }}
+        title="Delete Session"
+        message={
+          confirmDelete
+            ? `Delete ${confirmDelete.sessionNumber ? `Session ${confirmDelete.sessionNumber}` : `session on ${confirmDelete.sessionDate}`}? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        busy={deleting}
+      />
     </div>
   );
 }

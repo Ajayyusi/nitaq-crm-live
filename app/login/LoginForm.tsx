@@ -71,7 +71,7 @@ export default function LoginForm() {
     <form onSubmit={handleSubmit} className="space-y-4 px-8 py-6">
       <Field label="Email address" htmlFor="login-email">
         <div className="relative">
-          <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
+          <Mail className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
           <Input
             id="login-email"
             type="email"
@@ -80,14 +80,14 @@ export default function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@nitaqacademy.com"
-            className="pl-9"
+            className="ps-9"
           />
         </div>
       </Field>
 
       <Field label="Password" htmlFor="login-password">
         <div className="relative">
-          <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
+          <Lock className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
           <Input
             id="login-password"
             type={showPassword ? "text" : "password"}
@@ -96,13 +96,13 @@ export default function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="pl-9 pr-10"
+            className="ps-9 pe-10"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             aria-label={showPassword ? "Hide password" : "Show password"}
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition hover:text-dim"
+            className="absolute end-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition hover:text-dim"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>

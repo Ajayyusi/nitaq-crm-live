@@ -1,9 +1,13 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
+import { Spinner } from "@/components/ui/feedback";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function Redeem() {
   const router = useRouter();
@@ -31,26 +35,34 @@ function Redeem() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-md rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center">
-        <ShieldAlert className="mx-auto h-9 w-9 text-rose-500" />
-        <h1 className="mt-3 text-base font-bold text-rose-900">Cannot open this session</h1>
-        <p className="mt-1 text-sm text-rose-700">{error}</p>
+      <div
+        role="alert"
+        className="face mx-auto w-full max-w-md border-alert/30 p-8 text-center"
+      >
+        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-card border border-alert/30 bg-[var(--lamp-alert-bg)]">
+          <ShieldAlert className="h-6 w-6 text-alert" aria-hidden />
+        </div>
+        <h1 className="text-base font-bold text-ink">Cannot Open This Session</h1>
+        <p className="mt-2 text-sm text-dim">{error}</p>
+        <Link href="/login" className={cn(buttonVariants({ variant: "primary" }), "mt-6")}>
+          Go to Login
+        </Link>
       </div>
     );
   }
 
   return (
     <div className="text-center">
-      <Loader2 className="mx-auto h-7 w-7 animate-spin text-[#2E7D32]" />
-      <p className="mt-3 text-sm font-medium text-slate-600">Opening session…</p>
+      <Spinner className="mx-auto h-7 w-7" />
+      <p className="placard mt-4">Opening session</p>
     </div>
   );
 }
 
 export default function ImpersonatePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-      <Suspense fallback={<Loader2 className="h-7 w-7 animate-spin text-[#2E7D32]" />}>
+    <div className="flex min-h-screen items-center justify-center bg-panel p-6">
+      <Suspense fallback={<Spinner className="h-7 w-7" />}>
         <Redeem />
       </Suspense>
     </div>

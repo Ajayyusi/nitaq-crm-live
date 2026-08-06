@@ -21,7 +21,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="min-h-screen lg:pl-[248px]">
+      <div className="min-h-screen lg:ps-[248px]">
         {/* One sticky stack: banner and header never fight over top-0 */}
         <div className="sticky top-0 z-30">
           <ImpersonationBanner />

@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronLeft, Loader2, Save } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Save } from "lucide-react";
 import DatePicker from "@/components/shared/DatePicker";
 import { AccountSelect, usePostingAccounts } from "@/components/accounting/shared";
 import BackButton from "@/components/shared/BackButton";
+import PageHeader from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input, Field } from "@/components/ui/input";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Spinner, PanelLoading, LoadError } from "@/components/ui/feedback";
 
 const MAPPINGS: { key: string; label: string; hint?: string }[] = [
   { key: "defaultCashAccount",   label: "Default Cash Account" },
@@ -30,16 +34,21 @@ export default function AccountingSettingsPage() {
   const { accounts, loading: accountsLoading } = usePostingAccounts();
   const [settings, setSettings] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setLoadFailed(false);
     fetch("/api/accounting/settings")
       .then((r) => r.json())
       .then((d) => setSettings(d.settings ?? {}))
-      .catch(() => {})
+      .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(load, [load]);
 
   const save = async () => {
     setSaving(true); setMsg("");
@@ -55,95 +64,124 @@ export default function AccountingSettingsPage() {
       setMsg("Saved.");
       setTimeout(() => setMsg(""), 3000);
     } catch (err) {
-      setMsg((err as Error).message);
+      setMsg((err as Error).message || "Couldn't save. Retry.");
     } finally { setSaving(false); }
   };
 
+  if (loadFailed) {
+    return (
+      <div className="p-4 sm:p-6">
+        <BackButton />
+        <LoadError message="Couldn't load accounting settings. Check your connection and retry." onRetry={load} />
+      </div>
+    );
+  }
   if (loading || accountsLoading || !settings) {
-    return <div className="flex h-64 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>;
+    return <PanelLoading label="Loading settings" />;
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-3xl">
-      <div>
-        <BackButton />
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Accounting Settings</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Map CRM operations to Chart of Accounts — nothing is hardcoded</p>
-      </div>
+    <div className="max-w-3xl space-y-5 p-4 sm:p-6">
+      <BackButton />
+      <PageHeader
+        title="Accounting Settings"
+        subtitle="Map CRM operations to Chart of Accounts — nothing is hardcoded"
+      />
 
       {/* VAT */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">VAT</h2>
-        <div className="flex flex-wrap items-center gap-6">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={!!settings.vatEnabled} onChange={(e) => setSettings((s) => ({ ...s!, vatEnabled: e.target.checked }))} className="h-4 w-4 accent-[#2E7D32]" />
-            <span className="text-gray-700 dark:text-gray-300">VAT enabled (post Output VAT on invoices)</span>
+      <Card>
+        <CardHeader>
+          <CardTitle>VAT</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-6">
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input type="checkbox" checked={!!settings.vatEnabled} onChange={(e) => setSettings((s) => ({ ...s!, vatEnabled: e.target.checked }))} className="h-4 w-4 accent-phos" />
+            VAT enabled (post Output VAT on invoices)
           </label>
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-600 dark:text-gray-400">Rate</span>
-            <input type="number" min="0" max="100" value={Number(settings.vatRate) || 5}
+            <span className="text-dim">Rate</span>
+            <Input
+              type="number" min="0" max="100" value={Number(settings.vatRate) || 5}
               onChange={(e) => setSettings((s) => ({ ...s!, vatRate: Number(e.target.value) }))}
-              className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-2 text-sm dark:border-white/10 dark:bg-white/5 dark:text-white" />
-            <span className="text-gray-400">%</span>
+              className="w-20"
+              aria-label="VAT rate percent"
+            />
+            <span className="text-faint">%</span>
           </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       {/* Auto-posting */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">Automatic Posting</h2>
-        <div className="space-y-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Automatic Posting</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
           {[
             ["autoPostInvoices", "Post invoice entries when enrollments are created"],
             ["autoPostPayments", "Post receipt entries when payments are recorded"],
             ["autoPostExpenses", "Post expense entries when expenses are recorded"],
           ].map(([key, label]) => (
-            <label key={key} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={!!settings[key]} onChange={(e) => setSettings((s) => ({ ...s!, [key]: e.target.checked }))} className="h-4 w-4 accent-[#2E7D32]" />
-              <span className="text-gray-700 dark:text-gray-300">{label}</span>
+            <label key={key} className="flex items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={!!settings[key]} onChange={(e) => setSettings((s) => ({ ...s!, [key]: e.target.checked }))} className="h-4 w-4 accent-phos" />
+              {label}
             </label>
           ))}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       {/* Period lock */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">Books Lock Date</h2>
-        <p className="mb-3 text-xs text-gray-400">No journal entries can be posted on or before this date — set it after closing a period so nobody can change closed months.</p>
-        <div className="max-w-xs">
-          <DatePicker
-            value={String(settings.lockDate ?? "")}
-            onChange={(v) => setSettings((s) => ({ ...s!, lockDate: v }))}
-            placeholder="No lock — all periods open"
-          />
-        </div>
-      </section>
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Books Lock Date</CardTitle>
+            <CardDescription className="mt-1">
+              No journal entries can be posted on or before this date — set it after closing a period so nobody can change closed months.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="max-w-xs">
+            <DatePicker
+              value={String(settings.lockDate ?? "")}
+              onChange={(v) => setSettings((s) => ({ ...s!, lockDate: v }))}
+              placeholder="No lock — all periods open"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Account mappings */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-gray-500">Account Mappings</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Account Mappings</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
           {MAPPINGS.map((m) => (
-            <div key={m.key}>
-              <label className="mb-1 block text-xs font-semibold text-gray-600 dark:text-gray-400">
-                {m.label}{m.hint && <span className="ml-1 font-normal text-gray-400">({m.hint})</span>}
-              </label>
+            <Field key={m.key} label={m.label} help={m.hint}>
               <AccountSelect
                 value={String(settings[m.key] ?? "")}
                 onChange={(v) => setSettings((s) => ({ ...s!, [m.key]: v }))}
                 accounts={accounts}
                 placeholder="— not set —"
               />
-            </div>
+            </Field>
           ))}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
       <div className="flex items-center gap-3">
-        <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-[#2E7D32] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Settings
-        </button>
-        {msg && <span className={`text-sm font-medium ${msg === "Saved." ? "text-green-600" : "text-red-600"}`}>{msg}</span>}
+        <Button variant="solid" onClick={save} disabled={saving}>
+          {saving ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />} Save Settings
+        </Button>
+        {msg && (
+          <span
+            role={msg === "Saved." ? "status" : "alert"}
+            className={`text-sm font-medium ${msg === "Saved." ? "text-phos" : "text-alert"}`}
+          >
+            {msg}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -8,20 +8,34 @@ import {
 type MonthlyRow = { month: string; revenue: number; expenses: number; net: number };
 type CourseRow = { name: string; value: number };
 
-const PIE_COLORS = ["#2E7D32", "#00897B", "#2196F3", "#7B1FA2", "#F57C00", "#C62828", "#0288D1"];
+/** Series colors come from the panel token layer so both themes read correctly. */
+const PIE_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 function formatAED(v: number) {
   return "AED " + v.toLocaleString("en-AE", { minimumFractionDigits: 0 });
 }
 
-function RevenueTooltip({ active, payload, label }: any) {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function PanelTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xl text-xs">
-      <p className="font-bold text-slate-700 mb-2">{label}</p>
+    <div className="rounded-ctl border border-bezel bg-raised px-3 py-2 text-xs shadow-raise">
+      {label != null && <p className="placard mb-1.5">{label}</p>}
       {payload.map((entry: any) => (
-        <p key={entry.dataKey} style={{ color: entry.color }}>
-          {entry.name}: {formatAED(entry.value)}
+        <p key={entry.dataKey ?? entry.name} className="readout" data-numeric>
+          <span
+            aria-hidden
+            className="mr-1.5 inline-block h-2 w-2 rounded-lamp align-middle"
+            style={{ background: entry.color ?? entry.payload?.fill }}
+          />
+          <span className="text-dim">{entry.name}: </span>
+          <span className="text-ink">{formatAED(entry.value)}</span>
         </p>
       ))}
     </div>
@@ -32,15 +46,27 @@ export function RevenueExpensesChart({ data }: { data: MonthlyRow[] }) {
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }} barGap={4}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-        <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#64748b" }} />
-        <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fill: "#64748b" }} />
-        <Tooltip content={<RevenueTooltip />} />
-        <Legend
-          formatter={(value) => <span style={{ fontSize: 12, color: "#374151" }}>{value}</span>}
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--bezel)" vertical={false} />
+        <XAxis
+          dataKey="month"
+          tick={{ fontSize: 12, fill: "var(--dim)" }}
+          axisLine={{ stroke: "var(--bezel)" }}
+          tickLine={{ stroke: "var(--bezel)" }}
         />
-        <Bar dataKey="revenue" name="Revenue" fill="#2E7D32" radius={[4, 4, 0, 0]} maxBarSize={36} />
-        <Bar dataKey="expenses" name="Expenses" fill="#EF5350" radius={[4, 4, 0, 0]} maxBarSize={36} />
+        <YAxis
+          tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+          tick={{ fontSize: 11, fill: "var(--dim)" }}
+          axisLine={{ stroke: "var(--bezel)" }}
+          tickLine={{ stroke: "var(--bezel)" }}
+        />
+        <Tooltip content={<PanelTooltip />} cursor={{ fill: "var(--bezel)", opacity: 0.35 }} />
+        <Legend
+          formatter={(value) => (
+            <span style={{ fontSize: 12, color: "var(--dim)" }}>{value}</span>
+          )}
+        />
+        <Bar dataKey="revenue" name="Revenue" fill="var(--chart-1)" radius={[3, 3, 0, 0]} maxBarSize={36} />
+        <Bar dataKey="expenses" name="Expenses" fill="var(--chart-5)" radius={[3, 3, 0, 0]} maxBarSize={36} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -71,15 +97,13 @@ export function CourseRevenuePieChart({ data }: { data: CourseRow[] }) {
           label={PieLabelLine}
           outerRadius={100}
           dataKey="value"
+          stroke="var(--bezel)"
         >
           {data.map((_, index) => (
             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
           ))}
         </Pie>
-        <PieTooltip
-          formatter={(value) => [typeof value === "number" ? formatAED(value) : String(value), "Revenue"]}
-          contentStyle={{ fontSize: 12, borderRadius: 10, border: "1px solid #e2e8f0" }}
-        />
+        <PieTooltip content={<PanelTooltip />} />
       </PieChart>
     </ResponsiveContainer>
   );

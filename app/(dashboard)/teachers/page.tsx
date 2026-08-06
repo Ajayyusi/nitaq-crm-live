@@ -1,13 +1,36 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import {
-  AlertTriangle, Edit3, Loader2, LogIn, MessageCircle, Plus, Search, Trash2, UserCheck, X,
-} from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { AlertTriangle, Edit3, LogIn, MessageCircle, Plus, Trash2, UserCheck, X } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { trainerStatuses, tamamStatuses, contractStatuses, trainerPaymentTypes as paymentTypes } from "@/constants/modelConstants";
+import {
+  trainerStatuses,
+  tamamStatuses,
+  contractStatuses,
+  trainerPaymentTypes as paymentTypes,
+} from "@/constants/modelConstants";
 import DatePicker from "@/components/shared/DatePicker";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import StatusBadge from "@/components/shared/StatusBadge";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { formatCurrency, getInitials } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Lamp } from "@/components/ui/lamp";
+import { Input, Textarea, Select, Field, SearchInput } from "@/components/ui/input";
+import { Drawer, ConfirmDialog } from "@/components/ui/dialog";
+import {
+  TableShell,
+  Table,
+  THead,
+  Th,
+  Tr,
+  Td,
+  TableFooter,
+  usePagination,
+  Pagination,
+} from "@/components/ui/table";
+import { SkeletonRows, LoadError, Spinner } from "@/components/ui/feedback";
 
 type Trainer = {
   id: string; fullName: string; fullNameAr: string; phone: string; email: string;
@@ -46,7 +69,15 @@ function getErr(v: unknown, fb: string) {
   return fb;
 }
 
-const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]";
+/** Debounce a value so typing doesn't refetch on every keystroke. */
+function useDebounced<T>(value: T, ms = 300) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
 
 export default function TrainersPage() {
   const { data: session } = useSession();
@@ -54,36 +85,47 @@ export default function TrainersPage() {
   const [openingAs, setOpeningAs] = useState("");
   const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounced(search);
   const [statusFilter, setStatusFilter] = useState("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTrainer, setEditingTrainer] = useState<Trainer | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<Trainer | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const params = new URLSearchParams();
-      if (search.trim()) params.set("search", search.trim());
+      if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
       if (statusFilter !== "all") params.set("status", statusFilter);
       const res = await fetch(`/api/teachers?${params}`, { cache: "no-store" });
       const data = await res.json();
       setTrainers(data.trainers ?? []);
-    } catch { setError("Failed to load trainers."); }
-    finally { setLoading(false); }
-  }
+    } catch {
+      setLoadError("Couldn't load trainers. Check your connection and retry.");
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedSearch, statusFilter]);
 
-  useEffect(() => { void load(); }, [search, statusFilter]);
+  useEffect(() => { void load(); }, [load]);
 
   function set(field: keyof FormState, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
-  function openCreate() { setEditingTrainer(null); setForm(emptyForm); setFormError(""); setDrawerOpen(true); }
+  function openCreate() {
+    setEditingTrainer(null); setForm(emptyForm); setFormError(""); setFieldErrors({}); setDrawerOpen(true);
+  }
   function openEdit(t: Trainer) {
     setEditingTrainer(t);
     setForm({
@@ -94,11 +136,17 @@ export default function TrainersPage() {
       contractEndDate: t.contractEndDate, paymentRate: t.paymentRate?.toString() ?? "",
       paymentType: uiPaymentType(t.paymentType), status: t.status, notes: t.notes,
     });
-    setFormError(""); setDrawerOpen(true);
+    setFormError(""); setFieldErrors({}); setDrawerOpen(true);
   }
 
   async function save(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setSaving(true); setFormError("");
+    e.preventDefault();
+    const errs: Record<string, string> = {};
+    if (!form.fullName.trim()) errs.fullName = "Full name is required.";
+    if (!form.phone.trim()) errs.phone = "Phone number is required.";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    setSaving(true); setFormError("");
     try {
       const url = editingTrainer ? `/api/teachers/${editingTrainer.id}` : "/api/teachers";
       const method = editingTrainer ? "PATCH" : "POST";
@@ -111,21 +159,31 @@ export default function TrainersPage() {
       setNotice(editingTrainer ? "Trainer updated." : "Trainer added.");
       setDrawerOpen(false);
       await load();
-    } catch (caught) { setFormError(getErr(caught, "Failed to save trainer.")); }
+    } catch (caught) { setFormError(getErr(caught, "Couldn't save the trainer. Check the fields and retry.")); }
     finally { setSaving(false); }
   }
 
   async function deleteTrainer(t: Trainer) {
-    if (!window.confirm(`Delete trainer ${t.fullName}? This cannot be undone.`)) return;
+    setDeleting(true);
+    setActionError("");
     try {
-      await fetch(`/api/teachers/${t.id}`, { method: "DELETE" });
-      setNotice("Trainer deleted."); await load();
-    } catch { setError("Failed to delete."); }
+      const res = await fetch(`/api/teachers/${t.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setNotice("Trainer deleted.");
+      setConfirmDelete(null);
+      await load();
+    } catch {
+      setConfirmDelete(null);
+      setActionError("Couldn't delete the trainer. Retry, or contact your administrator.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   /** Admin: open the CRM in a new tab as this trainer (audited, single-use link). */
   async function openAsTrainer(t: Trainer) {
     setOpeningAs(t.id);
+    setActionError("");
     try {
       const res = await fetch("/api/admin/impersonate", {
         method: "POST",
@@ -136,173 +194,337 @@ export default function TrainersPage() {
       if (!res.ok) throw new Error(d.message);
       window.open(d.url, "_blank", "noopener");
     } catch (err) {
-      setError((err as Error).message);
+      setActionError((err as Error).message || "Couldn't open the trainer session. Retry.");
     } finally {
       setOpeningAs("");
     }
   }
 
   const alerts = trainers.filter((t) => t.tamamAlert || t.contractAlert || t.contractExpiring);
+  const { slice, page, pages, setPage, total } = usePagination(trainers);
 
   return (
-    <>
-      {drawerOpen && (
-        <>
-          <div className="fixed inset-0 z-40 bg-[#0D1F0E]/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-          <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-[580px] flex-col bg-white shadow-2xl">
-            <div className="border-b bg-[#0D1F0E] px-6 py-5 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">Trainers</p>
-                  <h2 className="mt-1 text-xl font-bold">{editingTrainer ? "Edit Trainer" : "Add Trainer"}</h2>
-                </div>
-                <button onClick={() => setDrawerOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 hover:bg-white/20"><X className="h-4 w-4" /></button>
-              </div>
-            </div>
-            <form onSubmit={save} className="flex flex-1 flex-col min-h-0">
-              <div className="flex-1 overflow-y-auto space-y-4 p-6">
-                {formError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{formError}</div>}
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Personal Details</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Full name (EN) *</label><input required value={form.fullName} onChange={(e) => set("fullName", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Full name (AR)</label><input dir="rtl" value={form.fullNameAr} onChange={(e) => set("fullNameAr", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Phone *</label><input required value={form.phone} onChange={(e) => set("phone", e.target.value)} className={inp} placeholder="+971..." /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Email</label><input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Emirates ID</label><input value={form.emiratesId} onChange={(e) => set("emiratesId", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Nationality</label><input value={form.nationality} onChange={(e) => set("nationality", e.target.value)} className={inp} /></div>
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 pt-2">Professional</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2"><label className="block text-sm font-bold text-slate-700 mb-1">Specialisation / Subjects</label><input value={form.specialisation} onChange={(e) => set("specialisation", e.target.value)} className={inp} /></div>
-                  <div className="sm:col-span-2"><label className="block text-sm font-bold text-slate-700 mb-1">Qualifications</label><textarea rows={2} value={form.qualifications} onChange={(e) => set("qualifications", e.target.value)} className={inp} /></div>
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 pt-2">Tamam &amp; Contract</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Tamam status</label><select value={form.tamamStatus} onChange={(e) => set("tamamStatus", e.target.value)} className={inp}>{tamamStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Tamam number</label><input value={form.tamamNumber} onChange={(e) => set("tamamNumber", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract status</label><select value={form.contractStatus} onChange={(e) => set("contractStatus", e.target.value)} className={inp}>{contractStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Status</label><select value={form.status} onChange={(e) => set("status", e.target.value)} className={inp}>{trainerStatuses.map((s) => <option key={s}>{s}</option>)}</select></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract start</label><DatePicker value={form.contractStartDate} onChange={(v) => set("contractStartDate", v)} max={form.contractEndDate || undefined} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Contract end</label><DatePicker value={form.contractEndDate} onChange={(v) => set("contractEndDate", v)} min={form.contractStartDate || undefined} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Payment rate (AED)</label><input type="number" min="0" value={form.paymentRate} onChange={(e) => set("paymentRate", e.target.value)} className={inp} /></div>
-                  <div><label className="block text-sm font-bold text-slate-700 mb-1">Payment type</label><select value={form.paymentType} onChange={(e) => set("paymentType", e.target.value)} className={inp}>{paymentTypes.map((p) => <option key={p}>{p}</option>)}</select></div>
-                </div>
-                <div><label className="block text-sm font-bold text-slate-700 mb-1">Notes</label><textarea rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} className={inp} /></div>
-              </div>
-              <div className="flex gap-3 border-t border-slate-200 bg-slate-50 p-5">
-                <button type="button" onClick={() => setDrawerOpen(false)} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
-                <button type="submit" disabled={saving} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {editingTrainer ? "Save Changes" : "Add Trainer"}
-                </button>
-              </div>
-            </form>
-          </aside>
-        </>
+    <div>
+      <PageHeader
+        title="Trainers"
+        subtitle="Trainer profiles, contracts, Tamam status, and payment rates"
+        actions={
+          <Button variant="solid" onClick={openCreate}>
+            <Plus className="h-4 w-4" aria-hidden /> Add Trainer
+          </Button>
+        }
+      />
+
+      {alerts.length > 0 && (
+        <div role="status" className="mb-4 rounded-card border border-caution/30 bg-[var(--lamp-caution-bg)] px-4 py-3">
+          <div className="mb-1.5 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-caution" aria-hidden />
+            <span className="text-xs font-bold uppercase tracking-[0.14em] text-caution">Trainer Alerts</span>
+          </div>
+          <ul className="space-y-0.5">
+            {alerts.map((t) => (
+              <li key={t.id} className="text-xs text-dim">
+                <span className="font-semibold text-ink">{t.fullName}:</span>{" "}
+                {t.tamamAlert && "Tamam registration pending. "}
+                {t.contractAlert && "Contract expired. "}
+                {t.contractExpiring && !t.contractAlert && "Contract expiring within 30 days. "}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-[#2E7D32]">Academy Ops</p>
-              <h1 className="mt-2 text-3xl font-bold text-[#0D1F0E]">Trainers</h1>
-              <p className="mt-2 text-sm text-slate-500">Manage trainer profiles, contracts, Tamam status, and payment rates.</p>
-            </div>
-            <button onClick={openCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#2E7D32] px-5 text-sm font-bold text-white shadow transition hover:bg-[#1B5E20]">
-              <Plus className="h-4 w-4" /> Add Trainer
-            </button>
-          </div>
-        </section>
-
-        {alerts.length > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-            <div className="flex items-center gap-2 text-sm font-bold text-amber-800 mb-2"><AlertTriangle className="h-4 w-4" />Trainer Alerts</div>
-            <div className="space-y-1">
-              {alerts.map((t) => (
-                <p key={t.id} className="text-xs text-amber-700">
-                  <span className="font-semibold">{t.fullName}:</span>{" "}
-                  {t.tamamAlert && "Tamam registration pending. "}
-                  {t.contractAlert && "Contract expired. "}
-                  {t.contractExpiring && !t.contractAlert && "Contract expiring within 30 days. "}
-                </p>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(notice || error) && (
-          <div className="space-y-2">
-            {notice && <div className="flex items-center justify-between rounded-xl border border-green-200 bg-[#E8F5E9] px-4 py-3 text-sm font-semibold text-[#2E7D32]"><span>{notice}</span><button onClick={() => setNotice("")}><X className="h-4 w-4" /></button></div>}
-            {error && <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"><span>{error}</span><button onClick={() => setError("")}><X className="h-4 w-4" /></button></div>}
-          </div>
-        )}
-
-        <div className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <label className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
-            <Search className="h-4 w-4 text-slate-400" />
-            <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search trainers..." />
-          </label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-[#2E7D32]">
-            <option value="all">All statuses</option>
-            {trainerStatuses.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </div>
-
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {loading ? (
-            <div className="flex min-h-60 items-center justify-center gap-3 text-slate-500"><Loader2 className="h-6 w-6 animate-spin text-[#2E7D32]" /><span className="text-sm font-semibold">Loading...</span></div>
-          ) : trainers.length === 0 ? (
-            <div className="flex min-h-60 flex-col items-center justify-center gap-3 text-center">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#E8F5E9] text-[#2E7D32]"><UserCheck className="h-6 w-6" /></div>
-              <p className="text-lg font-bold text-[#0D1F0E]">No trainers yet</p>
-              <button onClick={openCreate} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2E7D32] px-4 text-sm font-bold text-white"><Plus className="h-4 w-4" />Add Trainer</button>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {trainers.map((t) => (
-                <div key={t.id} className={`flex items-start gap-4 px-6 py-4 hover:bg-slate-50 ${t.contractAlert ? "bg-rose-50/30" : t.contractExpiring ? "bg-amber-50/30" : ""}`}>
-                  <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-[#E8F5E9] text-sm font-bold text-[#2E7D32]">
-                    {t.fullName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-bold text-[#0D1F0E]">{t.fullName}</p>
-                      {t.fullNameAr && <p className="text-sm text-slate-500" dir="rtl">{t.fullNameAr}</p>}
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${t.status === "Active" ? "bg-[#E8F5E9] text-[#2E7D32] ring-green-200" : "bg-slate-100 text-slate-600 ring-slate-200"}`}>{t.status}</span>
-                      {t.tamamAlert && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">Tamam Pending</span>}
-                      {t.contractAlert && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-700">Contract Expired</span>}
-                      {t.contractExpiring && !t.contractAlert && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">Contract Expiring</span>}
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-                      <span>{t.phone}</span>
-                      {t.specialisation && <><span>·</span><span>{t.specialisation}</span></>}
-                      {t.paymentRate && <><span>·</span><span>AED {t.paymentRate} / {uiPaymentType(t.paymentType)}</span></>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <a href={(buildWhatsAppUrl(t.phone) ?? "#")} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-green-200 bg-[#E8F5E9] text-[#2E7D32] hover:bg-green-100"><MessageCircle className="h-4 w-4" /></a>
-                    {isAdmin && (
-                      <button
-                        onClick={() => void openAsTrainer(t)}
-                        disabled={openingAs === t.id}
-                        title={`Open the CRM as ${t.fullName} in a new tab`}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 disabled:opacity-50"
-                      >
-                        {openingAs === t.id
-                          ? <Loader2 className="h-4 w-4 animate-spin" />
-                          : <LogIn className="h-4 w-4" />}
-                      </button>
-                    )}
-                    <button onClick={() => openEdit(t)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32]"><Edit3 className="h-4 w-4" /></button>
-                    <button onClick={() => void deleteTrainer(t)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                </div>
-              ))}
+      {(notice || actionError) && (
+        <div className="mb-4 space-y-2">
+          {notice && (
+            <div role="status" className="flex items-center justify-between gap-2 rounded-ctl border border-phos/30 bg-[var(--lamp-ok-bg)] px-4 py-2 text-sm font-semibold text-phos">
+              <span>{notice}</span>
+              <Button variant="ghost" size="iconSm" onClick={() => setNotice("")} aria-label="Dismiss message">
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
-        </section>
+          {actionError && (
+            <div role="alert" className="flex items-center justify-between gap-2 rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-2 text-sm font-semibold text-alert">
+              <span>{actionError}</span>
+              <Button variant="ghost" size="iconSm" onClick={() => setActionError("")} aria-label="Dismiss error">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <SearchInput
+          className="w-full sm:w-72"
+          placeholder="Search trainers"
+          aria-label="Search trainers"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select
+          className="w-44"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
+        >
+          <option value="all">All Statuses</option>
+          {trainerStatuses.map((s) => <option key={s}>{s}</option>)}
+        </Select>
       </div>
-    </>
+
+      {loadError ? (
+        <LoadError message={loadError} onRetry={() => void load()} />
+      ) : (
+        <TableShell>
+          {loading ? (
+            <SkeletonRows rows={6} cols={6} />
+          ) : trainers.length === 0 ? (
+            <EmptyState
+              icon={UserCheck}
+              title="No trainers found"
+              description={
+                debouncedSearch.trim() || statusFilter !== "all"
+                  ? "No trainers match the current filters. Clear them to see everyone."
+                  : "Add the first trainer profile to get started."
+              }
+              action={
+                <Button variant="primary" onClick={openCreate}>
+                  <Plus className="h-4 w-4" aria-hidden /> Add Trainer
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <THead>
+                  <tr>
+                    <Th>Trainer</Th>
+                    <Th>Phone</Th>
+                    <Th>Specialisation</Th>
+                    <Th numeric>Rate</Th>
+                    <Th>Status</Th>
+                    <Th className="text-right"><span className="sr-only">Actions</span></Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {slice.map((t) => (
+                    <Tr key={t.id} clickable onClick={() => openEdit(t)}>
+                      <Td>
+                        <div className="flex items-center gap-3">
+                          <span
+                            aria-hidden
+                            className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full border border-bezel bg-well text-xs font-bold text-dim"
+                          >
+                            {getInitials(t.fullName)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-semibold">{t.fullName}</p>
+                            {t.fullNameAr && (
+                              <p className="truncate text-xs text-dim" dir="rtl">{t.fullNameAr}</p>
+                            )}
+                          </div>
+                        </div>
+                      </Td>
+                      <Td><span className="readout text-xs" data-numeric>{t.phone}</span></Td>
+                      <Td className="text-dim">
+                        <span className="block max-w-[16rem] truncate" title={t.specialisation || undefined}>
+                          {t.specialisation || "—"}
+                        </span>
+                      </Td>
+                      <Td numeric>
+                        {t.paymentRate ? (
+                          <>
+                            {formatCurrency(t.paymentRate)}
+                            <span className="block text-[11px] text-faint">{uiPaymentType(t.paymentType)}</span>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </Td>
+                      <Td>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <StatusBadge status={t.status} />
+                          {t.tamamAlert && <Lamp variant="caution">Tamam Pending</Lamp>}
+                          {t.contractAlert && <Lamp variant="alert">Contract Expired</Lamp>}
+                          {t.contractExpiring && !t.contractAlert && <Lamp variant="caution">Contract Expiring</Lamp>}
+                        </div>
+                      </Td>
+                      <Td className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <a
+                            href={buildWhatsAppUrl(t.phone) ?? "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Open WhatsApp chat with ${t.fullName}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-ctl border border-transparent text-phos transition-colors hover:bg-well"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                          </a>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="iconSm"
+                              disabled={openingAs === t.id}
+                              title={`Open the CRM as ${t.fullName} in a new tab`}
+                              aria-label={`Open the CRM as ${t.fullName} in a new tab`}
+                              className="text-caution hover:text-caution"
+                              onClick={(e) => { e.stopPropagation(); void openAsTrainer(t); }}
+                            >
+                              {openingAs === t.id ? <Spinner className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            aria-label={`Edit ${t.fullName}`}
+                            onClick={(e) => { e.stopPropagation(); openEdit(t); }}
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            className="text-alert hover:text-alert"
+                            aria-label={`Delete ${t.fullName}`}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDelete(t); }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+              <TableFooter>
+                <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+              </TableFooter>
+            </>
+          )}
+        </TableShell>
+      )}
+
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={editingTrainer ? "Edit Trainer" : "Add Trainer"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="solid" type="submit" form="trainer-form" disabled={saving}>
+              {saving && <Spinner className="h-3.5 w-3.5" />}
+              {editingTrainer ? "Save Changes" : "Add Trainer"}
+            </Button>
+          </>
+        }
+      >
+        <form id="trainer-form" onSubmit={save} noValidate className="space-y-4">
+          {formError && (
+            <div role="alert" className="rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-3 text-sm font-semibold text-alert">
+              {formError}
+            </div>
+          )}
+
+          <p className="placard">Personal Details</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Full Name (EN)" required error={fieldErrors.fullName} htmlFor="trainer-name">
+              <Input
+                id="trainer-name"
+                value={form.fullName}
+                aria-invalid={fieldErrors.fullName ? true : undefined}
+                onChange={(e) => set("fullName", e.target.value)}
+              />
+            </Field>
+            <Field label="Full Name (AR)" htmlFor="trainer-name-ar">
+              <Input id="trainer-name-ar" dir="rtl" value={form.fullNameAr} onChange={(e) => set("fullNameAr", e.target.value)} />
+            </Field>
+            <Field label="Phone" required error={fieldErrors.phone} htmlFor="trainer-phone">
+              <Input
+                id="trainer-phone"
+                value={form.phone}
+                aria-invalid={fieldErrors.phone ? true : undefined}
+                onChange={(e) => set("phone", e.target.value)}
+                placeholder="+971..."
+              />
+            </Field>
+            <Field label="Email" htmlFor="trainer-email">
+              <Input id="trainer-email" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+            </Field>
+            <Field label="Emirates ID" htmlFor="trainer-eid">
+              <Input id="trainer-eid" value={form.emiratesId} onChange={(e) => set("emiratesId", e.target.value)} />
+            </Field>
+            <Field label="Nationality" htmlFor="trainer-nationality">
+              <Input id="trainer-nationality" value={form.nationality} onChange={(e) => set("nationality", e.target.value)} />
+            </Field>
+          </div>
+
+          <p className="placard pt-2">Professional</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Specialisation / Subjects" htmlFor="trainer-spec" className="sm:col-span-2">
+              <Input id="trainer-spec" value={form.specialisation} onChange={(e) => set("specialisation", e.target.value)} />
+            </Field>
+            <Field label="Qualifications" htmlFor="trainer-qual" className="sm:col-span-2">
+              <Textarea id="trainer-qual" rows={2} value={form.qualifications} onChange={(e) => set("qualifications", e.target.value)} />
+            </Field>
+          </div>
+
+          <p className="placard pt-2">Tamam &amp; Contract</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Tamam Status" htmlFor="trainer-tamam">
+              <Select id="trainer-tamam" value={form.tamamStatus} onChange={(e) => set("tamamStatus", e.target.value)}>
+                {tamamStatuses.map((s) => <option key={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="Tamam Number" htmlFor="trainer-tamam-no">
+              <Input id="trainer-tamam-no" value={form.tamamNumber} onChange={(e) => set("tamamNumber", e.target.value)} />
+            </Field>
+            <Field label="Contract Status" htmlFor="trainer-contract">
+              <Select id="trainer-contract" value={form.contractStatus} onChange={(e) => set("contractStatus", e.target.value)}>
+                {contractStatuses.map((s) => <option key={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="Status" htmlFor="trainer-status">
+              <Select id="trainer-status" value={form.status} onChange={(e) => set("status", e.target.value)}>
+                {trainerStatuses.map((s) => <option key={s}>{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="Contract Start">
+              <DatePicker value={form.contractStartDate} onChange={(v) => set("contractStartDate", v)} max={form.contractEndDate || undefined} />
+            </Field>
+            <Field label="Contract End">
+              <DatePicker value={form.contractEndDate} onChange={(v) => set("contractEndDate", v)} min={form.contractStartDate || undefined} />
+            </Field>
+            <Field label="Payment Rate (AED)" htmlFor="trainer-rate">
+              <Input id="trainer-rate" type="number" min="0" value={form.paymentRate} onChange={(e) => set("paymentRate", e.target.value)} />
+            </Field>
+            <Field label="Payment Type" htmlFor="trainer-pay-type">
+              <Select id="trainer-pay-type" value={form.paymentType} onChange={(e) => set("paymentType", e.target.value)}>
+                {paymentTypes.map((p) => <option key={p}>{p}</option>)}
+              </Select>
+            </Field>
+          </div>
+
+          <Field label="Notes" htmlFor="trainer-notes">
+            <Textarea id="trainer-notes" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+          </Field>
+        </form>
+      </Drawer>
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onClose={() => { if (!deleting) setConfirmDelete(null); }}
+        onConfirm={() => { if (confirmDelete) void deleteTrainer(confirmDelete); }}
+        title="Delete Trainer"
+        message={confirmDelete ? `Delete trainer ${confirmDelete.fullName}? This cannot be undone.` : ""}
+        confirmLabel="Delete"
+        busy={deleting}
+      />
+    </div>
   );
 }

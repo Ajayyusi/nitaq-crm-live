@@ -29,6 +29,15 @@ import { Instrument } from "@/components/ui/instrument";
 import { Lamp } from "@/components/ui/lamp";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import StatusBadge from "@/components/shared/StatusBadge";
+import { buttonVariants } from "@/components/ui/button";
+import { Table, THead, Th, Tr, Td } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+
+const solidAction = cn(buttonVariants({ variant: "solid" }));
+const quietAction = cn(
+  buttonVariants({ variant: "ghost" }),
+  "border border-bezel-strong text-dim hover:border-phos hover:bg-transparent hover:text-phos"
+);
 
 // ── Role helpers ─────────────────────────────────────────────────────────────
 const FINANCE_ROLES = new Set(["admin", "manager", "finance"]);
@@ -364,26 +373,17 @@ export default async function DashboardPage({
             </Suspense>
           )}
           {data.showSales && (
-            <Link
-              href="/leads"
-              className="inline-flex h-9 items-center gap-2 rounded-ctl border border-transparent bg-phos px-4 text-xs font-bold uppercase tracking-[0.08em] text-phos-ink shadow-glow transition hover:bg-phos-bright"
-            >
+            <Link href="/leads" className={solidAction}>
               <Plus className="h-4 w-4" /> Add Lead
             </Link>
           )}
           {data.showFinance && !data.showSales && (
-            <Link
-              href="/payments"
-              className="inline-flex h-9 items-center gap-2 rounded-ctl border border-transparent bg-phos px-4 text-xs font-bold uppercase tracking-[0.08em] text-phos-ink shadow-glow transition hover:bg-phos-bright"
-            >
+            <Link href="/payments" className={solidAction}>
               <CircleDollarSign className="h-4 w-4" /> Record Payment
             </Link>
           )}
           {role === "trainer" && (
-            <Link
-              href="/classes"
-              className="inline-flex h-9 items-center gap-2 rounded-ctl border border-transparent bg-phos px-4 text-xs font-bold uppercase tracking-[0.08em] text-phos-ink shadow-glow transition hover:bg-phos-bright"
-            >
+            <Link href="/classes" className={solidAction}>
               <CalendarDays className="h-4 w-4" /> My Classes
             </Link>
           )}
@@ -558,44 +558,44 @@ export default async function DashboardPage({
             </Link>
           </CardHeader>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-well">
+            <Table>
+              <THead>
                 <tr>
-                  <th className="placard border-b border-bezel px-4 py-2.5 text-left first:pl-5">Sales Rep</th>
-                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Total</th>
-                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Interested</th>
-                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Converted</th>
-                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Overdue</th>
-                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Done%</th>
-                  <th className="placard border-b border-bezel px-3 py-2.5 pr-5 text-right">Conv%</th>
+                  <Th>Sales Rep</Th>
+                  <Th numeric>Total</Th>
+                  <Th numeric>Interested</Th>
+                  <Th numeric>Converted</Th>
+                  <Th numeric>Overdue</Th>
+                  <Th numeric>Done%</Th>
+                  <Th numeric>Conv%</Th>
                 </tr>
-              </thead>
+              </THead>
               <tbody>
                 {data.salesPerformance.map((s) => {
                   const rate = s.total > 0 ? Math.round((s.converted / s.total) * 100) : 0;
                   const donePct = s.fuTotal > 0 ? Math.round((s.fuDone / s.fuTotal) * 100) : null;
                   return (
-                    <tr key={s.name} className="border-b border-bezel/60 transition last:border-0 hover:bg-well">
-                      <td className="px-4 py-3 pl-5 text-sm font-semibold text-ink">{s.name}</td>
-                      <td className="readout px-3 py-3 text-right" data-numeric>{s.total}</td>
-                      <td className="readout px-3 py-3 text-right text-advisory" data-numeric>{s.interested}</td>
-                      <td className="readout px-3 py-3 text-right text-phos" data-numeric>{s.converted}</td>
-                      <td className={`readout px-3 py-3 text-right ${s.overdue > 0 ? "text-alert" : "text-faint"}`} data-numeric>{s.overdue}</td>
-                      <td className="px-3 py-3 text-right">
+                    <Tr key={s.name}>
+                      <Td className="font-semibold">{s.name}</Td>
+                      <Td numeric>{s.total}</Td>
+                      <Td numeric className="text-advisory">{s.interested}</Td>
+                      <Td numeric className="text-phos">{s.converted}</Td>
+                      <Td numeric className={s.overdue > 0 ? "text-alert" : "text-faint"}>{s.overdue}</Td>
+                      <Td numeric>
                         {donePct === null ? (
                           <span className="text-xs text-faint">—</span>
                         ) : (
                           <Lamp variant={donePct >= 70 ? "ok" : donePct >= 40 ? "caution" : "alert"}>{donePct}%</Lamp>
                         )}
-                      </td>
-                      <td className="px-3 py-3 pr-5 text-right">
+                      </Td>
+                      <Td numeric>
                         <Lamp variant={rate >= 20 ? "ok" : rate >= 10 ? "caution" : "off"}>{rate}%</Lamp>
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   );
                 })}
               </tbody>
-            </table>
+            </Table>
           </div>
         </Card>
       )}
@@ -614,43 +614,37 @@ export default async function DashboardPage({
               </Link>
             </CardHeader>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-well">
+              <Table>
+                <THead>
                   <tr>
-                    <th className="placard border-b border-bezel px-4 py-2.5 pl-5 text-left">Student</th>
-                    <th className="placard border-b border-bezel px-3 py-2.5 text-left">Course</th>
-                    <th className="placard border-b border-bezel px-3 py-2.5 text-left">Status</th>
-                    {data.showFinance && (
-                      <th className="placard border-b border-bezel px-4 py-2.5 pr-5 text-right">Paid</th>
-                    )}
+                    <Th>Student</Th>
+                    <Th>Course</Th>
+                    <Th>Status</Th>
+                    {data.showFinance && <Th numeric>Paid</Th>}
                   </tr>
-                </thead>
+                </THead>
                 <tbody>
                   {data.recentEnrollments.map((e) => (
-                    <tr key={e.id} className="border-b border-bezel/60 transition last:border-0 hover:bg-well">
-                      <td className="px-4 py-3 pl-5">
+                    <Tr key={e.id}>
+                      <Td>
                         <p className="text-sm font-semibold text-ink">{e.fullName}</p>
                         <p className="readout text-[11px] text-faint" data-numeric>{e.enrollmentId}</p>
-                      </td>
-                      <td className="max-w-[160px] px-3 py-3">
-                        <p className="truncate text-sm text-dim">{e.course}</p>
-                      </td>
-                      <td className="px-3 py-3">
+                      </Td>
+                      <Td className="max-w-[160px]">
+                        <p className="truncate text-sm text-dim" title={e.course}>{e.course}</p>
+                      </Td>
+                      <Td>
                         <StatusBadge status={e.status} />
-                      </td>
+                      </Td>
                       {data.showFinance && (
-                        <td className="px-4 py-3 pr-5 text-right">
-                          <p className="readout text-sm font-bold text-ink" data-numeric>
-                            AED {e.amountPaid.toLocaleString()}
-                          </p>
+                        <Td numeric>
+                          <p className="text-sm font-bold text-ink">AED {e.amountPaid.toLocaleString()}</p>
                           {e.amountPaid < e.totalFee && (
-                            <p className="readout text-[11px] text-faint" data-numeric>
-                              of {e.totalFee.toLocaleString()}
-                            </p>
+                            <p className="text-[11px] text-faint">of {e.totalFee.toLocaleString()}</p>
                           )}
-                        </td>
+                        </Td>
                       )}
-                    </tr>
+                    </Tr>
                   ))}
                   {data.recentEnrollments.length === 0 && (
                     <tr>
@@ -661,7 +655,7 @@ export default async function DashboardPage({
                     </tr>
                   )}
                 </tbody>
-              </table>
+              </Table>
             </div>
           </Card>
         )}
@@ -735,41 +729,40 @@ export default async function DashboardPage({
         </Card>
       </section>
 
-      {/* ── Quick actions — quiet utility row ────────────────────────────── */}
+      {/* ── Quick actions — quiet utility row (no duplicates of the command strip) ── */}
       <section className="flex flex-wrap gap-2">
         {data.showSales && (
           <>
-            <Link href="/leads" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
-              <Plus className="h-4 w-4" /> Add Lead
-            </Link>
-            <Link href="/follow-ups" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+            <Link href="/follow-ups" className={quietAction}>
               <BellRing className="h-4 w-4" /> Follow-Ups
             </Link>
-            <Link href="/enrollments" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+            <Link href="/enrollments" className={quietAction}>
               <GraduationCap className="h-4 w-4" /> Enroll Student
             </Link>
           </>
         )}
+        {data.showFinance && data.showSales && (
+          <Link href="/payments" className={quietAction}>
+            <CircleDollarSign className="h-4 w-4" /> Record Payment
+          </Link>
+        )}
         {data.showFinance && (
           <>
-            <Link href="/payments" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
-              <CircleDollarSign className="h-4 w-4" /> Record Payment
-            </Link>
-            <Link href="/expenses" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+            <Link href="/expenses" className={quietAction}>
               <HandCoins className="h-4 w-4" /> Add Expense
             </Link>
-            <Link href="/reports" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+            <Link href="/reports" className={quietAction}>
               <BarChart3 className="h-4 w-4" /> Reports
             </Link>
           </>
         )}
-        {data.showClasses && (
-          <Link href="/classes" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+        {data.showClasses && role !== "trainer" && (
+          <Link href="/classes" className={quietAction}>
             <CalendarDays className="h-4 w-4" /> Attendance
           </Link>
         )}
         {can(role, new Set(["admin", "manager", "sales", "finance"])) && (
-          <Link href="/import-export" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+          <Link href="/import-export" className={quietAction}>
             <ArrowUpDown className="h-4 w-4" /> Import / Export
           </Link>
         )}

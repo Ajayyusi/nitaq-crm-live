@@ -1,50 +1,59 @@
-import { cn } from "@/lib/utils";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Instrument } from "@/components/ui/instrument";
 
 interface KPICardProps {
   title: string;
   value: string | number;
   subtitle?: string;
   icon: LucideIcon;
+  /** Legacy prop, kept for API compatibility — the instrument face ignores it. */
   iconColor?: string;
+  /** Legacy prop, kept for API compatibility — the instrument face ignores it. */
   iconBg?: string;
   trend?: { value: number; label: string };
   className?: string;
 }
 
+/**
+ * KPI stat card — a thin wrapper over the Instrument primitive.
+ * Same prop API as the legacy card; renders as a six-pack instrument:
+ * mono readout, engraved placard label, icon riding the top-right corner.
+ */
 export default function KPICard({
   title,
   value,
   subtitle,
   icon: Icon,
-  iconColor = "text-blue-600",
-  iconBg = "bg-blue-50",
   trend,
   className,
 }: KPICardProps) {
   return (
-    <div className={cn("bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition-shadow", className)}>
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{title}</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1 leading-none">{value}</p>
-          {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
-          {trend && (
-            <div className={cn("flex items-center gap-1 mt-2 text-xs font-medium",
-              trend.value >= 0 ? "text-green-600" : "text-red-500"
-            )}>
-              {trend.value >= 0
-                ? <TrendingUp className="w-3 h-3" />
-                : <TrendingDown className="w-3 h-3" />
-              }
-              <span>{Math.abs(trend.value)}% {trend.label}</span>
-            </div>
+    <Instrument
+      label={title}
+      value={value}
+      sub={subtitle}
+      className={className}
+      corner={<Icon className="h-4 w-4 shrink-0 text-faint" aria-hidden />}
+    >
+      {trend && (
+        <p
+          className={cn(
+            "mt-1 flex items-center gap-1 text-xs font-semibold",
+            trend.value >= 0 ? "text-phos" : "text-alert"
           )}
-        </div>
-        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", iconBg)}>
-          <Icon className={cn("w-5 h-5", iconColor)} />
-        </div>
-      </div>
-    </div>
+        >
+          {trend.value >= 0 ? (
+            <TrendingUp className="h-3 w-3" aria-hidden />
+          ) : (
+            <TrendingDown className="h-3 w-3" aria-hidden />
+          )}
+          <span className="readout" data-numeric>
+            {Math.abs(trend.value)}%
+          </span>
+          <span className="font-medium text-dim">{trend.label}</span>
+        </p>
+      )}
+    </Instrument>
   );
 }

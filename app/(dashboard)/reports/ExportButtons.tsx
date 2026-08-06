@@ -2,6 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { Download, Printer } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /** Download the report as Excel-compatible CSV, or print → save as PDF. */
 export default function ExportButtons() {
@@ -16,16 +18,13 @@ export default function ExportButtons() {
     <div className="flex gap-2 print:hidden">
       <a
         href={`/api/reports/export?${qs.toString()}`}
-        className="flex items-center gap-1.5 rounded-lg border border-[#2E7D32] px-3 py-1.5 text-xs font-semibold text-[#2E7D32] transition hover:bg-[#E8F5E9] dark:text-green-400 dark:hover:bg-green-900/20"
+        className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
       >
-        <Download className="h-3.5 w-3.5" /> Excel / CSV
+        <Download className="h-3.5 w-3.5" aria-hidden /> Excel / CSV
       </a>
-      <button
-        onClick={() => window.print()}
-        className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1B5E20]"
-      >
-        <Printer className="h-3.5 w-3.5" /> PDF / Print
-      </button>
+      <Button variant="primary" size="sm" onClick={() => window.print()}>
+        <Printer className="h-3.5 w-3.5" aria-hidden /> PDF / Print
+      </Button>
     </div>
   );
 }

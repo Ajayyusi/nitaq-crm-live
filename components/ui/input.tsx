@@ -25,7 +25,7 @@ Textarea.displayName = "Textarea";
 
 const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
   ({ className, children, ...props }, ref) => (
-    <select ref={ref} className={cn(inputBase, "h-9 appearance-none pr-8", className)} {...props}>
+    <select ref={ref} className={cn(inputBase, "h-9 appearance-none pe-8", className)} {...props}>
       {children}
     </select>
   )
@@ -89,8 +89,8 @@ const SearchInput = React.forwardRef<
   React.InputHTMLAttributes<HTMLInputElement>
 >(({ className, ...props }, ref) => (
   <div className={cn("relative", className)}>
-    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
-    <input ref={ref} type="search" className={cn(inputBase, "h-9 pl-9")} {...props} />
+    <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
+    <input ref={ref} type="search" className={cn(inputBase, "h-9 ps-9")} {...props} />
   </div>
 ));
 SearchInput.displayName = "SearchInput";

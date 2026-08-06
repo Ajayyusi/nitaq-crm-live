@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import {
-  Plus, CreditCard, DollarSign, Clock, AlertCircle,
-  X, ChevronDown, Trash2,
-} from "lucide-react";
+import { Plus, CreditCard, Pencil, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
+import StatusBadge from "@/components/shared/StatusBadge";
 import DatePicker from "@/components/shared/DatePicker";
 import DateRangePicker from "@/components/shared/DateRangePicker";
+import { Button } from "@/components/ui/button";
+import { Input, Textarea, Select, Field, SearchInput } from "@/components/ui/input";
+import { Drawer, ConfirmDialog } from "@/components/ui/dialog";
+import {
+  TableShell, Table, THead, Th, Tr, Td, TableFooter, usePagination, Pagination,
+} from "@/components/ui/table";
+import { Instrument, InstrumentRow } from "@/components/ui/instrument";
+import { SkeletonRows, LoadError } from "@/components/ui/feedback";
 import { courseList } from "@/constants/leads";
 import {
   paymentMethods, paymentTypes, txStatuses,
@@ -35,39 +41,14 @@ const today = new Date().toISOString().slice(0, 10);
 const fmt = (n: number) =>
   "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const methodConfig: Record<string, string> = {
-  "Bank Transfer": "bg-blue-100 text-blue-700",
-  "Cash": "bg-emerald-100 text-emerald-700",
-  "Card": "bg-purple-100 text-purple-700",
-  "Cheque": "bg-amber-100 text-amber-700",
-  "Online": "bg-teal-100 text-teal-700",
-};
-
-const statusConfig: Record<string, string> = {
-  "Received": "bg-[#E8F5E9] text-[#1B5E20]",
-  "Pending": "bg-amber-50 text-amber-700",
-  "Overdue": "bg-red-50 text-red-700",
-  "Refunded": "bg-slate-100 text-slate-500",
-};
-
-const typeConfig: Record<string, string> = {
-  "Full Payment": "bg-[#E8F5E9] text-[#2E7D32]",
-  "Instalment 1 of 2": "bg-teal-50 text-teal-700",
-  "Instalment 2 of 2": "bg-cyan-50 text-cyan-700",
-  "Deposit": "bg-indigo-50 text-indigo-700",
-  "Refund": "bg-red-50 text-red-700",
-};
-
-const cls =
-  "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E7D32] bg-white";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
-      {children}
-    </div>
-  );
+/** Debounce a changing value; used so typing doesn't fire a fetch per keystroke. */
+function useDebouncedValue<T>(value: T, delay = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
 }
 
 const BLANK = {
@@ -78,31 +59,45 @@ const BLANK = {
   installmentNumber: "", totalInstallments: "",
 };
 
+type FieldErrors = { studentName?: string; amount?: string };
+
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [statusFilter, setStatusFilter] = useState("All");
   const [methodFilter, setMethodFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [dateFrom, setDateFrom] = useState(() => thisMonthRange().from);
   const [dateTo, setDateTo] = useState(() => thisMonthRange().to);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Payment | null>(null);
   const [form, setForm] = useState({ ...BLANK });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalPending, setTotalPending] = useState(0);
-  const [expandEnrolment, setExpandEnrolment] = useState(false);
+
+  // Honor deep links like /payments?status=Overdue (sent from notifications).
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("status");
+    if (s && (txStatuses as readonly string[]).includes(s)) setStatusFilter(s);
+  }, []);
 
   const fetchPayments = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "All") params.set("status", statusFilter);
       if (methodFilter !== "All") params.set("method", methodFilter);
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       if (dateFrom) params.set("from", dateFrom);
       if (dateTo) params.set("to", dateTo);
       const res = await fetch(`/api/payments?${params}`);
@@ -111,12 +106,12 @@ export default function PaymentsPage() {
       setTotalRevenue(data.totalRevenue ?? 0);
       setTotalPending(data.totalPending ?? 0);
     } catch {
-      setError("Could not load payments. Please check your connection.");
+      setLoadFailed(true);
       setPayments([]);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, methodFilter, search, dateFrom, dateTo]);
+  }, [statusFilter, methodFilter, debouncedSearch, dateFrom, dateTo]);
 
   const fetchEnrollments = useCallback(async () => {
     try {
@@ -134,7 +129,8 @@ export default function PaymentsPage() {
   function openNew() {
     setEditTarget(null);
     setForm({ ...BLANK });
-    setError("");
+    setFormError("");
+    setFieldErrors({});
     setDrawerOpen(true);
   }
 
@@ -150,7 +146,8 @@ export default function PaymentsPage() {
       installmentNumber: p.installmentNumber != null ? String(p.installmentNumber) : "",
       totalInstallments: p.totalInstallments != null ? String(p.totalInstallments) : "",
     });
-    setError("");
+    setFormError("");
+    setFieldErrors({});
     setDrawerOpen(true);
   }
 
@@ -168,13 +165,17 @@ export default function PaymentsPage() {
       amount: String(e.balanceDue > 0 ? e.balanceDue : e.totalFee),
       installmentNumber: String(existingCount + 1),
     }));
+    setFieldErrors({});
   }
 
   async function save() {
-    if (!form.studentName.trim()) { setError("Student name is required."); return; }
-    if (!form.amount || Number(form.amount) <= 0) { setError("Amount must be greater than 0."); return; }
+    const errors: FieldErrors = {};
+    if (!form.studentName.trim()) errors.studentName = "Enter the student's name.";
+    if (!form.amount || Number(form.amount) <= 0) errors.amount = "Enter an amount greater than 0.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSaving(true);
-    setError("");
+    setFormError("");
     const payload = {
       studentName: form.studentName,
       studentPhone: form.studentPhone,
@@ -204,432 +205,444 @@ export default function PaymentsPage() {
       setDrawerOpen(false);
       fetchPayments();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save payment.");
+      setFormError(e instanceof Error ? e.message : "Couldn't save this receipt. Check the details and try again.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function deletePayment(p: Payment) {
-    if (!confirm(`Delete payment ${p.paymentId} (${p.studentName})? This will permanently remove this financial record and cannot be undone.`)) return;
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
     try {
-      await fetch(`/api/payments/${p.id}`, { method: "DELETE" });
+      await fetch(`/api/payments/${deleteTarget.id}`, { method: "DELETE" });
+      setDeleteTarget(null);
       void fetchPayments();
     } catch {
-      setError("Failed to delete payment.");
+      setDeleteError("Couldn't delete this receipt. Check your connection and try again.");
+    } finally {
+      setDeleting(false);
     }
   }
 
   const overdue = payments.filter((p) => p.status === "Overdue");
   const periodLabel = describeRange(dateFrom, dateTo);
+  const { slice, page, pages, setPage, total } = usePagination(payments, 50);
+
+  const enr = form.enrollmentId ? enrollments.find((e) => e.id === form.enrollmentId) : undefined;
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div>
       <PageHeader
         title="Receipts"
         subtitle="Receipts from students — income, instalments and overdue balances"
         actions={
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 px-4 py-2 bg-[#2E7D32] text-white text-sm font-medium rounded-lg hover:bg-[#1B5E20] transition"
-          >
-            <Plus className="w-4 h-4" /> Record Receipt
-          </button>
+          <Button variant="solid" onClick={openNew}>
+            <Plus className="h-4 w-4" aria-hidden /> Record Receipt
+          </Button>
         }
       />
 
-      {/* Overdue alert */}
-      {overdue.length > 0 && (
-        <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-red-700">
-            <span className="font-semibold">{overdue.length} overdue payment{overdue.length > 1 ? "s" : ""}:</span>{" "}
-            {overdue.slice(0, 3).map((p) => p.studentName).join(", ")}
-            {overdue.length > 3 && ` +${overdue.length - 3} more`}
+      <div className="space-y-4">
+        {/* Overdue annunciator */}
+        {overdue.length > 0 && (
+          <div
+            role="status"
+            className="flex items-start gap-3 rounded-card border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-3"
+          >
+            <span className="mt-0.5 h-2 w-2 flex-shrink-0 animate-pulse rounded-lamp bg-alert" aria-hidden />
+            <p className="text-sm text-ink">
+              <span className="font-bold text-alert">
+                {overdue.length} overdue receipt{overdue.length > 1 ? "s" : ""}:
+              </span>{" "}
+              {overdue.slice(0, 3).map((p) => p.studentName).join(", ")}
+              {overdue.length > 3 && ` +${overdue.length - 3} more`}
+            </p>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* KPI cards */}
-      <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { icon: DollarSign, label: `Received (${periodLabel})`, value: fmt(totalRevenue), cls: "text-[#2E7D32]" },
-          { icon: Clock, label: "Pending / Overdue", value: fmt(totalPending), cls: "text-amber-600" },
-          { icon: AlertCircle, label: "Overdue Records", value: String(overdue.length), cls: "text-red-600" },
-          { icon: CreditCard, label: "Total Records", value: String(payments.length), cls: "text-slate-700" },
-        ].map((k) => (
-          <div key={k.label} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#E8F5E9] flex items-center justify-center">
-              <k.icon className={`w-4 h-4 ${k.cls}`} />
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-500 font-medium">{k.label}</p>
-              <p className={`text-sm font-bold ${k.cls}`}>{k.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="px-6 pb-3 flex flex-wrap gap-3 items-center">
-        <DateRangePicker
-          from={dateFrom}
-          to={dateTo}
-          onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
-        />
-        <input
-          type="search"
-          placeholder="Search name, ID, receipt…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
-        >
-          <option value="All">All Statuses</option>
-          {txStatuses.map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select
-          value={methodFilter}
-          onChange={(e) => setMethodFilter(e.target.value)}
-          className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2E7D32]"
-        >
-          <option value="All">All Methods</option>
-          {paymentMethods.map((m) => <option key={m}>{m}</option>)}
-        </select>
-      </div>
-
-      {/* Table */}
-      <div className="flex-1 px-6 pb-8 overflow-auto">
-        {loading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
-            ))}
-          </div>
-        ) : payments.length === 0 ? (
-          <EmptyState
-            icon={CreditCard}
-            title="No receipts found"
-            description="Record your first payment to start tracking revenue."
-            action={
-              <button onClick={openNew} className="px-4 py-2 bg-[#2E7D32] text-white text-sm rounded-lg">
-                Record Receipt
-              </button>
-            }
+        {/* Instruments */}
+        <InstrumentRow className="xl:grid-cols-4">
+          <Instrument label={`Received (${periodLabel})`} value={fmt(totalRevenue)} tone="phos" />
+          <Instrument label="Pending / Overdue" value={fmt(totalPending)} tone="caution" sub="Not yet collected" />
+          <Instrument
+            label="Overdue Records"
+            value={overdue.length}
+            tone={overdue.length > 0 ? "alert" : "ink"}
+            sub="In current view"
           />
+          <Instrument label="Total Records" value={payments.length} sub="In current view" />
+        </InstrumentRow>
+
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker
+            from={dateFrom}
+            to={dateTo}
+            onChange={(f, t) => { setDateFrom(f); setDateTo(t); }}
+          />
+          <SearchInput
+            placeholder="Search name, ID, receipt…"
+            aria-label="Search receipts"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="min-w-[200px] flex-1"
+          />
+          <Select
+            aria-label="Filter by status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-auto"
+          >
+            <option value="All">All Statuses</option>
+            {txStatuses.map((s) => <option key={s}>{s}</option>)}
+          </Select>
+          <Select
+            aria-label="Filter by method"
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
+            className="w-auto"
+          >
+            <option value="All">All Methods</option>
+            {paymentMethods.map((m) => <option key={m}>{m}</option>)}
+          </Select>
+        </div>
+
+        {/* Table */}
+        {loadFailed ? (
+          <LoadError
+            message="Couldn't load receipts. Check your connection and retry."
+            onRetry={fetchPayments}
+          />
+        ) : loading ? (
+          <TableShell>
+            <SkeletonRows rows={6} cols={7} />
+          </TableShell>
+        ) : payments.length === 0 ? (
+          <TableShell>
+            <EmptyState
+              icon={CreditCard}
+              title="No receipts found"
+              description="No receipts match the current filters. Record one to start tracking income."
+              action={
+                <Button variant="primary" onClick={openNew}>
+                  <Plus className="h-4 w-4" aria-hidden /> Record Receipt
+                </Button>
+              }
+            />
+          </TableShell>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-            <table className="w-full min-w-[800px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
-                  {["ID", "Student", "Course", "Amount", "Type / Inst", "Method", "Status", "Date", ""].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
+          <TableShell>
+            <Table className="min-w-[820px]">
+              <THead>
+                <tr>
+                  <Th>ID</Th>
+                  <Th>Student</Th>
+                  <Th>Course</Th>
+                  <Th numeric>Amount</Th>
+                  <Th>Type / Inst</Th>
+                  <Th>Method</Th>
+                  <Th>Status</Th>
+                  <Th>Date</Th>
+                  <Th><span className="sr-only">Actions</span></Th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {payments.map((p) => {
-                  const isOverdue = p.status === "Overdue";
-                  const isPending = p.status === "Pending";
-                  return (
-                    <tr
-                      key={p.id}
-                      className={`hover:bg-[#E8F5E9]/30 transition-colors cursor-pointer ${isOverdue ? "bg-red-50/50" : isPending ? "bg-amber-50/30" : ""}`}
-                      onClick={() => openEdit(p)}
-                    >
-                      <td className="px-4 py-3 text-xs font-mono text-slate-400">{p.paymentId}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-[#0D1F0E]">{p.studentName}</div>
-                        {p.studentPhone && (
-                          <div className="text-xs text-slate-400">{p.studentPhone}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 max-w-[160px] truncate">{p.course || "—"}</td>
-                      <td className="px-4 py-3 font-semibold text-[#1B5E20] whitespace-nowrap">
-                        {fmt(p.amount)}
-                        {p.paymentType === "Refund" && <span className="text-red-500 text-xs ml-1">(refund)</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${typeConfig[p.paymentType] ?? "bg-slate-100 text-slate-600"}`}>
-                          {p.paymentType}
+              </THead>
+              <tbody>
+                {slice.map((p) => (
+                  <Tr
+                    key={p.id}
+                    clickable
+                    className={p.status === "Overdue" ? "bg-[var(--lamp-alert-bg)]" : undefined}
+                    onClick={() => openEdit(p)}
+                  >
+                    <Td className="readout text-xs text-faint" data-numeric>{p.paymentId}</Td>
+                    <Td>
+                      <div className="font-semibold">{p.studentName}</div>
+                      {p.studentPhone && <div className="readout text-xs text-faint" data-numeric>{p.studentPhone}</div>}
+                    </Td>
+                    <Td className="max-w-[160px] truncate text-dim" title={p.course || undefined}>
+                      {p.course || "—"}
+                    </Td>
+                    <Td numeric className="whitespace-nowrap font-semibold">
+                      {fmt(p.amount)}
+                      {p.paymentType === "Refund" && <span className="ml-1 text-xs text-alert">(refund)</span>}
+                    </Td>
+                    <Td className="text-dim">
+                      {p.paymentType}
+                      {p.installmentNumber != null && p.totalInstallments != null && (
+                        <span className="readout ml-1.5 text-xs text-faint" data-numeric>
+                          {p.installmentNumber}/{p.totalInstallments}
                         </span>
-                        {p.installmentNumber != null && p.totalInstallments != null && (
-                          <span className="ml-1.5 text-[10px] font-bold text-slate-400">
-                            {p.installmentNumber}/{p.totalInstallments}
-                          </span>
-                        )}
-                        {p.installmentNumber != null && p.totalInstallments == null && (
-                          <span className="ml-1.5 text-[10px] font-bold text-slate-400">
-                            #{p.installmentNumber}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${methodConfig[p.paymentMethod] ?? "bg-slate-100 text-slate-600"}`}>
-                          {p.paymentMethod}
+                      )}
+                      {p.installmentNumber != null && p.totalInstallments == null && (
+                        <span className="readout ml-1.5 text-xs text-faint" data-numeric>
+                          #{p.installmentNumber}
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig[p.status] ?? "bg-slate-100 text-slate-600"}`}>
-                          {p.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                        {p.datePaid || (p.dueDate ? `Due ${p.dueDate}` : "—")}
-                      </td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => deletePayment(p)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      )}
+                    </Td>
+                    <Td className="text-dim">{p.paymentMethod}</Td>
+                    <Td><StatusBadge status={p.status} /></Td>
+                    <Td className="whitespace-nowrap text-dim">
+                      {p.datePaid || (p.dueDate ? `Due ${p.dueDate}` : "—")}
+                    </Td>
+                    <Td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        onClick={() => openEdit(p)}
+                        aria-label={`Edit receipt ${p.paymentId}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        className="text-dim hover:text-alert"
+                        onClick={() => { setDeleteError(""); setDeleteTarget(p); }}
+                        aria-label={`Delete receipt ${p.paymentId}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                      </Button>
+                    </Td>
+                  </Tr>
+                ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
+            <TableFooter>
+              <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+            </TableFooter>
+          </TableShell>
         )}
       </div>
 
-      {/* Drawer */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-          <div className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#0D1F0E]">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  {editTarget ? `Edit ${editTarget.paymentId}` : "Record Receipt"}
-                </h2>
-                <p className="text-xs text-white/60">
-                  {editTarget ? "Update payment details" : "Add a new payment record"}
+      {/* Record / edit drawer */}
+      <Drawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={editTarget ? `Edit ${editTarget.paymentId}` : "Record Receipt"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="solid" onClick={save} disabled={saving}>
+              {saving ? "Saving…" : editTarget ? "Update Receipt" : "Record Receipt"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {formError && (
+            <p role="alert" className="rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-3 py-2 text-sm font-semibold text-alert">
+              {formError}
+            </p>
+          )}
+
+          {/* Link to enrollment */}
+          <div className="overflow-hidden rounded-ctl border border-bezel">
+            <div className="placard border-b border-bezel bg-well px-4 py-2.5">
+              Link to Enrollment (optional)
+            </div>
+            <div className="space-y-2 px-4 py-3">
+              <Select
+                aria-label="Link to enrollment"
+                value={form.enrollmentId}
+                onChange={(e) => {
+                  if (e.target.value) fillFromEnrollment(e.target.value);
+                  else setForm((f) => ({ ...f, enrollmentId: "" }));
+                }}
+              >
+                <option value="">— No enrollment linked —</option>
+                {enrollments.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.fullName} · {e.course} · bal: {fmt(e.balanceDue)}
+                  </option>
+                ))}
+              </Select>
+              {enr && (
+                <p className="readout flex flex-wrap gap-x-3 text-xs text-dim" data-numeric>
+                  <span>Total: <strong className="text-ink">{fmt(enr.totalFee)}</strong></span>
+                  <span>Paid: <strong className="text-ink">{fmt(enr.amountPaid)}</strong></span>
+                  <span>
+                    Balance:{" "}
+                    <strong className={enr.balanceDue > 0 ? "text-caution" : "text-ink"}>
+                      {fmt(enr.balanceDue)}
+                    </strong>
+                  </span>
                 </p>
-              </div>
-              <button onClick={() => setDrawerOpen(false)} className="text-white/60 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4 flex-1">
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
-                  {error}
-                </div>
               )}
-
-              {/* Link to enrollment */}
-              <div className="border border-[#2E7D32]/30 rounded-xl overflow-hidden">
-                <div className="px-4 py-2.5 bg-[#E8F5E9] text-sm font-semibold text-[#1B5E20]">
-                  Link to Enrollment (optional)
-                </div>
-                <div className="px-4 py-3 space-y-2">
-                  <select
-                    className={cls}
-                    value={form.enrollmentId}
-                    onChange={(e) => {
-                      if (e.target.value) fillFromEnrollment(e.target.value);
-                      else setForm((f) => ({ ...f, enrollmentId: "" }));
-                    }}
-                  >
-                    <option value="">— No enrollment linked —</option>
-                    {enrollments.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.fullName} · {e.course} · bal: {fmt(e.balanceDue)}
-                      </option>
-                    ))}
-                  </select>
-                  {form.enrollmentId && (() => {
-                    const enr = enrollments.find((e) => e.id === form.enrollmentId);
-                    if (!enr) return null;
-                    return (
-                      <div className="flex gap-3 text-xs text-[#1B5E20]">
-                        <span>Total: <strong>{fmt(enr.totalFee)}</strong></span>
-                        <span>·</span>
-                        <span>Paid: <strong>{fmt(enr.amountPaid)}</strong></span>
-                        <span>·</span>
-                        <span className={enr.balanceDue > 0 ? "text-rose-600" : ""}>
-                          Balance: <strong>{fmt(enr.balanceDue)}</strong>
-                        </span>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Field label="Student Name *">
-                    <input
-                      className={cls}
-                      value={form.studentName}
-                      onChange={(e) => setForm((f) => ({ ...f, studentName: e.target.value }))}
-                      placeholder="Full name"
-                    />
-                  </Field>
-                </div>
-                <Field label="Phone">
-                  <input
-                    className={cls}
-                    value={form.studentPhone}
-                    onChange={(e) => setForm((f) => ({ ...f, studentPhone: e.target.value }))}
-                    placeholder="+971…"
-                  />
-                </Field>
-                <Field label="Amount (AED) *">
-                  <input
-                    className={cls}
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={form.amount}
-                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                    placeholder="0.00"
-                  />
-                </Field>
-              </div>
-
-              <Field label="Course">
-                <select
-                  className={cls}
-                  value={form.course}
-                  onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))}
-                >
-                  <option value="">— Select course —</option>
-                  {courseList.map((c) => <option key={c}>{c}</option>)}
-                </select>
-              </Field>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Payment Type">
-                  <select
-                    className={cls}
-                    value={form.paymentType}
-                    onChange={(e) => setForm((f) => ({ ...f, paymentType: e.target.value }))}
-                  >
-                    {paymentTypes.map((t) => <option key={t}>{t}</option>)}
-                  </select>
-                </Field>
-                <Field label="Method">
-                  <select
-                    className={cls}
-                    value={form.paymentMethod}
-                    onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}
-                  >
-                    {paymentMethods.map((m) => <option key={m}>{m}</option>)}
-                  </select>
-                </Field>
-              </div>
-
-              {/* Installment fields */}
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Instalment # (optional)">
-                  <div className="flex items-center gap-2">
-                    <input
-                      className={cls}
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder="e.g. 1"
-                      value={form.installmentNumber}
-                      onChange={(e) => setForm((f) => ({ ...f, installmentNumber: e.target.value }))}
-                    />
-                    <span className="text-xs text-slate-400 whitespace-nowrap">of</span>
-                    <input
-                      className={cls}
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder="e.g. 3"
-                      value={form.totalInstallments}
-                      onChange={(e) => setForm((f) => ({ ...f, totalInstallments: e.target.value }))}
-                    />
-                  </div>
-                </Field>
-                <Field label="Status">
-                  <select
-                    className={cls}
-                    value={form.status}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  >
-                    {txStatuses.map((s) => <option key={s}>{s}</option>)}
-                  </select>
-                </Field>
-              </div>
-
-              <Field label="Date Paid">
-                <DatePicker
-                  value={form.datePaid}
-                  onChange={(v) => setForm((f) => ({ ...f, datePaid: v }))}
-                />
-              </Field>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Due Date">
-                  <DatePicker
-                    value={form.dueDate}
-                    onChange={(v) => setForm((f) => ({ ...f, dueDate: v }))}
-                  />
-                </Field>
-                <Field label="Receipt Ref">
-                  <input
-                    className={cls}
-                    value={form.receiptRef}
-                    onChange={(e) => setForm((f) => ({ ...f, receiptRef: e.target.value }))}
-                    placeholder="e.g. RCT-001"
-                  />
-                </Field>
-              </div>
-
-              <Field label="Recorded By">
-                <input
-                  className={cls}
-                  value={form.recordedBy}
-                  onChange={(e) => setForm((f) => ({ ...f, recordedBy: e.target.value }))}
-                  placeholder="Staff name"
-                />
-              </Field>
-
-              <Field label="Notes">
-                <textarea
-                  className={cls}
-                  rows={3}
-                  value={form.notes}
-                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Any additional notes…"
-                />
-              </Field>
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
-              <button
-                onClick={save}
-                disabled={saving}
-                className="flex-1 py-2.5 bg-[#2E7D32] text-white text-sm font-semibold rounded-lg hover:bg-[#1B5E20] transition disabled:opacity-50"
-              >
-                {saving ? "Saving…" : editTarget ? "Update Receipt" : "Record Receipt"}
-              </button>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="px-5 py-2.5 border border-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition"
-              >
-                Cancel
-              </button>
             </div>
           </div>
+
+          <Field label="Student Name" required error={fieldErrors.studentName} htmlFor="rcpt-student">
+            <Input
+              id="rcpt-student"
+              value={form.studentName}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, studentName: e.target.value }));
+                if (fieldErrors.studentName) setFieldErrors((fe) => ({ ...fe, studentName: undefined }));
+              }}
+              placeholder="Full name"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Phone" htmlFor="rcpt-phone">
+              <Input
+                id="rcpt-phone"
+                value={form.studentPhone}
+                onChange={(e) => setForm((f) => ({ ...f, studentPhone: e.target.value }))}
+                placeholder="+971…"
+              />
+            </Field>
+            <Field label="Amount (AED)" required error={fieldErrors.amount} htmlFor="rcpt-amount">
+              <Input
+                id="rcpt-amount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={form.amount}
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, amount: e.target.value }));
+                  if (fieldErrors.amount) setFieldErrors((fe) => ({ ...fe, amount: undefined }));
+                }}
+                placeholder="0.00"
+              />
+            </Field>
+          </div>
+
+          <Field label="Course" htmlFor="rcpt-course">
+            <Select
+              id="rcpt-course"
+              value={form.course}
+              onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))}
+            >
+              <option value="">— Select course —</option>
+              {courseList.map((c) => <option key={c}>{c}</option>)}
+            </Select>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Payment Type" htmlFor="rcpt-type">
+              <Select
+                id="rcpt-type"
+                value={form.paymentType}
+                onChange={(e) => setForm((f) => ({ ...f, paymentType: e.target.value }))}
+              >
+                {paymentTypes.map((t) => <option key={t}>{t}</option>)}
+              </Select>
+            </Field>
+            <Field label="Method" htmlFor="rcpt-method">
+              <Select
+                id="rcpt-method"
+                value={form.paymentMethod}
+                onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}
+              >
+                {paymentMethods.map((m) => <option key={m}>{m}</option>)}
+              </Select>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Instalment #" help="Leave blank for one-off receipts">
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="e.g. 1"
+                  aria-label="Instalment number"
+                  value={form.installmentNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, installmentNumber: e.target.value }))}
+                />
+                <span className="whitespace-nowrap text-xs text-faint">of</span>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="e.g. 3"
+                  aria-label="Total instalments"
+                  value={form.totalInstallments}
+                  onChange={(e) => setForm((f) => ({ ...f, totalInstallments: e.target.value }))}
+                />
+              </div>
+            </Field>
+            <Field label="Status" htmlFor="rcpt-status">
+              <Select
+                id="rcpt-status"
+                value={form.status}
+                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+              >
+                {txStatuses.map((s) => <option key={s}>{s}</option>)}
+              </Select>
+            </Field>
+          </div>
+
+          <Field label="Date Paid">
+            <DatePicker
+              value={form.datePaid}
+              onChange={(v) => setForm((f) => ({ ...f, datePaid: v }))}
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Due Date">
+              <DatePicker
+                value={form.dueDate}
+                onChange={(v) => setForm((f) => ({ ...f, dueDate: v }))}
+              />
+            </Field>
+            <Field label="Receipt Ref" htmlFor="rcpt-ref">
+              <Input
+                id="rcpt-ref"
+                value={form.receiptRef}
+                onChange={(e) => setForm((f) => ({ ...f, receiptRef: e.target.value }))}
+                placeholder="e.g. RCT-001"
+              />
+            </Field>
+          </div>
+
+          <Field label="Recorded By" htmlFor="rcpt-recorded">
+            <Input
+              id="rcpt-recorded"
+              value={form.recordedBy}
+              onChange={(e) => setForm((f) => ({ ...f, recordedBy: e.target.value }))}
+              placeholder="Staff name"
+            />
+          </Field>
+
+          <Field label="Notes" htmlFor="rcpt-notes">
+            <Textarea
+              id="rcpt-notes"
+              rows={3}
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Any additional notes…"
+            />
+          </Field>
         </div>
-      )}
+      </Drawer>
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        busy={deleting}
+        title="Delete Receipt"
+        confirmLabel="Delete"
+        message={
+          <>
+            Delete receipt <strong className="text-ink">{deleteTarget?.paymentId}</strong> for{" "}
+            <strong className="text-ink">{deleteTarget?.studentName}</strong>? This permanently
+            removes the financial record and cannot be undone.
+            {deleteError && (
+              <span role="alert" className="mt-2 block font-semibold text-alert">{deleteError}</span>
+            )}
+          </>
+        }
+      />
     </div>
   );
 }

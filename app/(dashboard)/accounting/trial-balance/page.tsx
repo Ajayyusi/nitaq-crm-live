@@ -2,10 +2,16 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { CheckCircle2, ChevronLeft, Download, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, Download, RefreshCw, Scale } from "lucide-react";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import { exportCsv, fmtNum } from "@/components/accounting/shared";
 import BackButton from "@/components/shared/BackButton";
+import PageHeader from "@/components/shared/PageHeader";
+import EmptyState from "@/components/shared/EmptyState";
+import { Button } from "@/components/ui/button";
+import { Lamp } from "@/components/ui/lamp";
+import { TableShell, Table, THead, Th, Tr, Td, TableFooter, usePagination, Pagination } from "@/components/ui/table";
+import { SkeletonRows, LoadError } from "@/components/ui/feedback";
 
 interface TbRow {
   code: string; name: string; type: string; category: string;
@@ -23,12 +29,14 @@ export default function TrialBalancePage() {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [openingImbalance, setOpeningImbalance] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
@@ -36,7 +44,7 @@ export default function TrialBalancePage() {
     fetch(`/api/accounting/trial-balance?${params}`)
       .then((r) => r.json())
       .then((d) => { setRows(d.rows ?? []); setTotals(d.totals ?? null); setOpeningImbalance(d.openingImbalance ?? 0); })
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, [from, to, typeFilter]);
 
@@ -50,91 +58,120 @@ export default function TrialBalancePage() {
     );
   };
 
+  const { slice, page, pages, setPage, total } = usePagination(rows, 100);
+
+  const chip = (active: boolean) =>
+    `h-8 rounded-ctl border px-3 text-xs font-semibold transition-colors ${
+      active ? "border-phos bg-[var(--lamp-ok-bg)] text-phos" : "border-bezel-strong text-dim hover:bg-well"
+    }`;
+
   return (
-    <div className="space-y-5 p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <BackButton />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Trial Balance</h1>
-          {totals && (
-            <p className={`mt-0.5 flex items-center gap-1 text-sm font-semibold ${totals.balanced ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-              {totals.balanced ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-              {totals.balanced ? "Balanced" : "OUT OF BALANCE"} — Dr {fmtNum(totals.periodDebit)} / Cr {fmtNum(totals.periodCredit)}
+    <div className="p-4 sm:p-6">
+      <BackButton />
+      <PageHeader
+        title="Trial Balance"
+        subtitle="Debits = credits check across every account"
+        actions={
+          <>
+            <Button variant="ghost" size="icon" onClick={load} aria-label="Refresh trial balance">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button variant="primary" onClick={doExport} disabled={rows.length === 0}>
+              <Download className="h-4 w-4" /> CSV
+            </Button>
+          </>
+        }
+      />
+
+      <div className="space-y-5">
+        {totals && (
+          <div role="status" className="flex flex-wrap items-center gap-2">
+            <Lamp variant={totals.balanced ? "ok" : "alert"} pulse={!totals.balanced}>
+              {totals.balanced ? "Balanced" : "Out of Balance"}
+            </Lamp>
+            <span className="readout text-xs text-dim" data-numeric>
+              Dr {fmtNum(totals.periodDebit)} · Cr {fmtNum(totals.periodCredit)}
+            </span>
+          </div>
+        )}
+
+        {openingImbalance !== 0 && (
+          <div role="alert" className="flex items-start gap-2 rounded-card border border-caution/30 bg-[var(--lamp-caution-bg)] px-4 py-3 text-sm text-ink">
+            <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 flex-shrink-0 text-caution" />
+            <p>
+              Opening balances entered on the Chart of Accounts don&apos;t balance (off by{" "}
+              <span className="readout font-semibold text-caution" data-numeric>{fmtNum(Math.abs(openingImbalance))}</span>).
+              Fix the opening debit/credit figures in the COA, or enter openings through a balanced Journal Voucher instead.
             </p>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm dark:border-white/10 dark:bg-white/5"><RefreshCw className="h-4 w-4" /></button>
-          <button onClick={doExport} disabled={rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-[#2E7D32] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#1B5E20] disabled:opacity-50">
-            <Download className="h-4 w-4" /> CSV
-          </button>
-        </div>
-      </div>
+          </div>
+        )}
 
-      {openingImbalance !== 0 && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-400">
-          ⚠ Opening balances entered on the Chart of Accounts don&apos;t balance (off by {fmtNum(Math.abs(openingImbalance))}).
-          Fix the opening debit/credit figures in the COA, or enter openings through a balanced Journal Voucher instead.
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+          {["", "Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => (
+            <button key={t || "all"} type="button" onClick={() => setTypeFilter(t)} aria-pressed={typeFilter === t} className={chip(typeFilter === t)}>
+              {t || "All"}
+            </button>
+          ))}
         </div>
-      )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
-        {["", "Asset", "Liability", "Equity", "Revenue", "Expense"].map((t) => (
-          <button key={t || "all"} onClick={() => setTypeFilter(t)}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${typeFilter === t ? "bg-[#2E7D32] text-white" : "border border-gray-200 bg-white text-gray-600 dark:border-white/10 dark:bg-white/5 dark:text-gray-400"}`}>
-            {t || "All"}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="flex h-40 items-center justify-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…</div>
-      ) : rows.length === 0 ? (
-        <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 dark:border-white/10">No balances in this period.</div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100 text-sm dark:divide-white/10">
-              <thead className="bg-gray-50 dark:bg-white/5">
+        {loading ? (
+          <TableShell><SkeletonRows rows={10} cols={7} /></TableShell>
+        ) : loadError ? (
+          <LoadError message="Couldn't load the trial balance." onRetry={load} />
+        ) : rows.length === 0 ? (
+          <div className="face">
+            <EmptyState
+              icon={Scale}
+              title="No balances in this period"
+              description="Post journal entries, or widen the date range."
+            />
+          </div>
+        ) : (
+          <TableShell>
+            <Table>
+              <THead>
                 <tr>
-                  <th className="px-3 py-2.5 text-left text-xs font-bold uppercase text-gray-500">Account</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Open Dr</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Open Cr</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Period Dr</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Period Cr</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Close Dr</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-bold uppercase text-gray-500">Close Cr</th>
+                  <Th>Account</Th>
+                  <Th numeric>Open Dr</Th>
+                  <Th numeric>Open Cr</Th>
+                  <Th numeric>Period Dr</Th>
+                  <Th numeric>Period Cr</Th>
+                  <Th numeric>Close Dr</Th>
+                  <Th numeric>Close Cr</Th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/10">
-                {rows.map((r) => (
-                  <tr key={r.code} className="hover:bg-gray-50 dark:hover:bg-white/5">
-                    <td className="px-3 py-2">
+              </THead>
+              <tbody>
+                {slice.map((r) => (
+                  <Tr key={r.code}>
+                    <Td>
                       <Link href={`/accounting/ledger?account=${encodeURIComponent(r.code)}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
-                        className="hover:text-[#2E7D32] hover:underline dark:hover:text-green-400">
-                        <span className="font-mono text-xs text-gray-400">{r.code}</span>{" "}
-                        <span className="text-gray-800 dark:text-gray-200">{r.name}</span>
+                        className="underline-offset-2 hover:text-phos hover:underline">
+                        <span className="readout text-xs text-faint" data-numeric>{r.code}</span>{" "}
+                        <span>{r.name}</span>
                       </Link>
-                    </td>
+                    </Td>
                     {[r.openingDebit, r.openingCredit, r.periodDebit, r.periodCredit, r.closingDebit, r.closingCredit].map((v, i) => (
-                      <td key={i} className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmtNum(v)}</td>
+                      <Td key={i} numeric className="whitespace-nowrap text-dim">{fmtNum(v)}</Td>
                     ))}
-                  </tr>
+                  </Tr>
                 ))}
                 {totals && (
-                  <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold dark:border-white/20 dark:bg-white/5">
-                    <td className="px-3 py-2.5 text-gray-900 dark:text-white">TOTAL</td>
+                  <Tr className="border-t-2 border-bezel-strong bg-well font-bold">
+                    <Td className="font-bold">Total{pages > 1 ? " (all accounts)" : ""}</Td>
                     {[totals.openingDebit, totals.openingCredit, totals.periodDebit, totals.periodCredit, totals.closingDebit, totals.closingCredit].map((v, i) => (
-                      <td key={i} className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-gray-900 dark:text-white">{fmtNum(v)}</td>
+                      <Td key={i} numeric className="whitespace-nowrap font-bold">{fmtNum(v)}</Td>
                     ))}
-                  </tr>
+                  </Tr>
                 )}
               </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+            </Table>
+            <TableFooter>
+              <Pagination page={page} pages={pages} setPage={setPage} total={total} shown={slice.length} />
+            </TableFooter>
+          </TableShell>
+        )}
+      </div>
     </div>
   );
 }
