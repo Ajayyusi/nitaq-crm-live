@@ -14,111 +14,87 @@ async function fetchAcademyName(): Promise<string> {
   }
 }
 
+/* A calm cockpit gauge, needle at rest — the login page's one instrument. */
+function HeroGauge() {
+  const ticks: React.ReactNode[] = [];
+  for (let i = 0; i < 24; i++) {
+    const major = i % 2 === 0;
+    ticks.push(
+      <line
+        key={i}
+        x1="90"
+        y1={major ? "14" : "17"}
+        x2="90"
+        y2="24"
+        stroke={major ? "var(--dim)" : "var(--bezel-strong)"}
+        strokeWidth={major ? 1.5 : 1}
+        transform={`rotate(${i * 15} 90 90)`}
+      />
+    );
+  }
+  return (
+    <svg viewBox="0 0 180 180" className="h-56 w-56" aria-hidden>
+      <circle cx="90" cy="90" r="86" fill="var(--face)" stroke="var(--bezel-strong)" strokeWidth="2" />
+      <circle cx="90" cy="90" r="78" fill="none" stroke="var(--bezel)" strokeWidth="1" />
+      {ticks}
+      <text x="90" y="64" textAnchor="middle" fill="var(--dim)" fontSize="9" letterSpacing="3" fontFamily="inherit">
+        OPERATIONS
+      </text>
+      <line x1="90" y1="90" x2="138" y2="52" stroke="var(--phos)" strokeWidth="3" strokeLinecap="round" />
+      <line x1="90" y1="90" x2="70" y2="106" stroke="var(--phos)" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+      <circle cx="90" cy="90" r="5" fill="var(--phos)" />
+      <text x="90" y="128" textAnchor="middle" fill="var(--ink)" fontSize="13" fontWeight="bold" letterSpacing="1" fontFamily="inherit">
+        NITAQ
+      </text>
+    </svg>
+  );
+}
+
 export default async function LoginPage() {
   const academyName = await fetchAcademyName();
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-        overflow: "hidden",
-        background: "#1B5E20",
-      }}
-    >
-      {/* Grid pattern */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          opacity: 0.07,
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)",
-          backgroundSize: "32px 32px",
-          pointerEvents: "none",
-        }}
-      />
-      {/* Glow orb */}
-      <div
-        style={{
-          position: "absolute",
-          top: "20%",
-          left: "20%",
-          width: 400,
-          height: 400,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, #4CAF50, transparent)",
-          opacity: 0.12,
-          pointerEvents: "none",
-        }}
-      />
-
-      <div style={{ position: "relative", zIndex: 10, width: "100%", maxWidth: 480, margin: "0 16px" }}>
-        <div
-          style={{
-            background: "white",
-            borderRadius: 24,
-            boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-            overflow: "hidden",
-          }}
-        >
-          {/* Header */}
-          <div style={{ padding: "40px 40px 32px", borderBottom: "1px solid #E8F5E9" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 16,
-                  background: "#1B5E20",
-                  color: "white",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 18,
-                  fontWeight: 900,
-                  letterSpacing: 1,
-                  flexShrink: 0,
-                }}
-              >
-                NA
-              </div>
-              <div>
-                <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#2E7D32", margin: 0 }}>
-                  {academyName}
-                </p>
-                <p style={{ fontSize: 20, fontWeight: 700, color: "#0D1F0E", margin: 0 }}>
-                  Internal CRM
-                </p>
-              </div>
-            </div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: "#0D1F0E", margin: "0 0 4px" }}>
-              Welcome back
+    <div className="dark flex min-h-screen items-center justify-center bg-panel p-4 text-ink">
+      <div className="grid w-full max-w-4xl items-center gap-10 lg:grid-cols-[1fr_420px]">
+        {/* Statement panel */}
+        <div className="hidden flex-col items-start gap-6 lg:flex">
+          <HeroGauge />
+          <div>
+            <h1 className="text-3xl font-bold uppercase leading-tight tracking-[0.06em] text-ink">
+              Trust your
+              <br />
+              instruments
             </h1>
-            <p style={{ fontSize: 14, color: "#5A7A5B", margin: 0 }}>
-              Sign in to your account to continue
+            <p className="mt-3 max-w-sm text-sm leading-6 text-dim">
+              Admissions, classes, money, and compliance on one panel —
+              cross-checked, reconciled, and ready before you ask.
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            <span className="placard">{academyName}</span>
+            <span className="h-px w-8 bg-bezel-strong" aria-hidden />
+            <span className="placard">Sharjah</span>
+          </div>
+        </div>
 
-          {/* Form — Suspense boundary for useSearchParams */}
+        {/* Sign-in card */}
+        <div className="face overflow-hidden">
+          <div className="border-b border-bezel px-8 pb-6 pt-8">
+            <p className="placard">{academyName}</p>
+            <h2 className="mt-1 text-xl font-bold text-ink">Sign in</h2>
+            <p className="mt-1 text-sm text-dim">Operations panel · authorized staff only</p>
+          </div>
           <Suspense
             fallback={
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 0" }}>
-                <Loader2 className="h-6 w-6 animate-spin" style={{ color: "#2E7D32" }} />
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-phos" />
               </div>
             }
           >
             <LoginForm />
           </Suspense>
-
-          {/* Footer */}
-          <div style={{ padding: "16px 40px", background: "#F8FAF8", borderTop: "1px solid #E8F5E9" }}>
-            <p style={{ fontSize: 12, textAlign: "center", color: "#5A7A5B", margin: 0 }}>
-              {academyName} · Confidential
-            </p>
+          <div className="border-t border-bezel bg-well px-8 py-3.5">
+            <p className="placard text-center">{academyName} · Confidential</p>
           </div>
         </div>
       </div>

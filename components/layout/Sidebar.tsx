@@ -57,7 +57,7 @@ const navGroups = [
     label: "Business",
     items: [
       { label: "Finance",     href: "/finance",      icon: WalletCards },
-      { label: "Payments",    href: "/expenses",     icon: ReceiptText },
+      { label: "Expenses",    href: "/expenses",     icon: ReceiptText },
       { label: "Collections", href: "/collections",  icon: Coins },
       { label: "Teacher Pay", href: "/teacher-payouts", icon: UserCheck },
       { label: "Reports",     href: "/reports",      icon: BarChart3 },
@@ -99,9 +99,43 @@ function FollowUpBadge() {
 
   if (count === 0) return null;
   return (
-    <span className="ml-auto rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold leading-none text-[#0D1F0E]">
+    <span
+      className="readout ml-auto rounded-lamp border border-caution/30 bg-[var(--lamp-caution-bg)] px-1.5 py-px text-[10px] font-bold leading-4 text-caution"
+      data-numeric
+      aria-label={`${count} follow-ups due today`}
+    >
       {count}
     </span>
+  );
+}
+
+/** Gauge-true product mark: a needle at rest inside a ticked bezel.
+    Coordinates are static strings — computed floats hydrate inconsistently. */
+const MARK_TICKS: [string, string, string, string][] = [
+  ["18", "4.5", "18", "7.5"],
+  ["24.75", "6.31", "24", "7.61"],
+  ["29.69", "11.25", "28.39", "12"],
+  ["31.5", "18", "28.5", "18"],
+  ["29.69", "24.75", "28.39", "24"],
+  ["24.75", "29.69", "24", "28.39"],
+  ["18", "31.5", "18", "28.5"],
+  ["11.25", "29.69", "12", "28.39"],
+  ["6.31", "24.75", "7.61", "24"],
+  ["4.5", "18", "7.5", "18"],
+  ["6.31", "11.25", "7.61", "12"],
+  ["11.25", "6.31", "12", "7.61"],
+];
+
+function Mark() {
+  return (
+    <svg viewBox="0 0 36 36" className="h-9 w-9" aria-hidden>
+      <circle cx="18" cy="18" r="16" fill="var(--well)" stroke="var(--bezel-strong)" />
+      {MARK_TICKS.map(([x1, y1, x2, y2], i) => (
+        <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--dim)" strokeWidth="1" />
+      ))}
+      <line x1="18" y1="18" x2="26.5" y2="9.5" stroke="var(--phos)" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="18" cy="18" r="2" fill="var(--phos)" />
+    </svg>
   );
 }
 
@@ -152,46 +186,40 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-[#1B5E20] text-white shadow-2xl shadow-green-950/20 transition-transform duration-300 ${
+      className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-bezel bg-face transition-transform duration-300 ${
         isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       }`}
+      aria-label="Main navigation"
     >
-      {/* Logo */}
-      <div className="border-b border-white/10 px-5 py-5">
-        <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-white text-sm font-extrabold tracking-wider text-[#1B5E20] shadow-lg dark:bg-green-200 dark:text-[#1B5E20] overflow-hidden">
-            {logoBase64 ? (
-              <img src={logoBase64} alt="Logo" className="h-full w-full object-contain p-1" />
-            ) : (
-              "NA"
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold tracking-tight text-white">Nitaq Academy</p>
-            <p className="mt-0.5 text-xs font-medium text-green-200">Internal CRM</p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close navigation"
-            className="lg:hidden grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-white/10 text-white transition hover:bg-white/20"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      {/* Identity plate */}
+      <div className="flex items-center gap-3 border-b border-bezel px-4 py-4">
+        <div className="grid h-9 w-9 flex-shrink-0 place-items-center overflow-hidden rounded-full">
+          {logoBase64 ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoBase64} alt="Academy logo" className="h-full w-full object-contain" />
+          ) : (
+            <Mark />
+          )}
         </div>
-        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.08] px-3 py-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-green-300">Sharjah</p>
-          <p className="mt-0.5 text-xs text-green-100">Training center operations</p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold tracking-tight text-ink">Nitaq Academy</p>
+          <p className="placard mt-0.5">Operations</p>
         </div>
+        <button
+          onClick={onClose}
+          aria-label="Close navigation"
+          className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-ctl text-dim transition hover:bg-well hover:text-ink lg:hidden"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {visibleGroups.map((group) => (
           <div key={group.label} className="mb-5 last:mb-0">
-            <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-widest text-green-400">
-              {group.label}
-            </p>
-            <div className="space-y-0.5">
+            <p className="placard mb-1.5 px-3">{group.label}</p>
+            <div className="space-y-px">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -201,22 +229,28 @@ export default function Sidebar({
                     key={item.href}
                     href={item.href}
                     onClick={onClose}
-                    className={`group flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                    aria-current={active ? "page" : undefined}
+                    className={`group relative flex min-h-9 items-center gap-3 rounded-ctl px-3 py-2 text-[13px] font-semibold transition-colors ${
                       active
-                        ? "bg-[#2E7D32] text-white shadow-md shadow-green-950/20"
-                        : "text-green-100 hover:bg-white/[0.09] hover:text-white"
+                        ? "bg-[var(--lamp-ok-bg)] text-phos"
+                        : "text-dim hover:bg-well hover:text-ink"
                     }`}
                   >
-                    <Icon
-                      className={`h-4 w-4 flex-shrink-0 ${
-                        active ? "text-white" : "text-green-300 group-hover:text-green-200"
+                    {/* needle tick for the current position */}
+                    <span
+                      aria-hidden
+                      className={`absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full transition-all ${
+                        active ? "bg-phos" : "bg-transparent"
                       }`}
                     />
-                    <span>{item.label}</span>
+                    <Icon
+                      className={`h-4 w-4 flex-shrink-0 ${
+                        active ? "text-phos" : "text-faint group-hover:text-dim"
+                      }`}
+                      aria-hidden
+                    />
+                    <span className="truncate">{item.label}</span>
                     {item.badge && <FollowUpBadge />}
-                    {active && !item.badge && (
-                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white/60" />
-                    )}
                   </Link>
                 );
               })}
@@ -225,25 +259,24 @@ export default function Sidebar({
         ))}
       </nav>
 
-      {/* User footer */}
-      <div className="border-t border-white/10 p-4">
-        <div className="rounded-xl bg-white/[0.08] p-3">
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full bg-white text-xs font-bold text-[#1B5E20] dark:bg-green-200 dark:text-[#1B5E20]">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-white">{fullName}</p>
-              <p className="text-xs text-green-300">{userRoleLabels[role] ?? role}</p>
-            </div>
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              title="Sign out"
-              className="flex-shrink-0 rounded-lg p-1.5 text-green-300 transition hover:bg-white/10 hover:text-white"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+      {/* Crew plate */}
+      <div className="border-t border-bezel p-3">
+        <div className="flex items-center gap-3 rounded-card border border-bezel bg-well p-3">
+          <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full border border-phos/40 text-xs font-bold text-phos">
+            {initials}
           </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-bold text-ink">{fullName}</p>
+            <p className="placard mt-px">{userRoleLabels[role] ?? role}</p>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            title="Sign out"
+            aria-label="Sign out"
+            className="flex-shrink-0 rounded-ctl p-1.5 text-faint transition hover:bg-face hover:text-alert"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </aside>

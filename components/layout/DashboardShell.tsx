@@ -9,11 +9,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#E8F5E9] text-slate-950 dark:bg-[#0a1a0b] dark:text-[#e8f5e9]">
+    <div className="min-h-screen bg-panel text-ink">
       {/* Mobile backdrop overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -21,10 +21,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="min-h-screen lg:pl-[260px]">
-        <ImpersonationBanner />
-        <Header onMenuOpen={() => setSidebarOpen(true)} />
-        <main className="mx-auto w-full max-w-[1680px] px-4 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 2xl:px-10">
+      <div className="min-h-screen lg:pl-[248px]">
+        {/* One sticky stack: banner and header never fight over top-0 */}
+        <div className="sticky top-0 z-30">
+          <ImpersonationBanner />
+          <Header onMenuOpen={() => setSidebarOpen(true)} />
+        </div>
+        <main className="mx-auto w-full max-w-[1680px] px-4 py-4 sm:px-6 sm:py-5 md:px-8 md:py-6 2xl:px-10">
           {children}
         </main>
       </div>

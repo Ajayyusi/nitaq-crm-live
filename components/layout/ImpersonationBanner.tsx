@@ -34,16 +34,19 @@ export default function ImpersonationBanner() {
   }
 
   return (
-    <div className="sticky top-0 z-[70] flex flex-wrap items-center gap-x-3 gap-y-1 bg-amber-500 px-4 py-2 text-[#0D1F0E] print:hidden">
-      <Eye className="h-4 w-4 flex-shrink-0" />
-      <p className="text-xs font-bold">
-        Viewing as {u.name}{u.role ? ` (${u.role})` : ""} — you are signed in as {u.impersonatedBy}.
+    <div
+      role="status"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-caution/40 bg-caution-fill px-4 py-2 text-[#1a1204] print:hidden"
+    >
+      <Eye className="h-4 w-4 flex-shrink-0" aria-hidden />
+      <p className="text-xs font-bold uppercase tracking-[0.08em]">
+        Viewing as {u.name}{u.role ? ` (${u.role})` : ""} — signed in as {u.impersonatedBy}
       </p>
       <p className="hidden text-xs sm:block">Anything you do here is recorded against this account.</p>
       <button
         onClick={exitImpersonation}
         disabled={leaving}
-        className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-[#0D1F0E] px-3 py-1 text-xs font-bold text-white transition hover:bg-black disabled:opacity-60"
+        className="ml-auto inline-flex items-center gap-1.5 rounded-ctl border border-[#1a1204]/40 px-3 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[#1a1204] transition hover:bg-[#1a1204] hover:text-caution-fill disabled:opacity-60"
       >
         {leaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogOut className="h-3 w-3" />}
         {leaving ? "Returning…" : "Back to my account"}

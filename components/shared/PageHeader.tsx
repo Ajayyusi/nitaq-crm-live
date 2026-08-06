@@ -4,16 +4,15 @@ interface PageHeaderProps {
   actions?: React.ReactNode;
 }
 
+/* Page identity strip — sits on the panel itself, no card chrome. */
 export default function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-3 px-4 py-4 border-b border-slate-200 bg-white sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5 dark:border-slate-700 dark:bg-[#112013]">
+    <div className="mb-4 flex flex-col gap-3 border-b border-bezel pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold text-slate-900 truncate dark:text-[#e8f5e9]">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500 mt-0.5 dark:text-slate-400">{subtitle}</p>}
+        <h1 className="truncate text-lg font-bold tracking-tight text-ink">{title}</h1>
+        {subtitle && <p className="mt-0.5 text-sm text-dim">{subtitle}</p>}
       </div>
-      {actions && (
-        <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>
-      )}
+      {actions && <div className="flex flex-shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

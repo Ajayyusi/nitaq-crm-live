@@ -1,0 +1,49 @@
+{
+  "title": "Visual world for the Nitaq CRM redesign",
+  "question": "The roll assigned Sharjah Grid. Keep it, take an alternate, re-roll, or ask for the category standard.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Sharjah Grid",
+      "kicker": "THE ROLL",
+      "lineage": "Islamic 8-fold geometric construction · Sharjah's own architectural language",
+      "thesis": "An interface constructed like Islamic geometry: one strict proportional grid rules every screen, so precision itself becomes the brand.",
+      "palette": ["#1C2740", "#0E7A5F", "#B8934A", "#F6F7F5"],
+      "materials": ["8-fold construction grid", "hairline rules over cards", "deep emerald commitment", "brass reserved for money moments", "ledger red/black numerals"],
+      "viewport": "A calm stone-white workspace ruled by hairlines and an 8pt rhythm; a khatam-star product mark; emerald owns primary actions and live states; totals set like a ledger with tabular numerals; Arabic-ready dual-script type.",
+      "risk": "If the geometry turns decorative — patterns scattered as ornament — it tips into theme-park; the geometry must stay structural (grid, proportion, one constructed mark) or it fails."
+    },
+    {
+      "id": "challenger-cyclorama",
+      "label": "Cyclorama Dawn",
+      "lineage": "stagecraft theater lighting — night-to-day cyc wall",
+      "thesis": "The workspace as a lit stage: content held in horizon bands that pass from night into day.",
+      "case": "Fuses poorly: dark atmospheric bands fight dense bilingual tables and bright Sharjah office use.",
+      "hero": "https://impeccable.style/worlds/cards/stagecraft-theater-lighting-cyclorama-dawn-hero.webp"
+    },
+    {
+      "id": "challenger-cape",
+      "label": "Drawcord Cape",
+      "lineage": "textile drape — one cord transforms flat cloth into volume",
+      "thesis": "Screens as flat planes that gather into shaped volumes on command.",
+      "case": "Fuses poorly: a single-object transformation grammar has nowhere to live across 27 CRUD modules.",
+      "hero": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-drawcord-transforming-cape-hero.webp"
+    },
+    {
+      "id": "challenger-sixpack",
+      "label": "Night Six-Pack",
+      "lineage": "small-aircraft night instrument panel",
+      "thesis": "Six calm luminous gauges that agree with each other; the practiced eye sweeps them.",
+      "case": "Partial fit for a finance dashboard, but dial grammar obscures tables and reads gimmicky at CRM scale.",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-night-flight-six-pack-hero.webp"
+    }
+  ],
+  "reroll": true,
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "The clean neutral SaaS admin — Linear/Stripe grammar played straight, executed impeccably.",
+    "viewport": "White ground, grayscale hierarchy, one green accent, refined sidebar and data tables at full craft."
+  },
+  "steer": true
+}

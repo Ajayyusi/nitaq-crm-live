@@ -1,28 +1,54 @@
-import { cn } from "@/lib/utils";
+import { Lamp, type LampVariant } from "@/components/ui/lamp";
 
-const STATUS_STYLES: Record<string, string> = {
-  // Lead statuses
-  new: "bg-blue-50 text-blue-700 border-blue-200",
-  contacted: "bg-indigo-50 text-indigo-700 border-indigo-200",
-  trial_booked: "bg-purple-50 text-purple-700 border-purple-200",
-  trial_done: "bg-amber-50 text-amber-700 border-amber-200",
-  enrolled: "bg-green-50 text-green-700 border-green-200",
-  lost: "bg-red-50 text-red-700 border-red-200",
-  on_hold: "bg-slate-100 text-slate-600 border-slate-200",
+/*
+ * Every business status, mapped once to the annunciator vocabulary:
+ * ok (running normally) · caution (needs attention) · alert (breach) ·
+ * advisory (informational) · off (inert/closed).
+ */
+const STATUS_VARIANT: Record<string, LampVariant> = {
+  // Lead pipeline
+  new: "advisory",
+  contacted: "advisory",
+  interested: "advisory",
+  trial_booked: "advisory",
+  trial_done: "caution",
+  "follow-up": "caution",
+  enrolled: "ok",
+  converted: "ok",
+  lost: "off",
+  not_interested: "off",
+  on_hold: "caution",
   // Enrollment / class
-  active: "bg-green-50 text-green-700 border-green-200",
-  completed: "bg-slate-100 text-slate-600 border-slate-200",
-  paused: "bg-amber-50 text-amber-700 border-amber-200",
-  cancelled: "bg-red-50 text-red-700 border-red-200",
-  scheduled: "bg-blue-50 text-blue-700 border-blue-200",
-  rescheduled: "bg-orange-50 text-orange-700 border-orange-200",
-  no_show: "bg-red-50 text-red-700 border-red-200",
-  // Teachers
-  inactive: "bg-slate-100 text-slate-500 border-slate-200",
-  on_leave: "bg-orange-50 text-orange-700 border-orange-200",
+  active: "ok",
+  completed: "off",
+  paused: "caution",
+  cancelled: "alert",
+  dropped: "alert",
+  scheduled: "advisory",
+  rescheduled: "caution",
+  no_show: "alert",
+  // Payments
+  paid: "ok",
+  "paid full": "ok",
+  received: "ok",
+  pending: "caution",
+  overdue: "alert",
+  refunded: "advisory",
+  free: "advisory",
+  // Teachers / staff
+  inactive: "off",
+  on_leave: "caution",
   // Allocation
-  pending: "bg-amber-50 text-amber-700 border-amber-200",
-  confirmed: "bg-teal-50 text-teal-700 border-teal-200",
+  confirmed: "ok",
+  // Accounting
+  posted: "ok",
+  draft: "caution",
+  reversed: "off",
+  // Compliance
+  valid: "ok",
+  expiring: "caution",
+  expired: "alert",
+  missing: "alert",
 };
 
 const LABEL_MAP: Record<string, string> = {
@@ -31,6 +57,8 @@ const LABEL_MAP: Record<string, string> = {
   on_hold: "On Hold",
   on_leave: "On Leave",
   no_show: "No Show",
+  not_interested: "Not Interested",
+  "paid full": "Paid Full",
 };
 
 interface StatusBadgeProps {
@@ -39,12 +67,15 @@ interface StatusBadgeProps {
 }
 
 export default function StatusBadge({ status, className }: StatusBadgeProps) {
-  const style = STATUS_STYLES[status] || "bg-slate-100 text-slate-600 border-slate-200";
-  const label = LABEL_MAP[status] || status.charAt(0).toUpperCase() + status.slice(1);
+  const key = status.toLowerCase().replace(/\s+/g, "_");
+  const variant =
+    STATUS_VARIANT[key] ?? STATUS_VARIANT[status.toLowerCase()] ?? ("off" as LampVariant);
+  const label =
+    LABEL_MAP[key] ?? LABEL_MAP[status.toLowerCase()] ?? status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
-    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", style, className)}>
+    <Lamp variant={variant} className={className}>
       {label}
-    </span>
+    </Lamp>
   );
 }

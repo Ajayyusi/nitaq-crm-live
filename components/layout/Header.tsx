@@ -1,11 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Menu, KeyRound, X, Loader2, ShieldCheck, User } from "lucide-react";
+import { Menu, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { NotificationPanel } from "./NotificationPanel";
 import GlobalSearch from "./GlobalSearch";
 import { useSession } from "next-auth/react";
+import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input, Field } from "@/components/ui/input";
+import { Lamp } from "@/components/ui/lamp";
+
+function Notice({ kind, children }: { kind: "error" | "success"; children: React.ReactNode }) {
+  return (
+    <div
+      role={kind === "error" ? "alert" : "status"}
+      className={
+        kind === "error"
+          ? "rounded-ctl border border-alert/30 bg-[var(--lamp-alert-bg)] px-3 py-2.5 text-sm font-semibold text-alert"
+          : "rounded-ctl border border-phos/30 bg-[var(--lamp-ok-bg)] px-3 py-2.5 text-sm font-semibold text-phos"
+      }
+    >
+      {children}
+    </div>
+  );
+}
 
 function TwoFactorModal({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<"loading" | "off" | "setup" | "on">("loading");
@@ -60,92 +79,79 @@ function TwoFactorModal({ onClose }: { onClose: () => void }) {
     if (d) { setStatus("off"); setSuccess(d.message); setCode(""); setPassword(""); }
   };
 
-  const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]";
-
   return (
-    <>
-      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between rounded-t-2xl bg-[#0D1F0E] px-6 py-5 text-white">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">Security</p>
-              <h2 className="mt-0.5 text-lg font-bold">Two-Factor Authentication</h2>
+    <Dialog open onClose={onClose} title="Two-Factor Authentication" size="sm">
+      <div className="space-y-4">
+        {error && <Notice kind="error">{error}</Notice>}
+        {success && <Notice kind="success">{success}</Notice>}
+
+        {status === "loading" && (
+          <div className="flex h-24 items-center justify-center text-faint">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        )}
+
+        {status === "off" && (
+          <>
+            <p className="text-sm text-dim">
+              Protect your account with a 6-digit code from an authenticator app
+              (Google Authenticator, Microsoft Authenticator, Authy…) in addition to your password.
+            </p>
+            <Button variant="solid" className="w-full" onClick={startSetup} disabled={busy}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />} Enable 2FA
+            </Button>
+          </>
+        )}
+
+        {status === "setup" && (
+          <form onSubmit={verify} className="space-y-4">
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-dim">
+              <li>Open your authenticator app</li>
+              <li>Scan this QR code</li>
+              <li>Enter the 6-digit code below</li>
+            </ol>
+            {qr && (
+              <div className="flex justify-center rounded-card border border-bezel bg-white p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qr} alt="2FA QR code" className="h-48 w-48" />
+              </div>
+            )}
+            <p className="break-all rounded-ctl bg-well px-3 py-2 text-center text-xs text-dim">
+              Can&apos;t scan? Enter manually: <strong className="readout">{manualKey}</strong>
+            </p>
+            <Input
+              type="text" inputMode="numeric" maxLength={6} required autoFocus
+              value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="6-digit code"
+              className="readout text-center text-lg font-bold tracking-[0.5em]"
+              aria-label="6-digit verification code"
+            />
+            <Button type="submit" variant="solid" className="w-full" disabled={busy || code.length !== 6}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />} Verify &amp; Turn On
+            </Button>
+          </form>
+        )}
+
+        {status === "on" && (
+          <form onSubmit={disable} className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Lamp variant="ok">2FA Armed</Lamp>
+              <span className="text-sm text-dim">Two-factor authentication is on.</span>
             </div>
-            <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="space-y-4 p-6">
-            {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
-            {success && <div className="rounded-xl border border-green-200 bg-[#E8F5E9] px-4 py-3 text-sm font-semibold text-[#2E7D32]">{success}</div>}
-
-            {status === "loading" && (
-              <div className="flex h-24 items-center justify-center text-slate-400"><Loader2 className="h-5 w-5 animate-spin" /></div>
-            )}
-
-            {status === "off" && (
-              <>
-                <p className="text-sm text-slate-600">
-                  Protect your account with a 6-digit code from an authenticator app
-                  (Google Authenticator, Microsoft Authenticator, Authy…) in addition to your password.
-                </p>
-                <button onClick={startSetup} disabled={busy}
-                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                  {busy && <Loader2 className="h-4 w-4 animate-spin" />} Enable 2FA
-                </button>
-              </>
-            )}
-
-            {status === "setup" && (
-              <form onSubmit={verify} className="space-y-4">
-                <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600">
-                  <li>Open your authenticator app</li>
-                  <li>Scan this QR code</li>
-                  <li>Enter the 6-digit code below</li>
-                </ol>
-                {qr && (
-                  <div className="flex justify-center rounded-xl border border-slate-200 bg-white p-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={qr} alt="2FA QR code" className="h-48 w-48" />
-                  </div>
-                )}
-                <p className="break-all rounded-lg bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
-                  Can&apos;t scan? Enter manually: <strong className="font-mono">{manualKey}</strong>
-                </p>
-                <input
-                  type="text" inputMode="numeric" maxLength={6} required autoFocus
-                  value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="6-digit code" className={`${inp} text-center text-lg font-bold tracking-[0.5em]`}
-                />
-                <button type="submit" disabled={busy || code.length !== 6}
-                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                  {busy && <Loader2 className="h-4 w-4 animate-spin" />} Verify &amp; Turn On
-                </button>
-              </form>
-            )}
-
-            {status === "on" && (
-              <form onSubmit={disable} className="space-y-4">
-                <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-[#E8F5E9] px-4 py-3 text-sm font-semibold text-[#2E7D32]">
-                  <ShieldCheck className="h-4 w-4" /> Two-factor authentication is ON
-                </div>
-                <p className="text-sm text-slate-600">To turn it off, confirm your password and a current code:</p>
-                <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Your password" className={inp} autoComplete="current-password" />
-                <input type="text" inputMode="numeric" maxLength={6} required value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="6-digit code" className={`${inp} text-center font-bold tracking-[0.4em]`} />
-                <button type="submit" disabled={busy || code.length !== 6 || !password}
-                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-60">
-                  {busy && <Loader2 className="h-4 w-4 animate-spin" />} Turn Off 2FA
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
+            <p className="text-sm text-dim">To turn it off, confirm your password and a current code:</p>
+            <Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="Your password" autoComplete="current-password" aria-label="Password" />
+            <Input type="text" inputMode="numeric" maxLength={6} required value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="6-digit code" className="readout text-center font-bold tracking-[0.4em]"
+              aria-label="6-digit verification code" />
+            <Button type="submit" variant="danger" className="w-full" disabled={busy || code.length !== 6 || !password}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />} Turn Off 2FA
+            </Button>
+          </form>
+        )}
       </div>
-    </>
+    </Dialog>
   );
 }
 
@@ -180,48 +186,28 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const inp = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-[#2E7D32] focus:ring-2 focus:ring-[#E8F5E9]";
-
   return (
-    <>
-      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl">
-          <div className="flex items-center justify-between rounded-t-2xl bg-[#0D1F0E] px-6 py-5 text-white">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-[#4DB6AC]">Account</p>
-              <h2 className="mt-0.5 text-lg font-bold">Change Password</h2>
-            </div>
-            <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <form onSubmit={submit} className="space-y-4 p-6">
-            {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
-            {success && <div className="rounded-xl border border-green-200 bg-[#E8F5E9] px-4 py-3 text-sm font-semibold text-[#2E7D32]">{success}</div>}
-            <div>
-              <label className="mb-1 block text-sm font-bold text-slate-700">Current password</label>
-              <input type="password" required value={current} onChange={(e) => setCurrent(e.target.value)} className={inp} autoComplete="current-password" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-bold text-slate-700">New password</label>
-              <input type="password" required value={next} onChange={(e) => setNext(e.target.value)} className={inp} autoComplete="new-password" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-bold text-slate-700">Confirm new password</label>
-              <input type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inp} autoComplete="new-password" />
-            </div>
-            <div className="flex gap-3 pt-1">
-              <button type="button" onClick={onClose} className="h-10 flex-1 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="submit" disabled={saving} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#2E7D32] text-sm font-bold text-white hover:bg-[#1B5E20] disabled:opacity-60">
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Save
-              </button>
-            </div>
-          </form>
+    <Dialog open onClose={onClose} title="Change Password" size="sm">
+      <form onSubmit={submit} className="space-y-4">
+        {error && <Notice kind="error">{error}</Notice>}
+        {success && <Notice kind="success">{success}</Notice>}
+        <Field label="Current password" required>
+          <Input type="password" required value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" />
+        </Field>
+        <Field label="New password" required help="At least 8 characters.">
+          <Input type="password" required value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
+        </Field>
+        <Field label="Confirm new password" required>
+          <Input type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+        </Field>
+        <div className="flex gap-3 pt-1">
+          <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="solid" className="flex-1" disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />} Save
+          </Button>
         </div>
-      </div>
-    </>
+      </form>
+    </Dialog>
   );
 }
 
@@ -241,60 +227,62 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
     .toUpperCase() || "NA";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur dark:border-slate-700/80 dark:bg-[#112013]/95">
-      <div className="flex h-16 items-center gap-3 px-4 sm:px-6 2xl:px-10">
+    <header className="border-b border-bezel bg-panel/90 backdrop-blur">
+      <div className="flex h-14 items-center gap-2 px-4 sm:gap-3 sm:px-6 2xl:px-10">
         <button
           type="button"
           onClick={onMenuOpen}
           aria-label="Open navigation menu"
-          className="lg:hidden grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#2E7D32] hover:bg-[#E8F5E9] hover:text-[#2E7D32] dark:border-slate-700 dark:bg-[#112013] dark:text-slate-300 dark:hover:border-[#2E7D32] dark:hover:bg-[#1a2e1b]"
+          className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-ctl border border-bezel text-dim transition hover:border-phos hover:text-phos lg:hidden"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4" />
         </button>
 
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-[#0D1F0E] truncate dark:text-[#e8f5e9]">Nitaq Academy</p>
-          <p className="mt-0.5 text-xs text-slate-500 hidden sm:block dark:text-slate-400">
-            CRM &amp; Operations
-          </p>
-        </div>
+        {/* Brand appears here only on mobile, where the sidebar is hidden */}
+        <p className="min-w-0 flex-1 truncate text-sm font-bold text-ink lg:hidden">
+          Nitaq Academy
+        </p>
+        <div className="hidden min-w-0 flex-1 lg:block" />
 
-        <div className="flex items-center gap-2 sm:gap-3">
-          <span className="hidden rounded-full border border-green-200 bg-[#E8F5E9] px-3 py-1 text-xs font-semibold text-[#2E7D32] lg:inline-flex dark:border-green-900 dark:bg-[#0c1a0d] dark:text-[#4CAF50]">
-            Sharjah
-          </span>
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <GlobalSearch />
           <ThemeToggle />
           <NotificationPanel />
 
-          {/* User avatar with dropdown */}
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1B5E20] text-xs font-bold text-white shadow-sm hover:bg-[#2E7D32] transition"
+              className="grid h-9 w-9 place-items-center rounded-ctl border border-bezel bg-face text-xs font-bold text-ink transition hover:border-phos hover:text-phos"
               title={userName || "Account"}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
               {initials}
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-12 z-50 w-52 rounded-2xl border border-slate-200 bg-white shadow-xl">
-                  <div className="border-b border-slate-100 px-4 py-3">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Signed in as</p>
-                    <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">{userName || "User"}</p>
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
+                <div
+                  role="menu"
+                  className="absolute right-0 top-11 z-50 w-56 rounded-card border border-bezel bg-raised shadow-raise"
+                >
+                  <div className="border-b border-bezel px-4 py-3">
+                    <p className="placard">Signed in as</p>
+                    <p className="mt-0.5 truncate text-sm font-semibold text-ink">{userName || "User"}</p>
                   </div>
                   <div className="p-1.5">
                     <button
+                      role="menuitem"
                       onClick={() => { setMenuOpen(false); setPwOpen(true); }}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-[#E8F5E9] hover:text-[#2E7D32] transition"
+                      className="flex w-full items-center gap-3 rounded-ctl px-3 py-2.5 text-sm font-semibold text-dim transition hover:bg-well hover:text-ink"
                     >
                       <KeyRound className="h-4 w-4" />
                       Change Password
                     </button>
                     <button
+                      role="menuitem"
                       onClick={() => { setMenuOpen(false); setTfaOpen(true); }}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-[#E8F5E9] hover:text-[#2E7D32] transition"
+                      className="flex w-full items-center gap-3 rounded-ctl px-3 py-2.5 text-sm font-semibold text-dim transition hover:bg-well hover:text-ink"
                     >
                       <ShieldCheck className="h-4 w-4" />
                       Two-Factor Auth

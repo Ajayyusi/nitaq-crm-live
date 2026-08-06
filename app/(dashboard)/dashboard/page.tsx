@@ -1,23 +1,17 @@
 import Link from "next/link";
 import {
-  ArrowRight,
   ArrowUpDown,
-  Award,
   BarChart3,
   BellRing,
   BookOpen,
   CalendarCheck,
   CalendarDays,
-  CheckCircle2,
   CircleDollarSign,
   GraduationCap,
   HandCoins,
   MessageSquare,
   Phone,
   Plus,
-  TrendingUp,
-  UserPlus,
-  UsersRound,
 } from "lucide-react";
 import { Suspense } from "react";
 import connectDB from "@/lib/db";
@@ -31,12 +25,15 @@ import { auth } from "@/auth";
 import UrlDateFilter from "@/components/shared/UrlDateFilter";
 import { buildDateFilter, describeRange, thisMonthRange } from "@/lib/dateRange";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { Instrument } from "@/components/ui/instrument";
+import { Lamp } from "@/components/ui/lamp";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import StatusBadge from "@/components/shared/StatusBadge";
 
 // ── Role helpers ─────────────────────────────────────────────────────────────
 const FINANCE_ROLES = new Set(["admin", "manager", "finance"]);
 const SALES_ROLES   = new Set(["admin", "manager", "sales"]);
 const CLASS_ROLES   = new Set(["admin", "manager", "trainer"]);
-const ALL_ROLES     = new Set(["admin", "manager", "sales", "finance", "trainer"]);
 
 function can(role: string, set: Set<string>) { return set.has(role); }
 
@@ -118,6 +115,7 @@ async function getDashboardData(role: string, from: string, to: string, userName
     }
 
     // Enrollments list — finance only now (sales uses enrollment-request workflow)
+    let certificatesDue = 0;
     if (showFinance) {
       const raw = await Enrollment.find().sort({ createdAt: -1 }).limit(6).lean();
       recentEnrollments = raw.map((e) => ({
@@ -125,10 +123,14 @@ async function getDashboardData(role: string, from: string, to: string, userName
         fullName: e.fullName, course: e.course, status: e.status,
         paymentStatus: e.paymentStatus, amountPaid: e.amountPaid, totalFee: e.totalFee,
       }));
+      // Honest global count (previously computed from the 6 most recent only)
+      certificatesDue = await Enrollment.countDocuments({
+        status: "Completed",
+        $expr: { $gte: ["$amountPaid", "$totalFee"] },
+      });
     }
 
     // Enrollment requests — admin/manager see all pending; sales sees their own
-    // Import EnrollmentRequest dynamically to avoid top-level import issues
     try {
       const EnrollmentRequest = (await import("@/models/EnrollmentRequest")).default;
       if (!isSalesOnly) {
@@ -214,6 +216,7 @@ async function getDashboardData(role: string, from: string, to: string, userName
       leadTotal, fresh, interested, enrolled, paid, lost, leadsNoFollowUp,
       activeStudents, monthlyRevenue, pendingPayments, overdueFollowUps,
       upcomingSessions, conversionRate, pendingEnrollmentRequests, myPendingRequests,
+      certificatesDue,
       todayFollowUps, recentEnrollments, courseBreakdown, recentPayments, salesPerformance,
       connected: true,
       now: now.toISOString(),
@@ -233,12 +236,7 @@ const followUpTypeIcon: Record<string, typeof Phone> = {
   Other: BellRing,
 };
 
-const statusColor: Record<string, string> = {
-  Active: "bg-green-100 text-green-700",
-  Completed: "bg-teal-100 text-teal-700",
-  Dropped: "bg-rose-100 text-rose-700",
-  "On Hold": "bg-amber-100 text-amber-700",
-};
+const STAGE_COLORS = ["var(--advisory)", "var(--caution-fill)", "var(--phos)", "var(--phos-bright)"];
 
 export default async function DashboardPage({
   searchParams,
@@ -261,9 +259,9 @@ export default async function DashboardPage({
   if (!data) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center">
-          <p className="font-bold text-rose-700">Could not connect to database.</p>
-          <p className="mt-1 text-sm text-rose-600">Check your MONGODB_URI in .env.local</p>
+        <div className="rounded-card border border-alert/30 bg-[var(--lamp-alert-bg)] p-8 text-center">
+          <p className="font-bold text-alert">Couldn&apos;t reach the database.</p>
+          <p className="mt-1 text-sm text-dim">Try again shortly — if it persists, contact your administrator.</p>
         </div>
       </div>
     );
@@ -276,437 +274,322 @@ export default async function DashboardPage({
   const dateStr   = formatDate(now);
   const periodLabel = describeRange(from, to);
 
-  // ── KPIs — assembled per role ─────────────────────────────────────────────
-  const kpis = [
-    // Sales/leads KPIs
+  // ── The six-pack: the role's primary instruments, ranked ─────────────────
+  const sixPack = [
     data.showSales && {
       label: data.isSalesOnly ? "My Leads" : "Total Leads",
-      value: data.leadTotal,
-      sub: data.isSalesOnly ? "Assigned to me" : "All enquiries",
-      icon: UserPlus, topColor: "#2196F3", href: "/leads",
+      value: data.leadTotal, sub: data.isSalesOnly ? "Assigned to me" : "All enquiries",
+      href: "/leads", tone: "ink" as const,
     },
-    // Active students — admin/manager/finance only
     !data.isSalesOnly && {
       label: "Active Students", value: data.activeStudents,
-      sub: "Currently enrolled", icon: UsersRound, topColor: "#2E7D32", href: "/students",
+      sub: "Currently enrolled", href: "/students", tone: "ink" as const,
     },
-    // Finance KPI
     data.showFinance && {
-      label: `Revenue (${periodLabel})`, value: fmt(data.monthlyRevenue),
-      sub: "Received payments", icon: CircleDollarSign, topColor: "#7B1FA2", href: "/finance",
+      label: `Revenue · ${periodLabel}`, value: fmt(data.monthlyRevenue),
+      sub: "Received payments", href: "/finance", tone: "phos" as const,
     },
-    // Sales KPI
+    data.showFinance && {
+      label: "Pending Collection", value: fmt(data.pendingPayments),
+      sub: "Awaiting collection", href: "/collections",
+      tone: data.pendingPayments > 0 ? ("caution" as const) : ("ink" as const),
+    },
     data.showSales && {
       label: "Follow-Ups Today", value: data.todayFollowUps.length,
       sub: data.overdueFollowUps > 0 ? `${data.overdueFollowUps} overdue` : "Scheduled",
-      icon: BellRing, topColor: data.overdueFollowUps > 0 ? "#EF5350" : "#F59E0B", href: "/follow-ups",
+      href: "/follow-ups",
+      tone: data.overdueFollowUps > 0 ? ("caution" as const) : ("ink" as const),
     },
-    // Finance KPI
-    data.showFinance && {
-      label: "Pending Payments", value: fmt(data.pendingPayments),
-      sub: "Awaiting collection", icon: HandCoins,
-      topColor: data.pendingPayments > 0 ? "#EF5350" : "#78909C", href: "/payments",
-    },
-    // Sales KPI — conversion
     data.showSales && {
-      label: data.isSalesOnly ? "My Paid / Converted" : "Paid / Converted",
-      value: data.paid,
-      sub: `${data.conversionRate}% conversion rate`, icon: CheckCircle2, topColor: "#00897B", href: "/leads",
+      label: data.isSalesOnly ? "My Converted" : "Paid / Converted",
+      value: data.paid, sub: `${data.conversionRate}% conversion`,
+      href: "/leads", tone: "phos" as const,
     },
-    // Classes KPI
     data.showClasses && {
       label: "Upcoming Sessions", value: data.upcomingSessions,
-      sub: "From today", icon: CalendarDays, topColor: "#F57C00", href: "/classes",
+      sub: "From today", href: "/classes", tone: "ink" as const,
     },
-    // Finance KPI
     data.showFinance && {
-      label: "Certificate Due",
-      value: data.recentEnrollments.filter((e) => e.status === "Completed" && e.amountPaid >= e.totalFee).length,
-      sub: "Completed & paid", icon: Award, topColor: "#C62828", href: "/students",
+      label: "Certificates Due", value: data.certificatesDue,
+      sub: "Completed & fully paid", href: "/students",
+      tone: data.certificatesDue > 0 ? ("advisory" as const) : ("ink" as const),
     },
-    // Admin/Manager — pending enrollment requests
-    !data.isSalesOnly && data.showSales && data.pendingEnrollmentRequests > 0 && {
-      label: "Enrollment Requests", value: data.pendingEnrollmentRequests,
-      sub: "Pending review", icon: GraduationCap, topColor: "#F57C00", href: "/enrollment-requests",
-    },
-    // Sales only — their pending enrollment requests
-    data.isSalesOnly && data.myPendingRequests > 0 && {
-      label: "My Enrollment Requests", value: data.myPendingRequests,
-      sub: "Awaiting admin review", icon: GraduationCap, topColor: "#F57C00", href: "/enrollment-requests",
-    },
-    // Sales only — overdue follow-ups as separate KPI
+  ].filter(Boolean).slice(0, 6) as {
+    label: string; value: number | string; sub: string; href: string;
+    tone: "ink" | "phos" | "caution" | "alert" | "advisory";
+  }[];
+
+  // ── Annunciator strip: lamps that only appear when a condition is live ───
+  const annunciators = [
     data.showSales && data.overdueFollowUps > 0 && {
-      label: "Overdue Follow-Ups", value: data.overdueFollowUps,
-      sub: "Need immediate action", icon: BellRing, topColor: "#EF5350", href: "/follow-ups",
+      label: `${data.overdueFollowUps} overdue follow-up${data.overdueFollowUps === 1 ? "" : "s"}`,
+      href: "/follow-ups", variant: "alert" as const,
     },
-    // Sales — leads with no follow-up scheduled
     data.showSales && data.leadsNoFollowUp > 0 && {
-      label: "No Follow-Up Set", value: data.leadsNoFollowUp,
-      sub: "Active leads not scheduled", icon: UserPlus, topColor: "#78909C", href: "/leads",
+      label: `${data.leadsNoFollowUp} lead${data.leadsNoFollowUp === 1 ? "" : "s"} with no follow-up set`,
+      href: "/leads", variant: "caution" as const,
     },
-  ].filter(Boolean) as { label: string; value: number | string; sub: string; icon: typeof UserPlus; topColor: string; href: string }[];
+    !data.isSalesOnly && data.showSales && data.pendingEnrollmentRequests > 0 && {
+      label: `${data.pendingEnrollmentRequests} enrollment request${data.pendingEnrollmentRequests === 1 ? "" : "s"} pending review`,
+      href: "/enrollment-requests", variant: "caution" as const,
+    },
+    data.isSalesOnly && data.myPendingRequests > 0 && {
+      label: `${data.myPendingRequests} of my requests awaiting review`,
+      href: "/enrollment-requests", variant: "advisory" as const,
+    },
+  ].filter(Boolean) as { label: string; href: string; variant: "alert" | "caution" | "advisory" }[];
+
+  const funnel = [
+    { label: "Lead", value: data.fresh },
+    { label: "Interested", value: data.interested },
+    { label: "Enrolled", value: data.enrolled },
+    { label: "Paid", value: data.paid },
+  ];
+  const funnelMax = Math.max(1, ...funnel.map((f) => f.value));
 
   return (
-    <div className="space-y-7">
-      {/* ── Greeting hero ─────────────────────────────────────────────────── */}
-      <section
-        className="overflow-hidden rounded-2xl shadow-xl"
-        style={{ background: "linear-gradient(135deg, #0D1F0E 0%, #1B5E20 60%, #2E7D32 100%)" }}
-      >
-        <div className="relative px-8 py-8">
-          <div
-            className="pointer-events-none absolute inset-0 opacity-[0.06]"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(255,255,255,1) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,1) 1px,transparent 1px)",
-              backgroundSize: "40px 40px",
-            }}
-          />
-          <div className="relative z-10 flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-sm font-semibold text-green-300">{greet}, {firstName} 👋</p>
-              <h1 className="mt-1 text-2xl font-bold text-white xl:text-3xl">Nitaq Academy CRM</h1>
-              <p className="mt-1.5 text-sm text-green-200">{dateStr} · Sharjah, UAE</p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                {/* Sales actions */}
-                {data.showSales && (
-                  <>
-                    <Link href="/leads" className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#1B5E20] shadow-lg transition hover:bg-green-50">
-                      <Plus className="h-4 w-4" /> Add Lead
-                    </Link>
-                    <Link href="/follow-ups" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
-                      <BellRing className="h-4 w-4" /> Follow-Ups
-                      {data.overdueFollowUps > 0 && (
-                        <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold">{data.overdueFollowUps}</span>
-                      )}
-                    </Link>
-                    {!data.isSalesOnly && (
-                      <Link href="/enrollments" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
-                        <GraduationCap className="h-4 w-4" /> Enroll
-                      </Link>
-                    )}
-                    {data.isSalesOnly && (
-                      <Link href="/enrollment-requests" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
-                        <GraduationCap className="h-4 w-4" /> My Requests
-                        {data.myPendingRequests > 0 && (
-                          <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">{data.myPendingRequests}</span>
-                        )}
-                      </Link>
-                    )}
-                  </>
-                )}
-                {/* Finance actions */}
-                {data.showFinance && !data.showSales && (
-                  <>
-                    <Link href="/payments" className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#1B5E20] shadow-lg transition hover:bg-green-50">
-                      <CircleDollarSign className="h-4 w-4" /> Record Payment
-                    </Link>
-                    <Link href="/expenses" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
-                      <HandCoins className="h-4 w-4" /> Add Expense
-                    </Link>
-                    <Link href="/reports" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
-                      <BarChart3 className="h-4 w-4" /> Reports
-                    </Link>
-                  </>
-                )}
-                {/* Trainer actions */}
-                {role === "trainer" && (
-                  <>
-                    <Link href="/classes" className="inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-[#1B5E20] shadow-lg transition hover:bg-green-50">
-                      <CalendarDays className="h-4 w-4" /> My Classes
-                    </Link>
-                    <Link href="/courses" className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/20">
-                      <BookOpen className="h-4 w-4" /> Courses
-                    </Link>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Live snapshot — finance only */}
-            {data.showFinance && (
-              <div className="hidden rounded-2xl border border-white/10 bg-white/[0.07] p-5 lg:block" style={{ minWidth: 200 }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-green-300">Live snapshot</p>
-                <div className="mt-3 space-y-2.5">
-                  <div className="flex items-center justify-between gap-8 text-sm">
-                    <span className="text-green-200">Students</span>
-                    <span className="font-bold text-white">{data.activeStudents}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-8 text-sm">
-                    <span className="text-green-200">{periodLabel}</span>
-                    <span className="font-bold text-white">{fmt(data.monthlyRevenue)}</span>
-                  </div>
-                  <div className="h-px bg-white/10" />
-                  <div className="flex items-center justify-between gap-8 text-sm">
-                    <span className="text-green-200">Pending</span>
-                    <span className="font-bold text-amber-300">{fmt(data.pendingPayments)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Live snapshot — manager (no AED) */}
-            {data.showSales && !data.showFinance && !data.isSalesOnly && (
-              <div className="hidden rounded-2xl border border-white/10 bg-white/[0.07] p-5 lg:block" style={{ minWidth: 200 }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-green-300">Live snapshot</p>
-                <div className="mt-3 space-y-2.5">
-                  <div className="flex items-center justify-between gap-8 text-sm">
-                    <span className="text-green-200">Leads</span>
-                    <span className="font-bold text-white">{data.leadTotal}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-8 text-sm">
-                    <span className="text-green-200">Interested</span>
-                    <span className="font-bold text-white">{data.interested}</span>
-                  </div>
-                  <div className="h-px bg-white/10" />
-                  <div className="flex items-center justify-between gap-8 text-sm">
-                    <span className="text-green-200">Follow-ups today</span>
-                    <span className={`font-bold ${data.overdueFollowUps > 0 ? "text-amber-300" : "text-white"}`}>
-                      {data.todayFollowUps.length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+    <div className="space-y-5">
+      {/* ── Command strip ─────────────────────────────────────────────────── */}
+      <section className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm text-dim">
+            {greet}, <span className="font-bold text-ink">{firstName}</span>
+          </p>
+          <p className="placard mt-1">{dateStr} · Sharjah</p>
         </div>
-      </section>
-
-      {/* ── Period filter (finance + sales roles) ───────────────────────── */}
-      {(data.showFinance || data.showSales) && (
-        <div className="flex items-center gap-3 text-sm text-slate-500">
-          <span className="font-medium">Period:</span>
-          <Suspense fallback={null}>
-            <UrlDateFilter defaultFrom={defaultRange.from} defaultTo={defaultRange.to} />
-          </Suspense>
-        </div>
-      )}
-
-      {/* ── KPI cards ─────────────────────────────────────────────────────── */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi) => {
-          const Icon = kpi.icon;
-          return (
+        <div className="flex flex-wrap items-center gap-2">
+          {(data.showFinance || data.showSales) && (
+            <Suspense fallback={null}>
+              <UrlDateFilter defaultFrom={defaultRange.from} defaultTo={defaultRange.to} />
+            </Suspense>
+          )}
+          {data.showSales && (
             <Link
-              key={kpi.label}
-              href={kpi.href}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+              href="/leads"
+              className="inline-flex h-9 items-center gap-2 rounded-ctl border border-transparent bg-phos px-4 text-xs font-bold uppercase tracking-[0.08em] text-phos-ink shadow-glow transition hover:bg-phos-bright"
             >
-              <div className="absolute inset-x-0 top-0 h-[3px] rounded-t-2xl" style={{ background: kpi.topColor }} />
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-bold uppercase tracking-wider text-slate-500">{kpi.label}</p>
-                  <p className="mt-2.5 text-3xl font-bold tracking-tight text-[#0D1F0E]">
-                    {typeof kpi.value === "number" ? kpi.value.toLocaleString() : kpi.value}
-                  </p>
-                </div>
-                <div
-                  className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl"
-                  style={{ background: kpi.topColor + "18", color: kpi.topColor }}
-                >
-                  <Icon className="h-5 w-5" />
-                </div>
-              </div>
-              <p className="mt-3 text-xs text-slate-500">{kpi.sub}</p>
+              <Plus className="h-4 w-4" /> Add Lead
             </Link>
-          );
-        })}
+          )}
+          {data.showFinance && !data.showSales && (
+            <Link
+              href="/payments"
+              className="inline-flex h-9 items-center gap-2 rounded-ctl border border-transparent bg-phos px-4 text-xs font-bold uppercase tracking-[0.08em] text-phos-ink shadow-glow transition hover:bg-phos-bright"
+            >
+              <CircleDollarSign className="h-4 w-4" /> Record Payment
+            </Link>
+          )}
+          {role === "trainer" && (
+            <Link
+              href="/classes"
+              className="inline-flex h-9 items-center gap-2 rounded-ctl border border-transparent bg-phos px-4 text-xs font-bold uppercase tracking-[0.08em] text-phos-ink shadow-glow transition hover:bg-phos-bright"
+            >
+              <CalendarDays className="h-4 w-4" /> My Classes
+            </Link>
+          )}
+        </div>
       </section>
+
+      {/* ── The six-pack ──────────────────────────────────────────────────── */}
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {sixPack.map((kpi, i) => (
+          <div key={kpi.label} className="animate-power-on" style={{ animationDelay: `${i * 70}ms` }}>
+            <Instrument
+              label={kpi.label}
+              value={typeof kpi.value === "number" ? kpi.value.toLocaleString() : kpi.value}
+              sub={kpi.sub}
+              tone={kpi.tone}
+              href={kpi.href}
+            />
+          </div>
+        ))}
+      </section>
+
+      {/* ── Annunciator strip — lit only when something needs a human ─────── */}
+      {annunciators.length > 0 && (
+        <section className="flex flex-wrap gap-2" aria-label="Attention required">
+          {annunciators.map((a) => (
+            <Link key={a.label} href={a.href} className="group">
+              <Lamp variant={a.variant} className="px-2.5 py-1.5 text-[11px] transition group-hover:brightness-125">
+                {a.label}
+              </Lamp>
+            </Link>
+          ))}
+        </section>
+      )}
 
       {/* ── Pipeline + Follow-ups (Sales / Admin / Manager only) ─────────── */}
       {data.showSales && (
-        <section className="grid gap-5 xl:grid-cols-2">
-          {/* Pipeline */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
+        <section className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
               <div>
-                <h2 className="text-base font-bold text-[#0D1F0E]">Admissions Pipeline</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Lead-to-paid conversion funnel</p>
+                <CardTitle>Admissions Pipeline</CardTitle>
+                <CardDescription className="mt-0.5">
+                  {data.leadTotal} lead{data.leadTotal === 1 ? "" : "s"} · {data.conversionRate}% reach paid
+                </CardDescription>
               </div>
-              <Link href="/leads" className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
-                All Leads
+              <Link href="/leads" className="text-xs font-bold uppercase tracking-[0.08em] text-phos hover:underline">
+                All leads
               </Link>
-            </div>
-            <div className="mt-5 flex items-center gap-1 overflow-x-auto pb-1">
-              {[
-                { label: "Lead", value: data.fresh, color: "#2196F3" },
-                { label: "Interested", value: data.interested, color: "#F59E0B" },
-                { label: "Enrolled", value: data.enrolled, color: "#2E7D32" },
-                { label: "Paid", value: data.paid, color: "#00897B" },
-              ].map((stage, i) => (
-                <div key={stage.label} className="flex items-center">
-                  <div className="flex flex-col items-center">
-                    <div className="rounded-xl px-4 py-3 text-center shadow-sm" style={{ background: stage.color + "14", border: `1px solid ${stage.color}30` }}>
-                      <p className="text-2xl font-bold" style={{ color: stage.color }}>{stage.value}</p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-slate-600">{stage.label}</p>
-                    </div>
-                  </div>
-                  {i < 3 && <ArrowRight className="mx-1 h-4 w-4 flex-shrink-0 text-slate-300" />}
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-rose-400" />
-                <span className="text-sm font-semibold text-rose-700">Lost / Dropped out</span>
-              </div>
-              <span className="text-lg font-bold text-rose-700">{data.lost}</span>
-            </div>
-            <div className="mt-5 space-y-3">
-              {[
-                { label: "Lead", value: data.fresh, color: "#2196F3" },
-                { label: "Interested", value: data.interested, color: "#F59E0B" },
-                { label: "Enrolled", value: data.enrolled, color: "#2E7D32" },
-                { label: "Paid", value: data.paid, color: "#00897B" },
-              ].map((item) => {
-                const width = data.leadTotal > 0 ? Math.max(4, Math.round((item.value / data.leadTotal) * 100)) : 4;
-                return (
-                  <div key={item.label}>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-600">{item.label}</span>
-                      <span className="font-bold text-slate-800">
-                        {data.leadTotal > 0 ? Math.round((item.value / data.leadTotal) * 100) : 0}%
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${width}%`, background: item.color }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Today's follow-ups */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-[#0D1F0E]">Today&apos;s Follow-Ups</h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {data.todayFollowUps.length} pending today
-                  {data.overdueFollowUps > 0 && ` · ${data.overdueFollowUps} overdue`}
-                </p>
-              </div>
-              <Link href="/follow-ups" className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
-                All Follow-Ups
-              </Link>
-            </div>
-            {data.todayFollowUps.length === 0 ? (
-              <div className="mt-6 flex flex-col items-center justify-center rounded-xl bg-slate-50 py-10 text-center">
-                <CheckCircle2 className="h-10 w-10 text-slate-300" />
-                <p className="mt-3 text-sm font-semibold text-slate-500">No follow-ups due today</p>
-                <p className="mt-1 text-xs text-slate-400">Check back tomorrow</p>
-              </div>
-            ) : (
-              <div className="mt-4 space-y-2.5">
-                {data.todayFollowUps.map((f) => {
-                  const Icon = followUpTypeIcon[f.type] ?? BellRing;
-                  const waLink = (buildWhatsAppUrl(f.phone) ?? "#");
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {funnel.map((stage, i) => {
+                  const pct = data.leadTotal > 0 ? Math.round((stage.value / data.leadTotal) * 100) : 0;
+                  const width = Math.round((stage.value / funnelMax) * 100);
                   return (
-                    <div key={f.id} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 transition hover:border-[#2E7D32]/30 hover:bg-[#E8F5E9]">
-                      <div className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg bg-[#E8F5E9]">
-                        <Icon className="h-4 w-4 text-[#2E7D32]" />
+                    <div key={stage.label}>
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <span className="placard">{stage.label}</span>
+                        <span className="readout text-xs text-dim" data-numeric>
+                          {stage.value} · {pct}%
+                        </span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-[#0D1F0E]">{f.contactName}</p>
-                        {f.course && <p className="truncate text-xs text-slate-500">{f.course}</p>}
-                        <p className="mt-0.5 text-[11px] text-slate-400">{f.type}</p>
+                      <div className="h-2 overflow-hidden rounded-sm bg-well">
+                        <div
+                          className="h-full rounded-sm"
+                          style={{ width: `${width}%`, background: STAGE_COLORS[i] }}
+                        />
                       </div>
-                      <a href={waLink} target="_blank" rel="noopener noreferrer"
-                        className="flex-shrink-0 rounded-lg bg-green-500 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-green-600">
-                        WA
-                      </a>
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
+              <div className="mt-4 flex items-center justify-between border-t border-bezel pt-3">
+                <Lamp variant={data.lost > 0 ? "off" : "ok"}>Lost / dropped</Lamp>
+                <span className="readout text-sm font-bold text-dim" data-numeric>{data.lost}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Today&apos;s Follow-Ups</CardTitle>
+                <CardDescription className="mt-0.5">
+                  {data.todayFollowUps.length} pending today
+                  {data.overdueFollowUps > 0 && ` · ${data.overdueFollowUps} overdue`}
+                </CardDescription>
+              </div>
+              <Link href="/follow-ups" className="text-xs font-bold uppercase tracking-[0.08em] text-phos hover:underline">
+                All follow-ups
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {data.todayFollowUps.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-ctl bg-well py-10 text-center">
+                  <CalendarCheck className="h-8 w-8 text-faint" aria-hidden />
+                  <p className="mt-3 text-sm font-semibold text-dim">No follow-ups due today</p>
+                  <p className="mt-1 text-xs text-faint">The board is clear.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {data.todayFollowUps.map((f) => {
+                    const Icon = followUpTypeIcon[f.type] ?? BellRing;
+                    const waLink = (buildWhatsAppUrl(f.phone) ?? "#");
+                    return (
+                      <div
+                        key={f.id}
+                        className="flex items-start gap-3 rounded-ctl border border-bezel bg-well px-3.5 py-2.5 transition hover:border-phos/40"
+                      >
+                        <div className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-ctl border border-bezel bg-face">
+                          <Icon className="h-4 w-4 text-phos" aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-ink">{f.contactName}</p>
+                          {f.course && <p className="truncate text-xs text-dim">{f.course}</p>}
+                          <p className="placard mt-0.5">{f.type}</p>
+                        </div>
+                        <a
+                          href={waLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`WhatsApp ${f.contactName}`}
+                          className="flex-shrink-0 rounded-ctl border border-phos/60 px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-phos transition hover:bg-phos hover:text-phos-ink"
+                        >
+                          WA
+                        </a>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </section>
       )}
 
       {/* ── Trainer view — classes / sessions ───────────────────────────── */}
       {role === "trainer" && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-orange-100">
-              <CalendarDays className="h-5 w-5 text-orange-600" />
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-ctl border border-bezel bg-well">
+                <CalendarDays className="h-5 w-5 text-phos" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-ink">Your Sessions</h2>
+                <p className="text-xs text-dim">{data.upcomingSessions} upcoming from today</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-[#0D1F0E]">Your Sessions</h2>
-              <p className="text-xs text-slate-500">{data.upcomingSessions} upcoming from today</p>
+            <div className="flex gap-2">
+              <Link href="/classes" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-phos/60 px-4 text-xs font-bold uppercase tracking-[0.08em] text-phos transition hover:bg-phos hover:text-phos-ink">
+                <CalendarDays className="h-4 w-4" /> View Classes
+              </Link>
+              <Link href="/courses" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-ink transition hover:bg-well">
+                <BookOpen className="h-4 w-4" /> Courses
+              </Link>
             </div>
-          </div>
-          <div className="mt-4 flex gap-3">
-            <Link href="/classes" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
-              <CalendarDays className="h-4 w-4" /> View Classes
-            </Link>
-            <Link href="/courses" className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
-              <BookOpen className="h-4 w-4" /> Course Reference
-            </Link>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Sales Team Performance (admin/manager only) ─────────────────── */}
       {!data.isSalesOnly && data.showSales && data.salesPerformance.length > 0 && (
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+        <Card className="overflow-hidden">
+          <CardHeader>
             <div>
-              <h2 className="text-base font-bold text-[#0D1F0E]">Sales Team Performance</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Leads by sales staff member (all time)</p>
+              <CardTitle>Sales Team Performance</CardTitle>
+              <CardDescription className="mt-0.5">Leads by sales staff member · all time</CardDescription>
             </div>
-            <Link href="/leads" className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
-              View All Leads
+            <Link href="/leads" className="text-xs font-bold uppercase tracking-[0.08em] text-phos hover:underline">
+              View leads
             </Link>
-          </div>
+          </CardHeader>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="px-6 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">Sales Rep</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Total</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Interested</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Converted</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Overdue</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Done%</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">Conv%</th>
+            <table className="w-full text-sm">
+              <thead className="bg-well">
+                <tr>
+                  <th className="placard border-b border-bezel px-4 py-2.5 text-left first:pl-5">Sales Rep</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Total</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Interested</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Converted</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Overdue</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 text-right">Done%</th>
+                  <th className="placard border-b border-bezel px-3 py-2.5 pr-5 text-right">Conv%</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody>
                 {data.salesPerformance.map((s) => {
                   const rate = s.total > 0 ? Math.round((s.converted / s.total) * 100) : 0;
                   const donePct = s.fuTotal > 0 ? Math.round((s.fuDone / s.fuTotal) * 100) : null;
                   return (
-                    <tr key={s.name} className="hover:bg-slate-50 transition">
-                      <td className="px-6 py-3.5">
-                        <p className="text-sm font-semibold text-[#0D1F0E]">{s.name}</p>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-sm font-bold text-slate-700">{s.total}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-sm text-[#2E7D32] font-semibold">{s.interested}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-sm font-bold text-teal-600">{s.converted}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className={`text-sm font-bold ${s.overdue > 0 ? "text-rose-600" : "text-slate-400"}`}>{s.overdue}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
+                    <tr key={s.name} className="border-b border-bezel/60 transition last:border-0 hover:bg-well">
+                      <td className="px-4 py-3 pl-5 text-sm font-semibold text-ink">{s.name}</td>
+                      <td className="readout px-3 py-3 text-right" data-numeric>{s.total}</td>
+                      <td className="readout px-3 py-3 text-right text-advisory" data-numeric>{s.interested}</td>
+                      <td className="readout px-3 py-3 text-right text-phos" data-numeric>{s.converted}</td>
+                      <td className={`readout px-3 py-3 text-right ${s.overdue > 0 ? "text-alert" : "text-faint"}`} data-numeric>{s.overdue}</td>
+                      <td className="px-3 py-3 text-right">
                         {donePct === null ? (
-                          <span className="text-xs text-slate-400">—</span>
+                          <span className="text-xs text-faint">—</span>
                         ) : (
-                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${donePct >= 70 ? "bg-green-100 text-green-700" : donePct >= 40 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
-                            {donePct}%
-                          </span>
+                          <Lamp variant={donePct >= 70 ? "ok" : donePct >= 40 ? "caution" : "alert"}>{donePct}%</Lamp>
                         )}
                       </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${rate >= 20 ? "bg-green-100 text-green-700" : rate >= 10 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
-                          {rate}%
-                        </span>
+                      <td className="px-3 py-3 pr-5 text-right">
+                        <Lamp variant={rate >= 20 ? "ok" : rate >= 10 ? "caution" : "off"}>{rate}%</Lamp>
                       </td>
                     </tr>
                   );
@@ -714,55 +597,56 @@ export default async function DashboardPage({
               </tbody>
             </table>
           </div>
-        </section>
+        </Card>
       )}
 
-      {/* ── Course Breakdown + Enrollments / Payments ────────────────────── */}
-      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        {/* Recent enrollments — shown to admin/manager/finance only (not sales-only) */}
+      {/* ── Course breakdown + Enrollments / Payments ────────────────────── */}
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         {(data.showFinance || (data.showSales && !data.isSalesOnly)) && (
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <Card className="overflow-hidden">
+            <CardHeader>
               <div>
-                <h2 className="text-base font-bold text-[#0D1F0E]">Recent Enrollments</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Latest 6 student registrations</p>
+                <CardTitle>Recent Enrollments</CardTitle>
+                <CardDescription className="mt-0.5">Latest 6 student registrations</CardDescription>
               </div>
-              <Link href="/enrollments" className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
-                All Enrollments
+              <Link href="/enrollments" className="text-xs font-bold uppercase tracking-[0.08em] text-phos hover:underline">
+                All enrollments
               </Link>
-            </div>
+            </CardHeader>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="px-6 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Student</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Course</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Status</th>
+              <table className="w-full text-sm">
+                <thead className="bg-well">
+                  <tr>
+                    <th className="placard border-b border-bezel px-4 py-2.5 pl-5 text-left">Student</th>
+                    <th className="placard border-b border-bezel px-3 py-2.5 text-left">Course</th>
+                    <th className="placard border-b border-bezel px-3 py-2.5 text-left">Status</th>
                     {data.showFinance && (
-                      <th className="px-6 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Paid</th>
+                      <th className="placard border-b border-bezel px-4 py-2.5 pr-5 text-right">Paid</th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody>
                   {data.recentEnrollments.map((e) => (
-                    <tr key={e.id} className="transition hover:bg-slate-50">
-                      <td className="px-6 py-3.5">
-                        <p className="text-sm font-semibold text-[#0D1F0E]">{e.fullName}</p>
-                        <p className="text-[11px] text-slate-400">{e.enrollmentId}</p>
+                    <tr key={e.id} className="border-b border-bezel/60 transition last:border-0 hover:bg-well">
+                      <td className="px-4 py-3 pl-5">
+                        <p className="text-sm font-semibold text-ink">{e.fullName}</p>
+                        <p className="readout text-[11px] text-faint" data-numeric>{e.enrollmentId}</p>
                       </td>
-                      <td className="max-w-[160px] px-4 py-3.5">
-                        <p className="truncate text-sm text-slate-700">{e.course}</p>
+                      <td className="max-w-[160px] px-3 py-3">
+                        <p className="truncate text-sm text-dim">{e.course}</p>
                       </td>
-                      <td className="px-4 py-3.5">
-                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${statusColor[e.status] ?? "bg-slate-100 text-slate-600"}`}>
-                          {e.status}
-                        </span>
+                      <td className="px-3 py-3">
+                        <StatusBadge status={e.status} />
                       </td>
                       {data.showFinance && (
-                        <td className="px-6 py-3.5 text-right">
-                          <p className="text-sm font-bold text-[#0D1F0E]">AED {e.amountPaid.toLocaleString()}</p>
+                        <td className="px-4 py-3 pr-5 text-right">
+                          <p className="readout text-sm font-bold text-ink" data-numeric>
+                            AED {e.amountPaid.toLocaleString()}
+                          </p>
                           {e.amountPaid < e.totalFee && (
-                            <p className="text-[11px] text-slate-400">of {e.totalFee.toLocaleString()}</p>
+                            <p className="readout text-[11px] text-faint" data-numeric>
+                              of {e.totalFee.toLocaleString()}
+                            </p>
                           )}
                         </td>
                       )}
@@ -770,128 +654,125 @@ export default async function DashboardPage({
                   ))}
                   {data.recentEnrollments.length === 0 && (
                     <tr>
-                      <td colSpan={data.showFinance ? 4 : 3} className="px-6 py-10 text-center text-sm text-slate-400">
+                      <td colSpan={data.showFinance ? 4 : 3} className="px-6 py-10 text-center text-sm text-dim">
                         No enrollments yet.{" "}
-                        <Link href="/enrollments" className="font-bold text-[#2E7D32]">Add one →</Link>
+                        <Link href="/enrollments" className="font-bold text-phos hover:underline">Add one →</Link>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
-          </div>
+          </Card>
         )}
 
-        {/* Course breakdown + recent payments */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
+        <Card>
+          <CardHeader>
             <div>
-              <h2 className="text-base font-bold text-[#0D1F0E]">Active by Course</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Students currently enrolled</p>
+              <CardTitle>Active by Course</CardTitle>
+              <CardDescription className="mt-0.5">Students currently enrolled</CardDescription>
             </div>
-            <Link href="/courses" className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-[#0D1F0E] transition hover:border-[#2E7D32] hover:bg-[#E8F5E9]">
+            <Link href="/courses" className="text-xs font-bold uppercase tracking-[0.08em] text-phos hover:underline">
               Courses
             </Link>
-          </div>
-
-          {data.courseBreakdown.length === 0 ? (
-            <div className="mt-6 rounded-xl bg-slate-50 py-8 text-center">
-              <BookOpen className="mx-auto h-8 w-8 text-slate-300" />
-              <p className="mt-3 text-sm text-slate-400">No active enrollments yet.</p>
-            </div>
-          ) : (
-            <div className="mt-5 space-y-3">
-              {data.courseBreakdown.map((c, idx) => {
-                const maxCount = Math.max(...data.courseBreakdown.map((x) => x.count));
-                const width = maxCount > 0 ? Math.round((c.count / maxCount) * 100) : 0;
-                const colors = ["#2E7D32", "#00897B", "#2196F3", "#7B1FA2", "#F57C00", "#C62828"];
-                const color = colors[idx % colors.length];
-                return (
-                  <div key={c.course}>
-                    <div className="mb-1 flex items-center justify-between gap-2 text-sm">
-                      <span className="min-w-0 truncate font-semibold text-slate-700">{c.course}</span>
-                      <div className="flex flex-shrink-0 items-center gap-2">
-                        {data.showFinance && <span className="text-xs text-slate-400">{fmt(c.revenue)}</span>}
-                        <span className="font-bold text-[#0D1F0E]">{c.count}</span>
+          </CardHeader>
+          <CardContent>
+            {data.courseBreakdown.length === 0 ? (
+              <div className="rounded-ctl bg-well py-8 text-center">
+                <BookOpen className="mx-auto h-8 w-8 text-faint" aria-hidden />
+                <p className="mt-3 text-sm text-dim">No active enrollments yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {data.courseBreakdown.map((c, idx) => {
+                  const maxCount = Math.max(...data.courseBreakdown.map((x) => x.count));
+                  const width = maxCount > 0 ? Math.round((c.count / maxCount) * 100) : 0;
+                  const color = `var(--chart-${(idx % 5) + 1})`;
+                  return (
+                    <div key={c.course}>
+                      <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+                        <span className="min-w-0 truncate font-semibold text-dim">{c.course}</span>
+                        <div className="flex flex-shrink-0 items-baseline gap-2">
+                          {data.showFinance && (
+                            <span className="readout text-xs text-faint" data-numeric>{fmt(c.revenue)}</span>
+                          )}
+                          <span className="readout text-sm font-bold text-ink" data-numeric>{c.count}</span>
+                        </div>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-sm bg-well">
+                        <div className="h-full rounded-sm" style={{ width: `${width}%`, background: color }} />
                       </div>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full" style={{ width: `${width}%`, background: color }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
 
-          {/* Recent payments — finance only */}
-          {data.showFinance && data.recentPayments.length > 0 && (
-            <>
-              <div className="mt-6 mb-3 flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Recent Payments</p>
-                <Link href="/payments" className="text-xs font-bold text-[#2E7D32] hover:underline">View all</Link>
-              </div>
-              <div className="space-y-2">
-                {data.recentPayments.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[#0D1F0E]">{p.studentName}</p>
-                      <p className="text-[11px] text-slate-400">{p.datePaid}</p>
+            {data.showFinance && data.recentPayments.length > 0 && (
+              <>
+                <div className="mb-3 mt-6 flex items-center justify-between border-t border-bezel pt-4">
+                  <p className="placard">Recent Payments</p>
+                  <Link href="/payments" className="text-xs font-bold uppercase tracking-[0.08em] text-phos hover:underline">
+                    View all
+                  </Link>
+                </div>
+                <div className="space-y-2">
+                  {data.recentPayments.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between rounded-ctl bg-well px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">{p.studentName}</p>
+                        <p className="readout text-[11px] text-faint" data-numeric>{p.datePaid}</p>
+                      </div>
+                      <span className="readout ml-3 flex-shrink-0 text-sm font-bold text-phos" data-numeric>
+                        {fmt(p.amount)}
+                      </span>
                     </div>
-                    <span className="ml-3 flex-shrink-0 text-sm font-bold text-[#2E7D32]">{fmt(p.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
-      {/* ── Quick actions — filtered by role ─────────────────────────────── */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-bold text-[#0D1F0E]">Quick Actions</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-          {data.showSales && (
-            <>
-              <Link href="/leads" className="flex flex-col items-center gap-2.5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4 text-center text-sm font-bold text-blue-800 transition hover:border-blue-300 hover:bg-blue-100">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 text-blue-600"><UserPlus className="h-5 w-5" /></div>
-                Add Lead
-              </Link>
-              <Link href="/follow-ups" className="flex flex-col items-center gap-2.5 rounded-xl border border-amber-100 bg-amber-50 px-4 py-4 text-center text-sm font-bold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-100 text-amber-600"><BellRing className="h-5 w-5" /></div>
-                Follow-Ups
-              </Link>
-              <Link href="/enrollments" className="flex flex-col items-center gap-2.5 rounded-xl border border-green-100 bg-green-50 px-4 py-4 text-center text-sm font-bold text-green-800 transition hover:border-green-300 hover:bg-green-100">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-green-100 text-green-700"><GraduationCap className="h-5 w-5" /></div>
-                Enroll Student
-              </Link>
-            </>
-          )}
-          {data.showFinance && (
-            <>
-              <Link href="/payments" className="flex flex-col items-center gap-2.5 rounded-xl border border-purple-100 bg-purple-50 px-4 py-4 text-center text-sm font-bold text-purple-800 transition hover:border-purple-300 hover:bg-purple-100">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-purple-100 text-purple-600"><CircleDollarSign className="h-5 w-5" /></div>
-                Record Payment
-              </Link>
-              <Link href="/reports" className="flex flex-col items-center gap-2.5 rounded-xl border border-teal-100 bg-teal-50 px-4 py-4 text-center text-sm font-bold text-teal-800 transition hover:border-teal-300 hover:bg-teal-100">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-teal-100 text-teal-600"><TrendingUp className="h-5 w-5" /></div>
-                Reports
-              </Link>
-            </>
-          )}
-          {data.showClasses && (
-            <Link href="/classes" className="flex flex-col items-center gap-2.5 rounded-xl border border-orange-100 bg-orange-50 px-4 py-4 text-center text-sm font-bold text-orange-800 transition hover:border-orange-300 hover:bg-orange-100">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-orange-100 text-orange-600"><CalendarDays className="h-5 w-5" /></div>
-              Attendance
+      {/* ── Quick actions — quiet utility row ────────────────────────────── */}
+      <section className="flex flex-wrap gap-2">
+        {data.showSales && (
+          <>
+            <Link href="/leads" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+              <Plus className="h-4 w-4" /> Add Lead
             </Link>
-          )}
-          {can(role, new Set(["admin", "manager", "sales", "finance"])) && (
-            <Link href="/import-export" className="flex flex-col items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-center text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-200 text-slate-600"><ArrowUpDown className="h-5 w-5" /></div>
-              Import / Export
+            <Link href="/follow-ups" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+              <BellRing className="h-4 w-4" /> Follow-Ups
             </Link>
-          )}
-        </div>
+            <Link href="/enrollments" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+              <GraduationCap className="h-4 w-4" /> Enroll Student
+            </Link>
+          </>
+        )}
+        {data.showFinance && (
+          <>
+            <Link href="/payments" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+              <CircleDollarSign className="h-4 w-4" /> Record Payment
+            </Link>
+            <Link href="/expenses" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+              <HandCoins className="h-4 w-4" /> Add Expense
+            </Link>
+            <Link href="/reports" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+              <BarChart3 className="h-4 w-4" /> Reports
+            </Link>
+          </>
+        )}
+        {data.showClasses && (
+          <Link href="/classes" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+            <CalendarDays className="h-4 w-4" /> Attendance
+          </Link>
+        )}
+        {can(role, new Set(["admin", "manager", "sales", "finance"])) && (
+          <Link href="/import-export" className="inline-flex h-9 items-center gap-2 rounded-ctl border border-bezel-strong px-4 text-xs font-bold uppercase tracking-[0.08em] text-dim transition hover:border-phos hover:text-phos">
+            <ArrowUpDown className="h-4 w-4" /> Import / Export
+          </Link>
+        )}
       </section>
     </div>
   );

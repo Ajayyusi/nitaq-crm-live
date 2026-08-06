@@ -4,10 +4,12 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Loader2, Lock, Mail, AlertCircle, Database } from "lucide-react";
+import { Field, Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const ERRORS: Record<string, { msg: string; isDB?: boolean }> = {
   db_error: {
-    msg: "Service temporarily unavailable. Please try again in a moment.",
+    msg: "Service temporarily unavailable. Please try again in a moment — if it persists, contact your administrator.",
     isDB: true,
   },
   CredentialsSignin:    { msg: "Invalid email or password. Please try again." },
@@ -66,63 +68,55 @@ export default function LoginForm() {
   const err = ERRORS[errorCode] ?? (errorCode ? ERRORS.default : null);
 
   return (
-    <form onSubmit={handleSubmit} className="px-10 py-8 space-y-5">
-      <div>
-        <label className="block text-sm font-semibold mb-1.5" style={{ color: "#0D1F0E" }}>
-          Email Address
-        </label>
+    <form onSubmit={handleSubmit} className="space-y-4 px-8 py-6">
+      <Field label="Email address" htmlFor="login-email">
         <div className="relative">
-          <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5A7A5B" }} />
-          <input
+          <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
+          <Input
+            id="login-email"
             type="email"
             required
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@nitaqacademy.com"
-            className="w-full pl-10 pr-4 py-3 text-sm rounded-xl border outline-none transition-all"
-            style={{ border: "1.5px solid #D4E6D4", background: "#F8FAF8", color: "#0D1F0E" }}
-            onFocus={(e) => (e.target.style.borderColor = "#2E7D32")}
-            onBlur={(e) => (e.target.style.borderColor = "#D4E6D4")}
+            className="pl-9"
           />
         </div>
-      </div>
+      </Field>
 
-      <div>
-        <label className="block text-sm font-semibold mb-1.5" style={{ color: "#0D1F0E" }}>
-          Password
-        </label>
+      <Field label="Password" htmlFor="login-password">
         <div className="relative">
-          <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5A7A5B" }} />
-          <input
+          <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
+          <Input
+            id="login-password"
             type={showPassword ? "text" : "password"}
             required
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="w-full pl-10 pr-11 py-3 text-sm rounded-xl border outline-none transition-all"
-            style={{ border: "1.5px solid #D4E6D4", background: "#F8FAF8", color: "#0D1F0E" }}
-            onFocus={(e) => (e.target.style.borderColor = "#2E7D32")}
-            onBlur={(e) => (e.target.style.borderColor = "#D4E6D4")}
+            className="pl-9 pr-10"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 p-0.5 rounded transition-opacity hover:opacity-70"
-            style={{ color: "#5A7A5B" }}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition hover:text-dim"
           >
-            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-      </div>
+      </Field>
 
       {otpStep && (
-        <div>
-          <label className="block text-sm font-semibold mb-1.5" style={{ color: "#0D1F0E" }}>
-            Authenticator Code
-          </label>
-          <input
+        <Field
+          label="Authenticator code"
+          htmlFor="login-otp"
+          help="Open your authenticator app (Google Authenticator, Authy…) and enter the 6-digit code."
+        >
+          <Input
+            id="login-otp"
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -132,46 +126,38 @@ export default function LoginForm() {
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
             placeholder="6-digit code"
-            className="w-full px-4 py-3 text-center text-lg font-bold tracking-[0.5em] rounded-xl border outline-none transition-all"
-            style={{ border: "1.5px solid #D4E6D4", background: "#F8FAF8", color: "#0D1F0E" }}
-            onFocus={(e) => (e.target.style.borderColor = "#2E7D32")}
-            onBlur={(e) => (e.target.style.borderColor = "#D4E6D4")}
+            className="readout text-center text-lg font-bold tracking-[0.5em]"
           />
-          <p className="mt-1.5 text-xs" style={{ color: "#5A7A5B" }}>
-            Open your authenticator app (Google Authenticator, Authy…) and enter the 6-digit code.
-          </p>
-        </div>
+        </Field>
       )}
 
       {err && (
         <div
-          className="rounded-xl p-4 text-sm font-medium space-y-2"
-          style={{ background: err.isDB ? "#FFF3E0" : "#FFEBEE", color: err.isDB ? "#E65100" : "#C62828" }}
+          role="alert"
+          className={`flex items-start gap-2.5 rounded-ctl border px-3.5 py-3 text-sm font-semibold ${
+            err.isDB
+              ? "border-caution/30 bg-[var(--lamp-caution-bg)] text-caution"
+              : "border-alert/30 bg-[var(--lamp-alert-bg)] text-alert"
+          }`}
         >
-          <div className="flex items-start gap-2.5">
-            {err.isDB
-              ? <Database className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
-            <span>{err.msg}</span>
-          </div>
-          {err.isDB && (
-            <p className="text-xs ml-6" style={{ color: "#BF360C" }}>
-              Go to <strong>atlas.mongodb.com</strong> → <strong>Network Access</strong> → Add your IP or <code>0.0.0.0/0</code>.
-            </p>
-          )}
+          {err.isDB
+            ? <Database className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
+            : <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />}
+          <span>{err.msg}</span>
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full py-3.5 rounded-xl text-sm font-bold text-white transition-all flex items-center justify-center gap-2"
-        style={{ background: loading ? "#4CAF50" : "#2E7D32" }}
-        onMouseEnter={(e) => !loading && ((e.target as HTMLButtonElement).style.background = "#1B5E20")}
-        onMouseLeave={(e) => !loading && ((e.target as HTMLButtonElement).style.background = "#2E7D32")}
-      >
-        {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Signing in…</> : otpStep ? "Verify Code" : "Sign In"}
-      </button>
+      <Button type="submit" variant="solid" size="lg" className="w-full" disabled={loading}>
+        {loading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" /> Signing in…
+          </>
+        ) : otpStep ? (
+          "Verify code"
+        ) : (
+          "Sign in"
+        )}
+      </Button>
     </form>
   );
 }

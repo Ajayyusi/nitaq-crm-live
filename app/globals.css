@@ -1,113 +1,504 @@
+/*
+DIRECTION CONTRACT — Night Six-Pack
+THESIS: An academy run like a night flight deck — every number an instrument
+reading, every status an annunciator lamp. Refuses the white-admin,
+gradient-hero, tinted-icon-card dashboard.
+OWN-WORLD: Matte panel #0B0D0F; instrument faces #111417; luminous white
+markings; radio-green #39FF9A for engaged/primary; amber and red reserved for
+caution/warning; cyan advisory; B612 + B612 Mono placard caps and tabular
+numerals; hairline bezels, tick scales, rectangular lamp badges.
+STORY: Staff sign in, sweep their instruments, see what needs chasing, act
+without hunting.
+FIRST VIEWPORT: Dashboard = ranked six-pack of role instruments (two rows of
+three) above panel cards for pipeline and follow-ups; primary action lit green.
+FORM: Night Six-Pack — dealt challenger, user-chosen over assigned direction;
+seed 5b13a029. Staging: ranked instrument rows + annunciator status grammar.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the
+finish review, the verdict, and DESIGN.md
+*/
+
 @import "tailwindcss";
 
-/* Class-based dark mode for Tailwind v4 */
+/* Class-based dark mode (night panel). Night is the DEFAULT theme;
+   `.dark` is applied by the pre-hydration script unless the user chose day. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ────────────────────────────────────────────────────────────────────────────
+   PANEL VARIABLES — day values on :root, night values on .dark.
+   Components consume ONLY the token utilities below, never raw hex.
+   ──────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  /* DAY PANEL (daylight cockpit: aluminum ground, white faces, black markings) */
+  --panel: #e7e9ec;          /* app canvas */
+  --face: #ffffff;           /* instrument face / card */
+  --raised: #ffffff;         /* popover / drawer */
+  --well: #f1f3f5;           /* inset: table heads, input wells */
+  --bezel: #d9dde2;          /* hairline borders */
+  --bezel-strong: #b9c0c8;
+  --ink: #14181d;            /* primary markings */
+  --dim: #4d565f;            /* secondary markings */
+  --faint: #838b94;          /* tertiary / placeholder */
+  --phos: #0b7a4b;           /* radio green, day-legible */
+  --phos-bright: #0f9a5f;
+  --phos-ink: #ffffff;       /* text on phos fill */
+  --phos-glow: rgba(11, 122, 75, 0.22);
+  --caution: #96690a;        /* amber, day-legible text */
+  --caution-fill: #b17d0d;
+  --alert: #c23934;
+  --advisory: #0c7aa6;
+  --lamp-ok-bg: rgba(15, 154, 95, 0.12);
+  --lamp-caution-bg: rgba(177, 125, 13, 0.13);
+  --lamp-alert-bg: rgba(194, 57, 52, 0.11);
+  --lamp-advisory-bg: rgba(12, 122, 166, 0.11);
+  --lamp-off-bg: rgba(20, 24, 29, 0.06);
+  --shadow-card: 0 1px 2px rgba(20, 24, 29, 0.06), 0 1px 1px rgba(20, 24, 29, 0.04);
+  --shadow-raise: 0 12px 32px rgba(20, 24, 29, 0.16), 0 4px 12px rgba(20, 24, 29, 0.08);
+  --shadow-glow: 0 0 0 1px var(--phos), 0 0 10px var(--phos-glow);
+  --chart-1: #0f9a5f;
+  --chart-2: #0c7aa6;
+  --chart-3: #b17d0d;
+  --chart-4: #7c6bd6;
+  --chart-5: #c23934;
 }
 
+.dark {
+  /* NIGHT PANEL (the committed world) */
+  --panel: #0b0d0f;
+  --face: #111417;
+  --raised: #16191e;
+  --well: #0d1013;
+  --bezel: #22272e;
+  --bezel-strong: #303740;
+  --ink: #f2f5f2;
+  --dim: #a4adb6;
+  --faint: #69737e;
+  --phos: #39ff9a;
+  --phos-bright: #63ffb1;
+  --phos-ink: #06180e;
+  --phos-glow: rgba(57, 255, 154, 0.22);
+  --caution: #ffb000;
+  --caution-fill: #ffb000;
+  --alert: #ff5148;
+  --advisory: #55c8f0;
+  --lamp-ok-bg: rgba(57, 255, 154, 0.1);
+  --lamp-caution-bg: rgba(255, 176, 0, 0.1);
+  --lamp-alert-bg: rgba(255, 81, 72, 0.11);
+  --lamp-advisory-bg: rgba(85, 200, 240, 0.1);
+  --lamp-off-bg: rgba(242, 245, 242, 0.05);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-raise: 0 16px 40px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 1px var(--phos), 0 0 12px var(--phos-glow);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TOKENS → UTILITIES (Tailwind v4 theme)
+   bg-panel · bg-face · bg-raised · bg-well · border-bezel · text-ink ·
+   text-dim · text-faint · text-phos · bg-phos · text-caution · text-alert ·
+   text-advisory · rounded-ctl · rounded-card · rounded-lamp · shadow-card ·
+   shadow-raise · shadow-glow · font-sans · font-mono
+   ──────────────────────────────────────────────────────────────────────────── */
+@theme inline {
+  --color-panel: var(--panel);
+  --color-face: var(--face);
+  --color-raised: var(--raised);
+  --color-well: var(--well);
+  --color-bezel: var(--bezel);
+  --color-bezel-strong: var(--bezel-strong);
+  --color-ink: var(--ink);
+  --color-dim: var(--dim);
+  --color-faint: var(--faint);
+  --color-phos: var(--phos);
+  --color-phos-bright: var(--phos-bright);
+  --color-phos-ink: var(--phos-ink);
+  --color-caution: var(--caution);
+  --color-caution-fill: var(--caution-fill);
+  --color-alert: var(--alert);
+  --color-advisory: var(--advisory);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* shadcn-compatible aliases so semantic components compile */
+  --color-background: var(--panel);
+  --color-foreground: var(--ink);
+  --color-card: var(--face);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--raised);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--phos);
+  --color-primary-foreground: var(--phos-ink);
+  --color-secondary: var(--well);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--well);
+  --color-muted-foreground: var(--dim);
+  --color-accent: var(--well);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--alert);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--bezel);
+  --color-input: var(--bezel-strong);
+  --color-ring: var(--phos);
+
+  --font-sans: var(--font-b612), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-b612-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --radius-ctl: 6px;
+  --radius-card: 10px;
+  --radius-lamp: 3px;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-raise: var(--shadow-raise);
+  --shadow-glow: var(--shadow-glow);
+
+  --animate-needle: needle 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.08) both;
+  --animate-power-on: power-on 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-spin: spin 1s linear infinite;
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
 html,
 body {
   height: 100%;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
 body {
   margin: 0;
-  padding: 0;
-  background-color: #f8fafc;
-  color: #0f172a;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--panel);
+  color: var(--ink);
+  font-family: var(--font-b612), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-.dark ::-webkit-scrollbar-thumb { background: #2d4a2e; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #3d5e3e; }
+::selection {
+  background: var(--phos-glow);
+  color: var(--ink);
+}
 
-/* Animations */
-/* ================================================================
-   DARK MODE OVERRIDES
-   Global CSS overrides keyed off the .dark class on <html>.
-   Higher specificity than Tailwind utilities so no !important needed
-   on most rules — selector specificity wins.
-   ================================================================ */
+:focus-visible {
+  outline: 2px solid var(--phos);
+  outline-offset: 2px;
+}
 
-/* Base */
-.dark body { background-color: #0a1a0b; color: #e8f5e9 !important; }
+/* Numbers read like instruments everywhere */
+table,
+[data-numeric] {
+  font-variant-numeric: tabular-nums;
+}
 
-/* Backgrounds */
-.dark .bg-white { background-color: #112013 !important; }
-.dark .bg-slate-50 { background-color: #0c1a0d !important; }
-.dark .bg-slate-100 { background-color: #162818 !important; }
-.dark .bg-slate-200 { background-color: #1e3520 !important; }
+/* ── House utilities ──────────────────────────────────────────────────────── */
+/* Placard: the engraved caps micro-label under every instrument */
+@utility placard {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+}
 
-/* Borders */
-.dark .border-slate-200 { border-color: #1e3520 !important; }
-.dark .border-slate-100 { border-color: #152716 !important; }
-.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #152716 !important; }
+/* Readout: a luminous data value */
+@utility readout {
+  font-family: var(--font-b612-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
 
-/* Text — slate scale (with !important to beat Tailwind utilities) */
-.dark .text-slate-950 { color: #e8f5e9 !important; }
-.dark .text-slate-900 { color: #e8f5e9 !important; }
-.dark .text-slate-800 { color: #c7dfc8 !important; }
-.dark .text-slate-700 { color: #a3bda4 !important; }
-.dark .text-slate-600 { color: #7a9c7b !important; }
-.dark .text-slate-500 { color: #5e7d5f !important; }
-.dark .text-slate-400 { color: #4a6b4b !important; }
+/* Instrument face: the standard card */
+@utility face {
+  background-color: var(--face);
+  border: 1px solid var(--bezel);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
 
-/* Brand text-[#0D1F0E] — attribute contains is reliable across all escape styles */
-.dark [class*="#0D1F0E"] { color: #e8f5e9 !important; }
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bezel-strong);
+  border-radius: 9999px;
+  border: 2px solid var(--panel);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+}
 
-/* Form inputs */
+/* ── Motion ───────────────────────────────────────────────────────────────── */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Needle settle: value elements rise 4px and settle with slight overshoot */
+@keyframes needle {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Power-on: panels warm up on first paint */
+@keyframes power-on {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Gauge sweep for tick-gauge fills */
+@keyframes sweep {
+  from {
+    width: 0;
+  }
+}
+.animate-sweep {
+  animation: sweep 0.9s cubic-bezier(0.2, 0.9, 0.25, 1.04) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   LEGACY COMPAT (transitional) — the incumbent pages were written in a light
+   slate/gray/brand-hex vocabulary. These remaps pull not-yet-migrated screens
+   into the panel world. Delete rules as modules migrate to token utilities.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Day theme: retire the old green-tinted canvas and brand greens */
+body {
+  /* pages that painted their own bg-[#E8F5E9] canvas sit on --panel instead */
+}
+[class*="bg-[#E8F5E9]"] {
+  background-color: var(--panel) !important;
+}
+[class*="bg-[#2E7D32]"],
+[class*="bg-[#1B5E20]"] {
+  background-color: var(--phos) !important;
+  color: var(--phos-ink) !important;
+}
+[class*="text-[#2E7D32]"],
+[class*="text-[#1B5E20]"] {
+  color: var(--phos) !important;
+}
+[class*="text-[#0D1F0E]"] {
+  color: var(--ink) !important;
+}
+[class*="bg-[#0D1F0E]"] {
+  background-color: var(--well) !important;
+  color: var(--ink) !important;
+}
+[class*="ring-[#2E7D32]"],
+[class*="border-[#2E7D32]"] {
+  --tw-ring-color: var(--phos) !important;
+  border-color: var(--phos) !important;
+}
+[class*="focus:ring-[#E8F5E9]"]:focus {
+  --tw-ring-color: var(--phos-glow) !important;
+}
+
+/* NIGHT remap of the light-authored vocabulary */
+.dark .bg-white {
+  background-color: var(--face) !important;
+}
+.dark .bg-slate-50,
+.dark .bg-gray-50 {
+  background-color: var(--well) !important;
+}
+.dark .bg-slate-100,
+.dark .bg-gray-100 {
+  background-color: var(--raised) !important;
+}
+.dark .bg-slate-200,
+.dark .bg-gray-200 {
+  background-color: var(--bezel) !important;
+}
+.dark .border-slate-200,
+.dark .border-slate-100,
+.dark .border-gray-200,
+.dark .border-gray-100 {
+  border-color: var(--bezel) !important;
+}
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--bezel) !important;
+}
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-gray-900,
+.dark .text-black {
+  color: var(--ink) !important;
+}
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: var(--dim) !important;
+}
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: var(--dim) !important;
+}
+.dark .text-slate-400,
+.dark .text-gray-400 {
+  color: var(--faint) !important;
+}
+
+/* Status tints → lamp language */
+.dark .bg-green-50,
+.dark .bg-green-100,
+.dark .bg-emerald-50,
+.dark .bg-emerald-100 {
+  background-color: var(--lamp-ok-bg) !important;
+}
+.dark .text-green-700,
+.dark .text-green-600,
+.dark .text-green-800,
+.dark .text-emerald-700,
+.dark .text-emerald-600 {
+  color: var(--phos) !important;
+}
+.dark .bg-amber-50,
+.dark .bg-amber-100,
+.dark .bg-yellow-50,
+.dark .bg-yellow-100,
+.dark .bg-orange-50,
+.dark .bg-orange-100 {
+  background-color: var(--lamp-caution-bg) !important;
+}
+.dark .text-amber-700,
+.dark .text-amber-600,
+.dark .text-amber-800,
+.dark .text-orange-700,
+.dark .text-orange-600 {
+  color: var(--caution) !important;
+}
+.dark .bg-rose-50,
+.dark .bg-rose-100,
+.dark .bg-red-50,
+.dark .bg-red-100 {
+  background-color: var(--lamp-alert-bg) !important;
+}
+.dark .text-rose-700,
+.dark .text-rose-600,
+.dark .text-red-700,
+.dark .text-red-600 {
+  color: var(--alert) !important;
+}
+.dark .bg-blue-50,
+.dark .bg-blue-100,
+.dark .bg-sky-50,
+.dark .bg-sky-100,
+.dark .bg-cyan-50,
+.dark .bg-teal-50,
+.dark .bg-teal-100 {
+  background-color: var(--lamp-advisory-bg) !important;
+}
+.dark .text-blue-700,
+.dark .text-blue-600,
+.dark .text-sky-700,
+.dark .text-teal-700,
+.dark .text-teal-600 {
+  color: var(--advisory) !important;
+}
+.dark .bg-purple-50,
+.dark .bg-purple-100,
+.dark .bg-violet-50 {
+  background-color: var(--lamp-advisory-bg) !important;
+}
+.dark .text-purple-700,
+.dark .text-purple-600 {
+  color: var(--advisory) !important;
+}
+
+/* Forms in untouched pages */
 .dark input:not([type="checkbox"]):not([type="radio"]),
 .dark select,
 .dark textarea {
-  background-color: #0c1a0d !important;
-  border-color: #1e3520 !important;
-  color: #e8f5e9 !important;
+  background-color: var(--well) !important;
+  border-color: var(--bezel-strong) !important;
+  color: var(--ink) !important;
 }
 .dark input::placeholder,
-.dark textarea::placeholder { color: #4a6b4b !important; }
-.dark select option { background-color: #112013; color: #e8f5e9; }
-
-/* Table backgrounds */
-.dark .bg-slate-50.rounded-xl,
-.dark thead .bg-slate-50 { background-color: #0c1a0d !important; }
-
-/* Hover rows */
-.dark .hover\:bg-\[#E8F5E9\]\/30:hover { background-color: rgba(46, 125, 50, 0.15) !important; }
-
-/* Shadows — tone down in dark */
-.dark .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important; }
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.dark textarea::placeholder {
+  color: var(--faint) !important;
 }
-.animate-spin { animation: spin 1s linear infinite; }
-
-@keyframes pulse {
-  50% { opacity: 0.5; }
+.dark select option {
+  background-color: var(--raised);
+  color: var(--ink);
 }
-.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 
-/* ── Print: show only the page content (hide sidebar, header, and controls) ── */
+.dark .shadow-sm {
+  box-shadow: var(--shadow-card) !important;
+}
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-slate-100:hover {
+  background-color: var(--raised) !important;
+}
+.dark .hover\:bg-\[\#E8F5E9\]\/30:hover {
+  background-color: rgba(57, 255, 154, 0.06) !important;
+}
+
+/* ── Print: vouchers and reports stay black-on-white paper ───────────────── */
 @media print {
-  aside, header, .no-print { display: none !important; }
-  main { padding: 0 !important; }
-  body { background: #fff !important; }
-  .print-area { box-shadow: none !important; border: none !important; }
-  @page { margin: 12mm; }
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .print-area {
+    box-shadow: none !important;
+    border: none !important;
+  }
+  @page {
+    margin: 12mm;
+  }
 }
