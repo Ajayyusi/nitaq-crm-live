@@ -351,7 +351,11 @@ finish review, the verdict, and DESIGN.md
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    /* Delays must go too: the dashboard staggers instruments with
+       animation-delay, and `both` fill would hold them invisible. */
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }
 

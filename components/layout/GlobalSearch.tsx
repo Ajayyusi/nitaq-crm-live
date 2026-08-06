@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,19 +26,30 @@ export default function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // ⌘K / Ctrl-K to open, Escape to close
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        // Never stack the palette over an open modal: a single Escape would
+        // then close both and discard whatever the user was typing.
+        const modalOpen = document.querySelector('[role="dialog"][aria-modal="true"]');
+        if (modalOpen && !open) return;
         e.preventDefault();
         setOpen((o) => !o);
       }
-      if (e.key === "Escape") setOpen(false);
+      // Only claim Escape while the palette is actually open, so it never
+      // closes a dialog underneath it.
+      if (e.key === "Escape" && open) {
+        e.stopPropagation();
+        setOpen(false);
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 30);
@@ -125,7 +137,11 @@ export default function GlobalSearch() {
         <kbd className="hidden rounded-lamp border border-bezel px-1 font-mono text-[10px] text-faint lg:inline">⌘K</kbd>
       </button>
 
-      {open && (
+      {/* Portaled to <body>: the header sets backdrop-filter, which makes it a
+          containing block for fixed descendants, and its sticky wrapper caps
+          z-index at 30 — an inline palette would anchor to the header and sit
+          under the page content. */}
+      {open && mounted && createPortal(
         <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[10vh]">
           <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-hidden="true" />
           <div
@@ -212,7 +228,8 @@ export default function GlobalSearch() {
               <span>↑↓ navigate</span><span>↵ open</span><span>esc close</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

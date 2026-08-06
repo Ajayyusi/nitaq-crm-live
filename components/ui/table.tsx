@@ -12,14 +12,23 @@ import { Button } from "./button";
 
 export function TableShell({
   className,
+  /** Cap the body height so the sticky header has something to stick to. */
+  maxHeight,
   children,
 }: {
   className?: string;
+  maxHeight?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={cn("face overflow-hidden", className)}>
-      <div className="overflow-x-auto">{children}</div>
+      {/* The horizontal scroller is the scrollport for `sticky` headers.
+          Without a bounded height it never scrolls vertically, so the header
+          has no travel and appears not to stick — pass maxHeight for long
+          lists that should keep their column labels visible. */}
+      <div className="overflow-x-auto" style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}>
+        {children}
+      </div>
     </div>
   );
 }

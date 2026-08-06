@@ -262,7 +262,17 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
+                {/* Click-away catcher. `fixed` here resolves against the
+                    header (it sets backdrop-filter, creating a containing
+                    block), so it only covered the header strip and the menu
+                    could not be dismissed by clicking the page. A viewport-
+                    sized catcher needs explicit dimensions. */}
+                <div
+                  className="fixed z-40"
+                  style={{ top: "-100vh", left: "-100vw", width: "300vw", height: "300vh" }}
+                  onClick={() => setMenuOpen(false)}
+                  aria-hidden
+                />
                 <div
                   role="menu"
                   className="absolute right-0 top-11 z-50 w-56 rounded-card border border-bezel bg-raised shadow-raise"

@@ -10,10 +10,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-panel text-ink">
-      {/* Mobile backdrop overlay */}
+      {/* Mobile backdrop overlay. z-35 sits above the sticky header stack
+          (z-30) but below the sidebar (z-40) — at z-30 the header rendered
+          later in the DOM and stayed lit and clickable behind the nav. */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 z-[35] bg-black/60 backdrop-blur-[2px] lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
