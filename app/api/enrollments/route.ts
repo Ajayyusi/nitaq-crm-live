@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Enrollment from "@/models/Enrollment";
-import { enrollmentStatuses, paymentStatuses, scheduleFormats } from "@/models/Enrollment";
+import { enrollmentStatuses, paymentStatuses, scheduleFormats, teacherPayBases } from "@/models/Enrollment";
 import { Payment, paymentMethods } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
@@ -25,6 +25,7 @@ function derivePaymentType(paymentStatus: string, isFirstPayment: boolean): stri
 const allowedStatuses = new Set<string>(enrollmentStatuses);
 const allowedPaymentStatuses = new Set<string>(paymentStatuses);
 const allowedFormats = new Set<string>(scheduleFormats);
+const allowedPayBases = new Set<string>(teacherPayBases);
 
 function clean(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
@@ -123,6 +124,14 @@ export async function POST(request: NextRequest) {
       leadId: body.leadId || undefined,
       // Teacher assignment & hour tracking
       teacherId: body.teacherId && mongoose.Types.ObjectId.isValid(body.teacherId) ? body.teacherId : undefined,
+      // Trainer pay for this registration (blank = use the trainer's default)
+      teacherPayRate:
+        body.teacherPayRate === "" || body.teacherPayRate == null
+          ? undefined
+          : Math.max(0, Number(body.teacherPayRate) || 0),
+      teacherPayBasis: allowedPayBases.has(clean(body.teacherPayBasis))
+        ? clean(body.teacherPayBasis)
+        : undefined,
       totalRegisteredHours: body.totalRegisteredHours ? Math.max(0, Number(body.totalRegisteredHours) || 0) : undefined,
       expectedCompletionDate: body.expectedCompletionDate ? new Date(body.expectedCompletionDate) : undefined,
     });

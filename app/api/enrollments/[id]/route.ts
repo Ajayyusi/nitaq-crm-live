@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Enrollment from "@/models/Enrollment";
-import { enrollmentStatuses, paymentStatuses, scheduleFormats } from "@/models/Enrollment";
+import { enrollmentStatuses, paymentStatuses, scheduleFormats, teacherPayBases } from "@/models/Enrollment";
 import { Payment, paymentMethods } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
 import { serializeEnrollment } from "@/lib/serializers";
@@ -27,6 +27,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 const allowedStatuses = new Set<string>(enrollmentStatuses);
 const allowedPaymentStatuses = new Set<string>(paymentStatuses);
 const allowedFormats = new Set<string>(scheduleFormats);
+const allowedPayBases = new Set<string>(teacherPayBases);
 
 function clean(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
@@ -108,6 +109,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     // ── Teacher assignment & hour tracking (admin/manager) ──
     if ("expectedCompletionDate" in body) {
       update.expectedCompletionDate = body.expectedCompletionDate ? new Date(body.expectedCompletionDate) : undefined;
+    }
+    // Trainer pay for this registration — clearing it reverts to the
+    // trainer's default rate, which is why "" maps to undefined.
+    if ("teacherPayRate" in body) {
+      const raw = body.teacherPayRate;
+      if (raw === "" || raw == null) {
+        update.teacherPayRate = undefined;
+      } else {
+        const r = Number(raw);
+        if (isNaN(r) || r < 0) throw new Error("Trainer pay rate must be zero or more.");
+        update.teacherPayRate = Math.round(r * 100) / 100;
+      }
+    }
+    if ("teacherPayBasis" in body) {
+      const v = clean(body.teacherPayBasis);
+      if (v && !allowedPayBases.has(v)) throw new Error("Invalid trainer pay basis.");
+      update.teacherPayBasis = v || undefined;
     }
     if ("totalRegisteredHours" in body) {
       const h = Number(body.totalRegisteredHours);

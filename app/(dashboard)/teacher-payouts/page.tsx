@@ -14,11 +14,18 @@ import {
 import { Instrument, InstrumentRow } from "@/components/ui/instrument";
 import { SkeletonRows, LoadError } from "@/components/ui/feedback";
 
+interface PayLine {
+  enrollmentRef: string; studentName: string; course: string;
+  basis: string; rate: number; quantity: number; quantityLabel: string;
+  sessionCount: number; hours: number; amount: number;
+  source: "enrollment" | "teacher"; note?: string;
+}
 interface Due {
   teacherId: string; teacherName: string; paymentType: string;
   basis: string; rate: number; quantity: number; quantityLabel: string;
   sessionCount: number; totalHours: number; suggestedAmount: number;
   periodFrom: string; periodTo: string; note: string;
+  lines: PayLine[]; mixed: boolean;
 }
 interface Payout {
   id: string; payoutNumber: string; teacherName: string; basis: string;
@@ -184,6 +191,11 @@ export default function TeacherPayoutsPage() {
                       {d.rate > 0 && (
                         <span className="readout block text-xs text-faint" data-numeric>{fmt(d.rate)} each</span>
                       )}
+                      {d.mixed && (
+                        <span className="block text-xs text-faint">
+                          {d.lines.length} registration{d.lines.length === 1 ? "" : "s"}, different rates
+                        </span>
+                      )}
                     </Td>
                     <Td>
                       <p className="text-dim">{d.quantityLabel}</p>
@@ -293,30 +305,71 @@ export default function TeacherPayoutsPage() {
               </p>
             )}
 
-            <div className="rounded-ctl border border-bezel bg-well p-4 text-sm">
-              <div className="flex justify-between gap-2">
-                <span className="text-dim">Basis</span>
-                <span className="font-semibold text-ink">{target.basis}</span>
+            {/* Per-registration breakdown: a trainer can earn a different rate
+                on each course, so the total is shown as its parts. */}
+            {target.lines.length > 0 ? (
+              <div className="overflow-hidden rounded-ctl border border-bezel bg-well text-sm">
+                <ul className="divide-y divide-bezel">
+                  {target.lines.map((l) => (
+                    <li key={l.enrollmentRef || l.studentName} className="p-3">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-ink">{l.studentName}</p>
+                          <p className="truncate text-xs text-dim">
+                            {l.course}
+                            {l.enrollmentRef && (
+                              <span className="readout text-faint"> · {l.enrollmentRef}</span>
+                            )}
+                          </p>
+                        </div>
+                        <span className="readout flex-shrink-0 font-bold text-ink" data-numeric>
+                          {fmt(l.amount)}
+                        </span>
+                      </div>
+                      <p className="readout mt-1 text-xs text-faint" data-numeric>
+                        {l.quantityLabel} × {fmt(l.rate)} · {l.basis}
+                        {l.source === "teacher" && " · trainer default"}
+                      </p>
+                      {l.note && (
+                        <p className="mt-1 flex items-start gap-1 text-xs text-caution">
+                          <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" aria-hidden />
+                          {l.note}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex justify-between gap-2 border-t border-bezel bg-face px-3 py-2.5">
+                  <span className="placard">Calculated total</span>
+                  <span className="readout font-bold text-phos" data-numeric>{fmt(target.suggestedAmount)}</span>
+                </div>
               </div>
-              <div className="mt-1 flex justify-between gap-2">
-                <span className="text-dim">Rate</span>
-                <span className="readout font-semibold text-ink" data-numeric>{fmt(target.rate)}</span>
+            ) : (
+              <div className="rounded-ctl border border-bezel bg-well p-4 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-dim">Basis</span>
+                  <span className="font-semibold text-ink">{target.basis}</span>
+                </div>
+                <div className="mt-1 flex justify-between gap-2">
+                  <span className="text-dim">Rate</span>
+                  <span className="readout font-semibold text-ink" data-numeric>{fmt(target.rate)}</span>
+                </div>
+                <div className="mt-1 flex justify-between gap-2">
+                  <span className="text-dim">Quantity</span>
+                  <span className="font-semibold text-ink">{target.quantityLabel}</span>
+                </div>
+                <div className="mt-1 flex justify-between gap-2">
+                  <span className="text-dim">Sessions covered</span>
+                  <span className="readout font-semibold text-ink" data-numeric>
+                    {target.sessionCount} · {target.totalHours}h
+                  </span>
+                </div>
+                <div className="mt-2 flex justify-between gap-2 border-t border-bezel pt-2">
+                  <span className="placard">Calculated</span>
+                  <span className="readout font-bold text-phos" data-numeric>{fmt(target.suggestedAmount)}</span>
+                </div>
               </div>
-              <div className="mt-1 flex justify-between gap-2">
-                <span className="text-dim">Quantity</span>
-                <span className="font-semibold text-ink">{target.quantityLabel}</span>
-              </div>
-              <div className="mt-1 flex justify-between gap-2">
-                <span className="text-dim">Sessions covered</span>
-                <span className="readout font-semibold text-ink" data-numeric>
-                  {target.sessionCount} · {target.totalHours}h
-                </span>
-              </div>
-              <div className="mt-2 flex justify-between gap-2 border-t border-bezel pt-2">
-                <span className="placard">Calculated</span>
-                <span className="readout font-bold text-phos" data-numeric>{fmt(target.suggestedAmount)}</span>
-              </div>
-            </div>
+            )}
 
             <Field
               label="Amount to Pay"

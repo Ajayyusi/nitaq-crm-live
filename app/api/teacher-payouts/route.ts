@@ -27,7 +27,9 @@ export async function GET() {
   const due = [];
   for (const t of teachers) {
     const preview = await previewTeacherPayout(t as never);
-    // Only surface teachers with something to settle
+    // Only surface teachers with something to settle. A zero-amount batch is
+    // still shown when sessions are outstanding (e.g. a fixed course fee that
+    // was already paid) so the admin can see why nothing is owed.
     if (preview.sessionCount === 0 && preview.basis !== "Monthly") continue;
     due.push({
       teacherId: t._id.toString(),
@@ -84,6 +86,9 @@ export async function POST(request: NextRequest) {
     const preview = await previewTeacherPayout(teacher as never);
     const amount = Math.round((Number(body.amount) || 0) * 100) / 100;
     if (amount <= 0) return NextResponse.json({ message: "Amount must be greater than zero." }, { status: 400 });
+    if (preview.sessionCount === 0 && preview.basis !== "Monthly") {
+      return NextResponse.json({ message: "This trainer has no unsettled sessions." }, { status: 400 });
+    }
 
     const adjusted = Math.abs(amount - preview.suggestedAmount) > 0.009;
     const adjustmentReason = String(body.adjustmentReason ?? "").trim();
@@ -116,6 +121,22 @@ export async function POST(request: NextRequest) {
       basis: preview.basis,
       rate: preview.rate,
       quantity: preview.quantity,
+      // Snapshot the per-registration breakdown so a payout stays auditable
+      // even after a registration's rate is later changed.
+      lines: preview.lines.length
+        ? preview.lines.map((l) => ({
+            enrollmentRef: l.enrollmentRef,
+            studentName: l.studentName,
+            course: l.course,
+            basis: l.basis,
+            rate: l.rate,
+            quantity: l.quantity,
+            sessionCount: l.sessionCount,
+            hours: l.hours,
+            amount: l.amount,
+            source: l.source,
+          }))
+        : undefined,
       sessionCount: preview.sessionCount,
       totalHours: preview.totalHours,
       suggestedAmount: preview.suggestedAmount,

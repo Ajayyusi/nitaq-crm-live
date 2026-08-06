@@ -9,6 +9,14 @@ export const paymentStatuses = [
   "Free",
 ] as const;
 export const scheduleFormats = ["In-Person", "Online", "Hybrid"] as const;
+/**
+ * How the trainer is paid for THIS registration. Pay belongs to the
+ * registration, not the trainer, because the same trainer can earn a
+ * different rate on different courses. Left empty, the trainer's own
+ * default rate applies (see lib/payroll.ts).
+ */
+export const teacherPayBases = ["Per Hour", "Per Class", "Fixed for Course"] as const;
+export type TeacherPayBasis = (typeof teacherPayBases)[number];
 
 export type EnrollmentStatus = (typeof enrollmentStatuses)[number];
 export type PaymentStatus = (typeof paymentStatuses)[number];
@@ -38,6 +46,9 @@ export interface IEnrollment extends Document {
   // ── Teacher assignment & hour tracking (per course registration) ──
   teacherId?: mongoose.Types.ObjectId;
   teacherName?: string;                 // denormalized for display
+  /** Trainer pay for this registration; falls back to the trainer's default when unset. */
+  teacherPayRate?: number;
+  teacherPayBasis?: TeacherPayBasis;
   totalRegisteredHours?: number;
   completedHours?: number;              // recalculated from ClassSession records — never edited directly
   expectedCompletionDate?: Date;
@@ -69,6 +80,8 @@ const EnrollmentSchema = new Schema<IEnrollment>(
     arAccountCode: { type: String, trim: true },
     teacherId: { type: Schema.Types.ObjectId, ref: "Teacher" },
     teacherName: { type: String, trim: true },
+    teacherPayRate: { type: Number, min: 0 },
+    teacherPayBasis: { type: String, enum: [...teacherPayBases] },
     totalRegisteredHours: { type: Number, min: 0 },
     completedHours: { type: Number, min: 0, default: 0 },
     expectedCompletionDate: Date,

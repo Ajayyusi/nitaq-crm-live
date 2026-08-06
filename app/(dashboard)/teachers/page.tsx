@@ -500,10 +500,20 @@ export default function TrainersPage() {
             <Field label="Contract End">
               <DatePicker value={form.contractEndDate} onChange={(v) => set("contractEndDate", v)} min={form.contractStartDate || undefined} />
             </Field>
-            <Field label="Payment Rate (AED)" htmlFor="trainer-rate">
+            <Field
+              label="Default Rate (AED)"
+              htmlFor="trainer-rate"
+              help="Used when a student registration doesn't set its own rate."
+            >
               <Input id="trainer-rate" type="number" min="0" value={form.paymentRate} onChange={(e) => set("paymentRate", e.target.value)} />
             </Field>
-            <Field label="Payment Type" htmlFor="trainer-pay-type">
+            <Field
+              label="Default Basis"
+              htmlFor="trainer-pay-type"
+              help={form.paymentType === "Monthly"
+                ? "Monthly salary — per-registration rates are ignored."
+                : "Per-registration rates override this."}
+            >
               <Select id="trainer-pay-type" value={form.paymentType} onChange={(e) => set("paymentType", e.target.value)}>
                 {paymentTypes.map((p) => <option key={p}>{p}</option>)}
               </Select>

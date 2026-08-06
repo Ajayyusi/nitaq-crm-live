@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle, CheckCircle2, ClipboardList, Edit3, MessageCircle, Plus, Trash2, X, XCircle,
 } from "lucide-react";
-import { enrollmentStatuses, paymentMethods, paymentStatuses, scheduleFormats } from "@/constants/modelConstants";
+import { enrollmentStatuses, paymentMethods, paymentStatuses, scheduleFormats, teacherPayBases } from "@/constants/modelConstants";
 import { courseList } from "@/constants/leads";
 import DateRangePicker from "@/components/shared/DateRangePicker";
 import DatePicker from "@/components/shared/DatePicker";
@@ -29,6 +29,7 @@ type Enrollment = {
   format: string; status: string; paymentStatus: string; totalFee: number; amountPaid: number;
   balanceDue: number; notes: string; registrationDate: string;
   teacherId: string; teacherName: string;
+  teacherPayRate: number | null; teacherPayBasis: string;
   totalRegisteredHours: number; completedHours: number; remainingHours: number;
   expectedCompletionDate: string;
   registrationComplete: boolean; missingFields: string[];
@@ -40,9 +41,10 @@ type FormState = {
   format: string; status: string; paymentStatus: string; totalFee: string; amountPaid: string;
   paymentMethod: string; notes: string;
   teacherId: string; totalRegisteredHours: string; expectedCompletionDate: string;
+  teacherPayRate: string; teacherPayBasis: string;
 };
 
-type TeacherOption = { id: string; fullName: string };
+type TeacherOption = { id: string; fullName: string; paymentRate: number | null; paymentType: string };
 
 const emptyForm: FormState = {
   fullName: "", phone: "", email: "", emiratesId: "", nationality: "",
@@ -50,6 +52,7 @@ const emptyForm: FormState = {
   format: "In-Person", status: "Active", paymentStatus: "Instalment 1 Paid",
   totalFee: "", amountPaid: "", paymentMethod: "Cash", notes: "",
   teacherId: "", totalRegisteredHours: "", expectedCompletionDate: "",
+  teacherPayRate: "", teacherPayBasis: "Per Hour",
 };
 
 function getErr(v: unknown, fb: string) {
@@ -163,6 +166,8 @@ export default function EnrollmentsPage() {
             paymentMethod: "Cash", notes: e.notes ?? "",
             teacherId: e.teacherId ?? "", totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
             expectedCompletionDate: e.expectedCompletionDate ?? "",
+            teacherPayRate: e.teacherPayRate != null ? String(e.teacherPayRate) : "",
+            teacherPayBasis: e.teacherPayBasis || "Per Hour",
           });
           setFormError("");
           setDrawerOpen(true);
@@ -205,7 +210,12 @@ export default function EnrollmentsPage() {
     fetch("/api/teachers")
       .then((r) => r.json())
       .then((d) => {
-        setTeachers((d.trainers ?? []).map((t: { id: string; fullName: string }) => ({ id: t.id, fullName: t.fullName })));
+        setTeachers(
+          (d.trainers ?? []).map((t: { id: string; fullName: string; paymentRate: number | null; paymentType: string }) => ({
+            id: t.id, fullName: t.fullName,
+            paymentRate: t.paymentRate ?? null, paymentType: t.paymentType ?? "",
+          }))
+        );
         setTeachersError(false);
       })
       .catch(() => setTeachersError(true));
@@ -229,6 +239,8 @@ export default function EnrollmentsPage() {
       totalFee: e.totalFee.toString(), amountPaid: e.amountPaid.toString(), paymentMethod: "Cash", notes: e.notes,
       teacherId: e.teacherId ?? "", totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
       expectedCompletionDate: e.expectedCompletionDate ?? "",
+      teacherPayRate: e.teacherPayRate != null ? String(e.teacherPayRate) : "",
+      teacherPayBasis: e.teacherPayBasis || "Per Hour",
     });
     setFormError(""); setDrawerOpen(true);
   }
@@ -240,7 +252,15 @@ export default function EnrollmentsPage() {
       const method = editingEnrollment ? "PATCH" : "POST";
       const res = await fetch(url, {
         method, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, totalFee: Number(form.totalFee) || 0, amountPaid: Number(form.amountPaid) || 0 }),
+        body: JSON.stringify({
+          ...form,
+          totalFee: Number(form.totalFee) || 0,
+          amountPaid: Number(form.amountPaid) || 0,
+          // A blank rate clears the override and reverts to the trainer's default;
+          // the basis only means something alongside a rate.
+          teacherPayRate: form.teacherPayRate === "" ? "" : Number(form.teacherPayRate) || 0,
+          teacherPayBasis: form.teacherPayRate === "" ? "" : form.teacherPayBasis,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw data;
@@ -351,6 +371,50 @@ export default function EnrollmentsPage() {
                 {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
               </Select>
             </Field>
+
+            {/* Trainer pay for THIS registration — rates differ by course, so
+                they belong here, not on the trainer's profile. */}
+            {form.teacherId && (() => {
+              const t = teachers.find((x) => x.id === form.teacherId);
+              const fallback = t?.paymentRate
+                ? `Leave blank to use ${t.fullName}'s default: AED ${t.paymentRate.toLocaleString()} ${(t.paymentType || "").toLowerCase()}`
+                : `${t?.fullName ?? "This trainer"} has no default rate — set one here, or on the Trainers page.`;
+              return (
+                <>
+                  <Field label="Trainer Pay Rate (AED)" htmlFor="enr-pay-rate" help={fallback}>
+                    <Input
+                      id="enr-pay-rate"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={form.teacherPayRate}
+                      onChange={(e) => set("teacherPayRate", e.target.value)}
+                      placeholder="e.g. 80"
+                    />
+                  </Field>
+                  <Field
+                    label="Pay Basis"
+                    htmlFor="enr-pay-basis"
+                    help={
+                      form.teacherPayBasis === "Fixed for Course"
+                        ? "Paid once for the whole course, not per session."
+                        : form.teacherPayBasis === "Per Class"
+                          ? "Paid per session held, whatever its length."
+                          : "Paid per hour actually delivered."
+                    }
+                  >
+                    <Select
+                      id="enr-pay-basis"
+                      value={form.teacherPayBasis}
+                      onChange={(e) => set("teacherPayBasis", e.target.value)}
+                      disabled={!form.teacherPayRate}
+                    >
+                      {teacherPayBases.map((b) => <option key={b}>{b}</option>)}
+                    </Select>
+                  </Field>
+                </>
+              );
+            })()}
             <Field
               label="Registered Hours"
               htmlFor="enr-hours"

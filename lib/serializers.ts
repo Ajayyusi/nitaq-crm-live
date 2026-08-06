@@ -130,6 +130,8 @@ export function serializeEnrollment(e: any) {
   return {
     teacherId: e.teacherId?.toString() ?? "",
     teacherName: e.teacherName ?? "",
+    teacherPayRate: e.teacherPayRate ?? null,
+    teacherPayBasis: e.teacherPayBasis ?? "",
     totalRegisteredHours: totalHours,
     completedHours,
     remainingHours,

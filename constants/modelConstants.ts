@@ -101,3 +101,6 @@ export const paymentStatuses = [
 ] as const;
 
 export const scheduleFormats = ["In-Person", "Online", "Hybrid"] as const;
+
+/** How the trainer is paid for one registration (blank = trainer's default). */
+export const teacherPayBases = ["Per Hour", "Per Class", "Fixed for Course"] as const;

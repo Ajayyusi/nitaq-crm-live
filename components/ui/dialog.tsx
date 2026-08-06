@@ -110,7 +110,6 @@ export function Dialog({
             "animate-power-on w-full rounded-card border border-bezel bg-raised shadow-raise outline-none",
             width
           )}
-          style={{ animation: "power-on 0.25s cubic-bezier(0.16,1,0.3,1) both" }}
         >
           <div className="flex items-center justify-between gap-3 border-b border-bezel px-5 py-3.5">
             <h2 className="text-sm font-bold text-ink">{title}</h2>
@@ -166,12 +165,10 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          "fixed inset-y-0 end-0 z-50 flex w-full flex-col border-s border-bezel bg-raised shadow-raise outline-none",
+          "animate-drawer-in fixed inset-y-0 end-0 z-50 flex w-full flex-col border-s border-bezel bg-raised shadow-raise outline-none",
           width
         )}
-        style={{ animation: "drawer-in 0.25s cubic-bezier(0.16,1,0.3,1) both" }}
       >
-        <style>{`@keyframes drawer-in{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}`}</style>
         <div className="flex items-center justify-between gap-3 border-b border-bezel px-5 py-4">
           <h2 className="text-sm font-bold text-ink">{title}</h2>
           <Button variant="ghost" size="iconSm" onClick={onClose} aria-label="Close panel">

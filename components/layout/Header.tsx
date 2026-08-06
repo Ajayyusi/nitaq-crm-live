@@ -111,7 +111,8 @@ function TwoFactorModal({ onClose }: { onClose: () => void }) {
               <li>Enter the 6-digit code below</li>
             </ol>
             {qr && (
-              <div className="flex justify-center rounded-card border border-bezel bg-white p-3">
+              // bg-[#fff] (not bg-white) escapes the night remap — QR codes must stay white to scan
+              <div className="flex justify-center rounded-card border border-bezel bg-[#fff] p-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qr} alt="2FA QR code" className="h-48 w-48" />
               </div>

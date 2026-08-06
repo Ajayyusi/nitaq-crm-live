@@ -13,9 +13,22 @@ export interface ITeacherPayout extends Document {
   sessionIds: mongoose.Types.ObjectId[];
   periodFrom?: Date;
   periodTo?: Date;
-  basis: string;                        // Per Hour | Per Class | Per Course | Monthly
+  basis: string;                        // Per Hour | Per Class | Fixed for Course | Monthly | Mixed
   rate: number;
   quantity: number;                     // hours, classes or courses covered
+  /** Per-registration breakdown, snapshotted at payment time. */
+  lines?: {
+    enrollmentRef: string;
+    studentName: string;
+    course: string;
+    basis: string;
+    rate: number;
+    quantity: number;
+    sessionCount: number;
+    hours: number;
+    amount: number;
+    source: string;
+  }[];
   sessionCount: number;
   totalHours: number;
   suggestedAmount: number;              // what the system calculated
@@ -42,6 +55,26 @@ const TeacherPayoutSchema = new Schema<ITeacherPayout>(
     basis:        { type: String, required: true, trim: true },
     rate:         { type: Number, default: 0, min: 0 },
     quantity:     { type: Number, default: 0, min: 0 },
+    lines: {
+      type: [
+        new Schema(
+          {
+            enrollmentRef: { type: String, trim: true },
+            studentName:   { type: String, trim: true },
+            course:        { type: String, trim: true },
+            basis:         { type: String, trim: true },
+            rate:          { type: Number, default: 0 },
+            quantity:      { type: Number, default: 0 },
+            sessionCount:  { type: Number, default: 0 },
+            hours:         { type: Number, default: 0 },
+            amount:        { type: Number, default: 0 },
+            source:        { type: String, trim: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: undefined,
+    },
     sessionCount: { type: Number, default: 0, min: 0 },
     totalHours:   { type: Number, default: 0, min: 0 },
     suggestedAmount: { type: Number, default: 0, min: 0 },

@@ -167,57 +167,59 @@ finish review, the verdict, and DESIGN.md
   --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* ── Base ─────────────────────────────────────────────────────────────────── */
-html,
-body {
-  height: 100%;
-}
+/* ── Base ─────────────────────────────────────────────────────────────────────
+   EVERYTHING here lives in @layer base so Tailwind utilities always win the
+   cascade. Unlayered rules outrank every layered utility in Tailwind v4 —
+   an unlayered `body > *` once overrode `.fixed` on every portaled dialog.
+   Do not add unlayered element rules to this file.
+   ──────────────────────────────────────────────────────────────────────────── */
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
 
-body {
-  margin: 0;
-  background-color: var(--panel);
-  color: var(--ink);
-  font-family: var(--font-b612), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  /* The grain rides on the root canvas, so no element needs a stacking
+     context to sit above it. Fixed attachment keeps it from scrolling. */
+  html {
+    background-color: var(--panel);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.028'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+    background-repeat: repeat;
+  }
 
-/* Fine machined grain on the panel ground — the matte material of the world.
-   Pure decoration layer: fixed, non-interactive, invisible to printers. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.05'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-body > * {
-  position: relative;
-  z-index: 1;
-}
-@media print {
-  body::before {
-    display: none;
+  body {
+    margin: 0;
+    background-color: transparent;
+    color: var(--ink);
+    font-family: var(--font-b612), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: var(--phos-glow);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--phos);
+    outline-offset: 2px;
+  }
+
+  /* Numbers read like instruments everywhere */
+  table,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-::selection {
-  background: var(--phos-glow);
-  color: var(--ink);
-}
-
-:focus-visible {
-  outline: 2px solid var(--phos);
-  outline-offset: 2px;
-}
-
-/* Numbers read like instruments everywhere */
-table,
-[data-numeric] {
-  font-variant-numeric: tabular-nums;
+@media print {
+  html {
+    background-image: none !important;
+    background-color: #fff !important;
+  }
 }
 
 /* ── House utilities ──────────────────────────────────────────────────────── */
@@ -305,6 +307,34 @@ table,
   }
 }
 
+/* Drawer slide-in — direction-aware so RTL enters from the correct edge */
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes drawer-in-rtl {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-drawer-in {
+  animation: drawer-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+[dir="rtl"] .animate-drawer-in {
+  animation-name: drawer-in-rtl;
+}
+
 /* Gauge sweep for tick-gauge fills */
 @keyframes sweep {
   from {
@@ -331,10 +361,9 @@ table,
    into the panel world. Delete rules as modules migrate to token utilities.
    ──────────────────────────────────────────────────────────────────────────── */
 
-/* Day theme: retire the old green-tinted canvas and brand greens */
-body {
-  /* pages that painted their own bg-[#E8F5E9] canvas sit on --panel instead */
-}
+/* Day theme: retire the old green-tinted canvas and brand greens.
+   These are class-targeted with !important on purpose — they must beat the
+   arbitrary-value utilities they replace. Never add ELEMENT selectors here. */
 [class*="bg-[#E8F5E9]"] {
   background-color: var(--panel) !important;
 }

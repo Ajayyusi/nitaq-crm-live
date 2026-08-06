@@ -30,7 +30,8 @@ Owner-confirmed: internal tool for Nitaq's business today, **to be sold to other
 ## Capabilities and Constraints
 
 - 27 dashboard modules; central RBAC in lib/permissions.ts drives pages, sidebar, and API — redesign must not alter permission behavior.
-- Accounting engine invariants are covered by 51 vitest tests (`npm test`); these must stay green.
+- Accounting engine invariants are covered by vitest (`npm test`); these must stay green.
+- **Trainer pay is a property of the student registration, not the trainer.** The same trainer earns different rates on different courses, so each enrollment may carry its own rate and basis (Per Hour · Per Class · Fixed for Course). A registration without a rate falls back to the trainer's default rate. Monthly-salaried trainers are paid a flat amount and ignore per-registration rates. A fixed course fee is paid once per registration and never re-paid in a later batch.
 - Next.js 16 App Router + Tailwind 4 + shadcn-style components; Turbopack.
 - Every existing feature and workflow must be preserved exactly (owner requirement).
 - **Language (owner-confirmed): English and Arabic both wanted.** Foundations must be RTL-ready (logical properties, direction-agnostic layouts, Arabic-capable type stack). Full Arabic string translation is a follow-on workstream, not silently dropped.
