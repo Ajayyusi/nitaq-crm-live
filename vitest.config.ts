@@ -12,6 +12,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Style guards read source files from the repo root
+    root: root,
     // First run downloads the in-memory MongoDB binary — allow plenty of time.
     hookTimeout: 300_000,
     testTimeout: 30_000,
