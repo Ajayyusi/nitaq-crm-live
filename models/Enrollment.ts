@@ -44,8 +44,15 @@ export interface IEnrollment extends Document {
   registrationDate: Date;
   arAccountCode?: string;   // this student's ledger account under Accounts Receivable
   // ── Teacher assignment & hour tracking (per course registration) ──
+  /**
+   * Primary trainer. Always mirrors teacherIds[0] — kept as a scalar so
+   * payroll, class sessions and every existing query keep working.
+   */
   teacherId?: mongoose.Types.ObjectId;
   teacherName?: string;                 // denormalized for display
+  /** All trainers on this registration; a student may be taught by several. */
+  teacherIds?: mongoose.Types.ObjectId[];
+  teacherNames?: string[];              // denormalized, index-aligned with teacherIds
   /** Trainer pay for this registration; falls back to the trainer's default when unset. */
   teacherPayRate?: number;
   teacherPayBasis?: TeacherPayBasis;
@@ -80,6 +87,8 @@ const EnrollmentSchema = new Schema<IEnrollment>(
     arAccountCode: { type: String, trim: true },
     teacherId: { type: Schema.Types.ObjectId, ref: "Teacher" },
     teacherName: { type: String, trim: true },
+    teacherIds: [{ type: Schema.Types.ObjectId, ref: "Teacher" }],
+    teacherNames: [{ type: String, trim: true }],
     teacherPayRate: { type: Number, min: 0 },
     teacherPayBasis: { type: String, enum: [...teacherPayBases] },
     totalRegisteredHours: { type: Number, min: 0 },

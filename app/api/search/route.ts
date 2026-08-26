@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
         $or: [{ fullName: rx }, { phone: rx }, { enrollmentId: rx }, { email: rx }],
       };
       if (role === "trainer") {
-        const { getTeacherForUser } = await import("@/lib/teacher");
+        const { getTeacherForUser, taughtByFilter, applyTaughtBy } = await import("@/lib/teacher");
         const teacher = await getTeacherForUser(authed);
         if (!teacher) return;
         query.teacherId = teacher._id;

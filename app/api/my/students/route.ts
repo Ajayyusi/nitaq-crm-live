@@ -3,7 +3,7 @@ import connectDB from "@/lib/db";
 import Enrollment from "@/models/Enrollment";
 import ClassSession from "@/models/ClassSession";
 import { requireAuth } from "@/lib/api-auth";
-import { getTeacherForUser } from "@/lib/teacher";
+import { getTeacherForUser, taughtByFilter } from "@/lib/teacher";
 import { serializeEnrollment } from "@/lib/serializers";
 
 /**
@@ -26,7 +26,7 @@ export async function GET() {
     });
   }
 
-  const enrollments = await Enrollment.find({ teacherId: teacher._id }).sort({ updatedAt: -1 }).lean();
+  const enrollments = await Enrollment.find(taughtByFilter(teacher._id)).sort({ updatedAt: -1 }).lean();
 
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import Enrollment from "@/models/Enrollment";
+import FollowUp from "@/models/FollowUp";
 import { getNextSequence } from "@/models/Counter";
 import { leadSources, leadStages, courseList } from "@/constants/leads";
 import { serializeLead } from "@/lib/serializers";
@@ -28,6 +29,13 @@ type LeadUpdatePayload = Partial<
 
 const allowedStages = new Set<string>(leadStages);
 const allowedSources = new Set<string>(leadSources);
+
+/**
+ * Stages where the lead is no longer being chased. Reaching one of these
+ * clears the lead's follow-up state, so a converted student can never keep
+ * showing up as an overdue chase.
+ */
+const CLOSED_STAGES = new Set(["Enrolled", "Paid", "Lost", "Not Interested", "Invalid Number"]);
 const allowedCourses = new Set<string>(courseList);
 
 function cleanText(value: unknown) {
@@ -148,6 +156,26 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (appendNote) changes.push("Note added");
     if (changes.length === 0 && Object.keys($set).length > 0) changes.push("Details updated");
     logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Lead", entityId: id, entityLabel: lead.fullName, detail: changes.join(" · ") });
+
+    // A converted or closed lead is no longer being chased: clear its
+    // follow-up state so it can never keep surfacing as an overdue chase on
+    // the dashboard, in the follow-ups list, or in the sidebar badge.
+    const stageAfter = (($set as Record<string, unknown>).stage as string | undefined) ?? existing.stage;
+    if (CLOSED_STAGES.has(stageAfter) && !CLOSED_STAGES.has(existing.stage)) {
+      await Lead.updateOne({ _id: id }, { $unset: { nextFollowUpDate: "" } });
+      lead.nextFollowUpDate = undefined;
+      const closed = await FollowUp.updateMany(
+        { leadId: id, status: "Pending" },
+        { $set: { status: "Done" } }
+      );
+      if (closed.modifiedCount > 0) {
+        logAudit({
+          userName: authed.name, userRole: authed.role,
+          action: "updated", entity: "FollowUp", entityId: id, entityLabel: lead.fullName,
+          detail: `${closed.modifiedCount} pending follow-up${closed.modifiedCount === 1 ? "" : "s"} closed — lead moved to ${stageAfter}`,
+        });
+      }
+    }
 
     // Auto-create enrollment when stage transitions to Enrolled
     let enrollmentId: string | undefined;

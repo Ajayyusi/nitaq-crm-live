@@ -4,7 +4,7 @@ import connectDB from "@/lib/db";
 import ClassSession from "@/models/ClassSession";
 import Enrollment from "@/models/Enrollment";
 import { requireAuth } from "@/lib/api-auth";
-import { getTeacherForUser } from "@/lib/teacher";
+import { getTeacherForUser, isTaughtBy } from "@/lib/teacher";
 import { recalcEnrollmentHours, sessionCharges } from "@/lib/hours";
 import { serializeClassSession } from "@/lib/serializers";
 import { logAudit } from "@/lib/audit";
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       if (!teacher) {
         return NextResponse.json({ message: "No teacher profile is linked to your account — ask an admin to set your teacher email." }, { status: 403 });
       }
-      if (!enrollment.teacherId || enrollment.teacherId.toString() !== teacher._id.toString()) {
+      if (!isTaughtBy(enrollment, teacher._id)) {
         return NextResponse.json({ message: "This student is not assigned to you." }, { status: 403 });
       }
       teacherId = teacher._id as never;
@@ -79,6 +79,22 @@ export async function POST(request: NextRequest) {
       // Teachers cannot mark absences chargeable — admin only
     } else {
       isChargeable = !!body.isChargeable;
+      // With several trainers on a registration, the admin says who taught
+      // this session — pay follows the session, so this must be explicit.
+      const picked = body.teacherId ? String(body.teacherId) : "";
+      if (picked) {
+        if (!isTaughtBy(enrollment, picked)) {
+          return NextResponse.json(
+            { message: "That trainer is not assigned to this registration." },
+            { status: 400 }
+          );
+        }
+        const { default: Teacher } = await import("@/models/Teacher");
+        const t = await Teacher.findById(picked).select("fullName").lean();
+        if (!t) return NextResponse.json({ message: "Trainer not found." }, { status: 404 });
+        teacherId = t._id as never;
+        teacherName = t.fullName;
+      }
       if (!teacherId) {
         return NextResponse.json({ message: "Assign a teacher to this registration before recording classes." }, { status: 400 });
       }

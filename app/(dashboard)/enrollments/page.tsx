@@ -28,7 +28,7 @@ type Enrollment = {
   course: string; batchName: string; startDate: string; endDate: string; schedule: string;
   format: string; status: string; paymentStatus: string; totalFee: number; amountPaid: number;
   balanceDue: number; notes: string; registrationDate: string;
-  teacherId: string; teacherName: string;
+  teacherId: string; teacherName: string; teacherIds: string[]; teacherNames: string[];
   teacherPayRate: number | null; teacherPayBasis: string;
   totalRegisteredHours: number; completedHours: number; remainingHours: number;
   expectedCompletionDate: string;
@@ -40,7 +40,7 @@ type FormState = {
   course: string; batchName: string; startDate: string; endDate: string; schedule: string;
   format: string; status: string; paymentStatus: string; totalFee: string; amountPaid: string;
   paymentMethod: string; notes: string;
-  teacherId: string; totalRegisteredHours: string; expectedCompletionDate: string;
+  teacherIds: string[]; totalRegisteredHours: string; expectedCompletionDate: string;
   teacherPayRate: string; teacherPayBasis: string;
 };
 
@@ -51,7 +51,7 @@ const emptyForm: FormState = {
   course: "Other", batchName: "", startDate: "", endDate: "", schedule: "",
   format: "In-Person", status: "Active", paymentStatus: "Instalment 1 Paid",
   totalFee: "", amountPaid: "", paymentMethod: "Cash", notes: "",
-  teacherId: "", totalRegisteredHours: "", expectedCompletionDate: "",
+  teacherIds: [], totalRegisteredHours: "", expectedCompletionDate: "",
   teacherPayRate: "", teacherPayBasis: "Per Hour",
 };
 
@@ -76,7 +76,7 @@ function RegistrationChecklist({ form }: { form: FormState }) {
   const checks: [string, boolean][] = [
     ["Student Information", !!form.fullName && !!form.phone],
     ["Course Selected", !!form.course],
-    ["Teacher Assigned", !!form.teacherId],
+    ["Trainer Assigned", form.teacherIds.length > 0],
     ["Total Registered Hours", !!form.totalRegisteredHours],
     ["Start Date", !!form.startDate],
     ["Expected Completion Date", !!form.expectedCompletionDate],
@@ -164,7 +164,7 @@ export default function EnrollmentsPage() {
             status: e.status, paymentStatus: e.paymentStatus,
             totalFee: String(e.totalFee), amountPaid: String(e.amountPaid),
             paymentMethod: "Cash", notes: e.notes ?? "",
-            teacherId: e.teacherId ?? "", totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
+            teacherIds: e.teacherIds ?? (e.teacherId ? [e.teacherId] : []), totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
             expectedCompletionDate: e.expectedCompletionDate ?? "",
             teacherPayRate: e.teacherPayRate != null ? String(e.teacherPayRate) : "",
             teacherPayBasis: e.teacherPayBasis || "Per Hour",
@@ -225,6 +225,18 @@ export default function EnrollmentsPage() {
 
   function set(field: keyof FormState, value: string) { setForm((f) => ({ ...f, [field]: value })); }
 
+  const teacherNameFor = (id: string) => teachers.find((t) => t.id === id)?.fullName ?? "Trainer";
+
+  /** Add or remove a trainer. Order is preserved: the first is the primary. */
+  function toggleTeacher(id: string) {
+    setForm((f) => ({
+      ...f,
+      teacherIds: f.teacherIds.includes(id)
+        ? f.teacherIds.filter((x) => x !== id)
+        : [...f.teacherIds, id],
+    }));
+  }
+
   function openCreate() {
     if (teachersError) loadTeachers();
     setEditingEnrollment(null); setForm(emptyForm); setFormError(""); setDrawerOpen(true);
@@ -237,7 +249,7 @@ export default function EnrollmentsPage() {
       course: e.course, batchName: e.batchName, startDate: e.startDate, endDate: e.endDate,
       schedule: e.schedule, format: e.format, status: e.status, paymentStatus: e.paymentStatus,
       totalFee: e.totalFee.toString(), amountPaid: e.amountPaid.toString(), paymentMethod: "Cash", notes: e.notes,
-      teacherId: e.teacherId ?? "", totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
+      teacherIds: e.teacherIds ?? (e.teacherId ? [e.teacherId] : []), totalRegisteredHours: e.totalRegisteredHours ? String(e.totalRegisteredHours) : "",
       expectedCompletionDate: e.expectedCompletionDate ?? "",
       teacherPayRate: e.teacherPayRate != null ? String(e.teacherPayRate) : "",
       teacherPayBasis: e.teacherPayBasis || "Per Hour",
@@ -359,26 +371,61 @@ export default function EnrollmentsPage() {
             <Field label="End date">
               <DatePicker value={form.endDate} onChange={(v) => set("endDate", v)} min={form.startDate || undefined} />
             </Field>
-            <Field
-              label="Assigned Teacher"
-              htmlFor="enr-teacher"
-              error={teachersError
-                ? "Teacher list failed to load — close and reopen this panel to retry."
-                : !form.teacherId ? "Required to complete registration" : undefined}
-            >
-              <Select id="enr-teacher" value={form.teacherId} onChange={(e) => set("teacherId", e.target.value)}>
-                <option value="">— No teacher assigned —</option>
-                {teachers.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
-              </Select>
-            </Field>
+            {/* A student may be taught by more than one trainer. The first
+                selected is the primary — pay and class records default to
+                them, and the order is preserved. */}
+            <div className="sm:col-span-2">
+              <Field
+                label="Assigned Trainers"
+                error={teachersError
+                  ? "Trainer list failed to load — close and reopen this panel to retry."
+                  : form.teacherIds.length === 0 ? "Required to complete registration" : undefined}
+                help={form.teacherIds.length > 1
+                  ? `${teacherNameFor(form.teacherIds[0])} is the primary trainer.`
+                  : "Select one or more. Click again to remove."}
+              >
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Assigned trainers">
+                  {teachers.length === 0 && !teachersError && (
+                    <span className="text-xs text-faint">No active trainers yet.</span>
+                  )}
+                  {teachers.map((t) => {
+                    const idx = form.teacherIds.indexOf(t.id);
+                    const picked = idx >= 0;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed={picked}
+                        onClick={() => toggleTeacher(t.id)}
+                        className={`inline-flex items-center gap-1.5 rounded-ctl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          picked
+                            ? "border-phos/60 bg-[var(--lamp-ok-bg)] text-phos"
+                            : "border-bezel-strong text-dim hover:border-phos hover:text-phos"
+                        }`}
+                      >
+                        {picked && idx === 0 && (
+                          <span className="placard text-[9px] text-phos">1st</span>
+                        )}
+                        {t.fullName}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            </div>
 
             {/* Trainer pay for THIS registration — rates differ by course, so
                 they belong here, not on the trainer's profile. */}
-            {form.teacherId && (() => {
-              const t = teachers.find((x) => x.id === form.teacherId);
+            {form.teacherIds.length > 0 && (() => {
+              // The rate belongs to the registration, so it covers whoever
+              // teaches it; the primary trainer's default is the fallback.
+              const t = teachers.find((x) => x.id === form.teacherIds[0]);
+              const many = form.teacherIds.length > 1;
               const fallback = t?.paymentRate
-                ? `Leave blank to use ${t.fullName}'s default: AED ${t.paymentRate.toLocaleString()} ${(t.paymentType || "").toLowerCase()}`
-                : `${t?.fullName ?? "This trainer"} has no default rate — set one here, or on the Trainers page.`;
+                ? `Applies to every trainer on this registration. Leave blank to use ${t.fullName}'s default: AED ${t.paymentRate.toLocaleString()} ${(t.paymentType || "").toLowerCase()}`
+                : many
+                  ? "Applies to every trainer on this registration. No default rate is set on the primary trainer — set one here, or on the Trainers page."
+                  : `${t?.fullName ?? "This trainer"} has no default rate — set one here, or on the Trainers page.`;
               return (
                 <>
                   <Field label="Trainer Pay Rate (AED)" htmlFor="enr-pay-rate" help={fallback}>

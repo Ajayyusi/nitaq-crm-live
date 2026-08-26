@@ -4,6 +4,7 @@ import AttendanceSession, { attendanceStatuses } from "@/models/Attendance";
 import Enrollment from "@/models/Enrollment";
 import { serializeSession } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { taughtByFilter, applyTaughtBy } from "@/lib/teacher";
 
 const allowedStatuses = new Set<string>(attendanceStatuses);
 
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
     let records = body.records;
     if (!records || !Array.isArray(records) || records.length === 0) {
       const enrollQuery: Record<string, unknown> = { course, status: "Active" };
-      if (trainerScope) enrollQuery.teacherId = trainerScope.id;
+      if (trainerScope) applyTaughtBy(enrollQuery, trainerScope.id);
       const enrollments = await Enrollment.find(enrollQuery).lean();
       records = enrollments.map((e: any) => ({
         enrollmentId: e._id.toString(),
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
       }));
     } else if (trainerScope) {
       // Trainer supplied explicit records — drop any student not assigned to them
-      const mine = await Enrollment.find({ teacherId: trainerScope.id }).select("_id").lean();
+      const mine = await Enrollment.find(taughtByFilter(trainerScope.id)).select("_id").lean();
       const mineIds = new Set(mine.map((e) => e._id.toString()));
       records = (records as { enrollmentId?: string }[]).filter((r) => r.enrollmentId && mineIds.has(String(r.enrollmentId)));
       if (records.length === 0) {

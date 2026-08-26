@@ -39,6 +39,14 @@ const quietAction = cn(
   "border border-bezel-strong text-dim hover:border-phos hover:bg-transparent hover:text-phos"
 );
 
+/**
+ * Stages where a lead is no longer chased. Converting a lead clears its
+ * follow-up date (see app/api/leads/[id]), but historic records may still
+ * carry one — excluding these stages keeps enrolled students out of the
+ * overdue count either way.
+ */
+const CLOSED_LEAD_STAGES = ["Enrolled", "Paid", "Lost", "Not Interested", "Invalid Number"];
+
 // ── Role helpers ─────────────────────────────────────────────────────────────
 const FINANCE_ROLES = new Set(["admin", "manager", "finance"]);
 const SALES_ROLES   = new Set(["admin", "manager", "sales"]);
@@ -112,7 +120,7 @@ async function getDashboardData(role: string, from: string, to: string, userName
         Lead.countDocuments({ ...salesFilter, stage: "Enrolled" }),
         Lead.countDocuments({ ...salesFilter, stage: "Paid" }),
         Lead.countDocuments({ ...salesFilter, stage: "Lost" }),
-        Lead.countDocuments({ ...salesFilter, nextFollowUpDate: { $lt: todayStart }, stage: { $nin: ["Paid", "Lost"] } }),
+        Lead.countDocuments({ ...salesFilter, nextFollowUpDate: { $lt: todayStart }, stage: { $nin: CLOSED_LEAD_STAGES } }),
         Lead.countDocuments({ ...salesFilter, nextFollowUpDate: { $exists: false }, stage: { $nin: ["Enrolled", "Paid", "Lost"] } }),
       ]);
       const rawFollowUps = await FollowUp.find({ ...fuSalesFilter, followUpDate: { $gte: todayStart, $lt: todayEnd }, status: "Pending" })
@@ -195,7 +203,7 @@ async function getDashboardData(role: string, from: string, to: string, userName
             Lead.countDocuments(ownerFilter),
             Lead.countDocuments({ ...ownerFilter, stage: "Interested" }),
             Lead.countDocuments({ ...ownerFilter, stage: { $in: ["Enrolled", "Paid"] } }),
-            Lead.countDocuments({ ...ownerFilter, nextFollowUpDate: { $lt: todayStart }, stage: { $nin: ["Paid", "Lost"] } }),
+            Lead.countDocuments({ ...ownerFilter, nextFollowUpDate: { $lt: todayStart }, stage: { $nin: CLOSED_LEAD_STAGES } }),
             FollowUp.countDocuments({ ...fuOwnerFilter, status: "Done" }),
             FollowUp.countDocuments(fuOwnerFilter),
           ]);

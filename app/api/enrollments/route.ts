@@ -65,10 +65,11 @@ export async function GET(request: NextRequest) {
     // Trainers only ever see registrations assigned to them — never the
     // whole student body (enforced here, not just in the UI).
     if (authed.role === "trainer") {
-      const { getTeacherForUser } = await import("@/lib/teacher");
+      const { getTeacherForUser, taughtByFilter, applyTaughtBy } = await import("@/lib/teacher");
       const teacher = await getTeacherForUser(authed);
       if (!teacher) return NextResponse.json({ enrollments: [] });
-      query.teacherId = teacher._id;
+      // Co-teaching counts: match the primary trainer or the full list.
+      applyTaughtBy(query, teacher._id);
     }
 
     const enrollments = await Enrollment.find(query).sort({ createdAt: -1 }).lean();
@@ -122,8 +123,18 @@ export async function POST(request: NextRequest) {
       amountPaid: Number(body.amountPaid) || 0,
       notes: clean(body.notes) || undefined,
       leadId: body.leadId || undefined,
-      // Teacher assignment & hour tracking
-      teacherId: body.teacherId && mongoose.Types.ObjectId.isValid(body.teacherId) ? body.teacherId : undefined,
+      // Teacher assignment & hour tracking. teacherIds is the source of
+      // truth; teacherId mirrors the first so existing queries keep working.
+      // A lone teacherId is still accepted for older clients.
+      ...(() => {
+        const raw: string[] = Array.isArray(body.teacherIds)
+          ? body.teacherIds.map(String)
+          : body.teacherId
+            ? [String(body.teacherId)]
+            : [];
+        const ids = [...new Set(raw.filter((id) => mongoose.Types.ObjectId.isValid(id)))];
+        return { teacherId: ids[0], teacherIds: ids };
+      })(),
       // Trainer pay for this registration (blank = use the trainer's default)
       teacherPayRate:
         body.teacherPayRate === "" || body.teacherPayRate == null
@@ -136,22 +147,29 @@ export async function POST(request: NextRequest) {
       expectedCompletionDate: body.expectedCompletionDate ? new Date(body.expectedCompletionDate) : undefined,
     });
 
-    // Denormalize teacher name + notify the teacher
-    if (enrollment.teacherId) {
+    // Denormalize trainer names + notify every assigned trainer
+    if (enrollment.teacherIds?.length) {
       const { default: Teacher } = await import("@/models/Teacher");
-      const t = await Teacher.findById(enrollment.teacherId).lean();
-      if (t) {
-        enrollment.teacherName = t.fullName;
-        await enrollment.save();
-        if (t.email) {
-          const { notify } = await import("@/lib/notify");
-          notify({
-            userEmail: t.email,
-            title: `New student assigned: ${enrollment.fullName}`,
-            body: `${enrollment.course} — new registration assigned to you.`,
-            link: "/my-students",
-          });
-        }
+      const teachers = await Teacher.find({ _id: { $in: enrollment.teacherIds } })
+        .select("fullName email")
+        .lean();
+      const byId = new Map(teachers.map((t) => [t._id.toString(), t]));
+      // Keep names index-aligned with teacherIds
+      enrollment.teacherNames = enrollment.teacherIds.map(
+        (id) => byId.get(id.toString())?.fullName ?? ""
+      );
+      enrollment.teacherName = enrollment.teacherNames[0] || undefined;
+      await enrollment.save();
+
+      const { notify } = await import("@/lib/notify");
+      for (const t of teachers) {
+        if (!t.email) continue;
+        notify({
+          userEmail: t.email,
+          title: `New student assigned: ${enrollment.fullName}`,
+          body: `${enrollment.course} — new registration assigned to you.`,
+          link: "/my-students",
+        });
       }
     }
 

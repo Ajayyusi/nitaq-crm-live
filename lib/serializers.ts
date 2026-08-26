@@ -130,6 +130,16 @@ export function serializeEnrollment(e: any) {
   return {
     teacherId: e.teacherId?.toString() ?? "",
     teacherName: e.teacherName ?? "",
+    // Full trainer list; falls back to the primary for records written
+    // before a registration could have several trainers.
+    teacherIds: (e.teacherIds?.length ? e.teacherIds : e.teacherId ? [e.teacherId] : []).map(
+      (t: unknown) => String(t)
+    ),
+    teacherNames: e.teacherNames?.length
+      ? e.teacherNames
+      : e.teacherName
+        ? [e.teacherName]
+        : [],
     teacherPayRate: e.teacherPayRate ?? null,
     teacherPayBasis: e.teacherPayBasis ?? "",
     totalRegisteredHours: totalHours,

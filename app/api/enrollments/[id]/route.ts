@@ -48,9 +48,9 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 
   // A trainer may only open a registration assigned to them
   if (authed.role === "trainer") {
-    const { getTeacherForUser } = await import("@/lib/teacher");
+    const { getTeacherForUser, isTaughtBy } = await import("@/lib/teacher");
     const teacher = await getTeacherForUser(authed);
-    if (!teacher || enrollment.teacherId?.toString() !== teacher._id.toString()) {
+    if (!teacher || !isTaughtBy(enrollment, teacher._id)) {
       return NextResponse.json({ message: "This student is not assigned to you." }, { status: 403 });
     }
   }
@@ -141,34 +141,60 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         throw new Error(`Cannot mark Completed: ${Math.round((finalTotal - done) * 100) / 100}h still remain. Use the admin override (with reason) to force completion.`);
       }
     }
-    if ("teacherId" in body) {
-      const tid = String(body.teacherId ?? "");
-      if (tid && !mongoose.Types.ObjectId.isValid(tid)) throw new Error("Invalid teacher.");
+    // Trainer assignment — a registration may have several trainers.
+    // Accepts teacherIds (preferred) or a single teacherId from older clients.
+    if ("teacherIds" in body || "teacherId" in body) {
+      const raw: string[] = Array.isArray(body.teacherIds)
+        ? body.teacherIds.map(String)
+        : "teacherId" in body && body.teacherId
+          ? [String(body.teacherId)]
+          : [];
+      for (const tid of raw) {
+        if (!mongoose.Types.ObjectId.isValid(tid)) throw new Error("Invalid trainer.");
+      }
+      const ids = [...new Set(raw)];
       const { default: Teacher } = await import("@/models/Teacher");
-      const newTeacher = tid ? await Teacher.findById(tid).lean() : null;
-      if (tid && !newTeacher) throw new Error("Teacher not found.");
-      update.teacherId = tid || undefined;
-      update.teacherName = newTeacher?.fullName ?? undefined;
-      const oldTid = existing.teacherId?.toString() ?? "";
-      if (tid !== oldTid) {
-        const { notify } = await import("@/lib/notify");
-        if (newTeacher?.email) {
+      const teachers = ids.length
+        ? await Teacher.find({ _id: { $in: ids } }).select("fullName email").lean()
+        : [];
+      if (teachers.length !== ids.length) throw new Error("Trainer not found.");
+
+      const byId = new Map(teachers.map((t) => [t._id.toString(), t]));
+      // Preserve the caller's ordering: the first entry is the primary trainer
+      const names = ids.map((tid) => byId.get(tid)?.fullName ?? "");
+      update.teacherIds = ids;
+      update.teacherNames = names;
+      update.teacherId = ids[0] || undefined;
+      update.teacherName = names[0] || undefined;
+
+      const oldIds = new Set(
+        (existing.teacherIds?.map((t) => t.toString()) ??
+          (existing.teacherId ? [existing.teacherId.toString()] : []))
+      );
+      const added = ids.filter((tid) => !oldIds.has(tid));
+      const removed = [...oldIds].filter((tid) => !ids.includes(tid));
+
+      const { notify } = await import("@/lib/notify");
+      for (const tid of added) {
+        const t = byId.get(tid);
+        if (t?.email) {
           notify({
-            userEmail: newTeacher.email,
+            userEmail: t.email,
             title: `New student assigned: ${existing.fullName}`,
             body: `${existing.course} — assigned to you by ${authed.name}.`,
             link: "/my-students",
           });
         }
-        if (oldTid) {
-          const oldTeacher = await Teacher.findById(oldTid).lean();
-          if (oldTeacher?.email) {
-            notify({
-              userEmail: oldTeacher.email,
-              title: `Student reassigned: ${existing.fullName}`,
-              body: `${existing.course} is no longer assigned to you.`,
-            });
-          }
+      }
+      if (removed.length) {
+        const gone = await Teacher.find({ _id: { $in: removed } }).select("email").lean();
+        for (const t of gone) {
+          if (!t.email) continue;
+          notify({
+            userEmail: t.email,
+            title: `Student reassigned: ${existing.fullName}`,
+            body: `${existing.course} is no longer assigned to you.`,
+          });
         }
       }
     }
