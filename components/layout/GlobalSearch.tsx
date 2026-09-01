@@ -130,11 +130,11 @@ export default function GlobalSearch() {
         onClick={() => setOpen(true)}
         aria-label="Search"
         title="Search (⌘K)"
-        className="grid h-10 w-10 place-items-center rounded-ctl border border-bezel-strong bg-face text-dim shadow-card transition-colors hover:border-phos hover:text-phos focus-visible:outline-none focus-visible:shadow-glow sm:h-10 sm:w-auto sm:gap-2 sm:px-3"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-neo-sm bg-well text-dim shadow-neo-inset-sm transition-[box-shadow,color] duration-200 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-auto sm:gap-2 sm:px-3.5"
       >
         <Search className="h-4 w-4" aria-hidden />
-        <span className="hidden text-xs font-medium text-faint sm:inline">Search…</span>
-        <kbd className="hidden rounded-lamp border border-bezel px-1 font-mono text-[10px] text-faint lg:inline">⌘K</kbd>
+        <span className="hidden text-xs font-medium text-dim sm:inline">Search…</span>
+        <kbd className="hidden rounded-neo-xs bg-face px-1.5 py-0.5 font-mono text-[10px] text-faint shadow-neo-xs lg:inline">⌘K</kbd>
       </button>
 
       {/* Portaled to <body>: the header sets backdrop-filter, which makes it a
@@ -143,16 +143,16 @@ export default function GlobalSearch() {
           under the page content. */}
       {open && mounted && createPortal(
         <div className="fixed inset-0 z-[60] flex items-start justify-center p-4 pt-[10vh]">
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="fixed inset-0 bg-[rgba(27,36,48,0.45)] backdrop-blur-[3px]" onClick={() => setOpen(false)} aria-hidden="true" />
           <div
             ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-label="Global search"
-            className="relative w-full max-w-lg overflow-hidden rounded-card border border-bezel bg-raised shadow-raise"
+            className="relative w-full max-w-lg overflow-hidden rounded-neo border border-edge bg-raised shadow-neo-pop"
             style={{ animation: "power-on 0.25s cubic-bezier(0.16,1,0.3,1) both" }}
           >
-            <div className="flex items-center gap-2 border-b border-bezel px-4">
+            <div className="flex items-center gap-2.5 border-b border-edge px-5">
               <Search className="h-4 w-4 flex-shrink-0 text-faint" aria-hidden />
               <input
                 ref={inputRef}
@@ -168,7 +168,7 @@ export default function GlobalSearch() {
                 aria-label="Search the CRM"
                 autoComplete="off"
                 spellCheck={false}
-                className="h-12 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
+                className="h-14 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-faint"
               />
               {loading && <Spinner />}
               <Button variant="ghost" size="iconSm" onClick={() => setOpen(false)} aria-label="Close search">

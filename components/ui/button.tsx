@@ -3,34 +3,50 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /*
- * ENGAGE button grammar (Night Six-Pack):
- * - primary  = outlined phosphor; lights up solid on hover/press
- * - solid    = pre-lit phosphor (the one most-important action on a screen)
- * - secondary= STANDBY: outlined neutral
- * - danger   = alert red, outlined; lights on hover
- * - ghost    = bare, for icon actions and table rows
+ * Button grammar (Soft Panel).
+ *
+ * Every pressable variant follows the same physical rule: raised at rest,
+ * recessed while held. `active:shadow-neo-inset-sm` is what makes a control
+ * feel like a button in this system, so it is on all of them.
+ *
+ *   primary   filled accent — the one committing action on a screen
+ *   solid     alias of primary, kept so existing call sites keep working
+ *   secondary raised neutral surface — the default for everything else
+ *   ghost     no surface until hovered — table row actions, toolbars
+ *   danger    filled red — destructive, and only ever destructive
+ *   link      inline text action
+ *
+ * Sizes `icon` / `iconSm` give a square pad for icon-only buttons; prefer
+ * <IconButton> below, which forces the accessible name they need.
  */
 const buttonVariants = cva(
-  "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-ctl text-xs font-bold uppercase tracking-[0.08em] transition-all duration-150 focus-visible:outline-none focus-visible:shadow-glow disabled:pointer-events-none disabled:opacity-40",
+  [
+    "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap",
+    "rounded-neo-sm text-xs font-bold uppercase tracking-[0.06em]",
+    "transition-[box-shadow,background-color,color,transform] duration-200 ease-out",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    "disabled:pointer-events-none disabled:opacity-45 disabled:shadow-none",
+  ].join(" "),
   {
     variants: {
       variant: {
         primary:
-          "border border-phos/60 bg-transparent text-phos hover:border-phos hover:bg-phos hover:text-phos-ink hover:shadow-glow active:translate-y-px",
+          "bg-accent text-accent-ink shadow-neo-xs hover:bg-accent-hover hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
         solid:
-          "border border-transparent bg-phos text-phos-ink shadow-glow hover:bg-phos-bright active:translate-y-px",
+          "bg-accent text-accent-ink shadow-neo-xs hover:bg-accent-hover hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
         secondary:
-          "border border-bezel-strong bg-transparent text-ink hover:bg-well active:translate-y-px",
+          "bg-face text-ink shadow-neo-xs hover:text-accent hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
+        ghost:
+          "bg-transparent text-dim shadow-none hover:bg-well hover:text-ink active:shadow-neo-inset-sm",
         danger:
-          "border border-alert/60 bg-transparent text-alert hover:border-alert hover:bg-alert hover:text-white active:translate-y-px",
-        ghost: "border border-transparent text-dim hover:bg-well hover:text-ink",
-        link: "border-none normal-case tracking-normal text-phos underline-offset-4 hover:underline",
+          "bg-danger text-white shadow-neo-xs hover:brightness-110 hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
+        link: "border-none normal-case tracking-normal text-accent shadow-none underline-offset-4 hover:underline",
       },
       size: {
         sm: "h-8 px-3",
-        default: "h-9 px-4",
-        lg: "h-10 px-6",
-        icon: "h-9 w-9 px-0",
+        default: "h-10 px-5",
+        lg: "h-11 px-7 text-[13px]",
+        icon: "h-10 w-10 px-0",
         iconSm: "h-8 w-8 px-0",
       },
     },
@@ -51,4 +67,26 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-export { Button, buttonVariants };
+/**
+ * Icon-only button. Enforces the accessible name a bare <Button size="icon">
+ * cannot — an icon with no label is invisible to a screen reader.
+ */
+const IconButton = React.forwardRef<
+  HTMLButtonElement,
+  ButtonProps & { label: string; small?: boolean }
+>(({ label, small, variant = "ghost", className, children, ...props }, ref) => (
+  <Button
+    ref={ref}
+    variant={variant}
+    size={small ? "iconSm" : "icon"}
+    aria-label={label}
+    title={label}
+    className={className}
+    {...props}
+  >
+    {children}
+  </Button>
+));
+IconButton.displayName = "IconButton";
+
+export { Button, IconButton, buttonVariants };

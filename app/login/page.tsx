@@ -14,39 +14,66 @@ async function fetchAcademyName(): Promise<string> {
   }
 }
 
-/* A calm cockpit gauge, needle at rest — the login page's one instrument. */
-function HeroGauge() {
-  const ticks: React.ReactNode[] = [];
-  for (let i = 0; i < 24; i++) {
-    const major = i % 2 === 0;
-    ticks.push(
-      <line
-        key={i}
-        x1="90"
-        y1={major ? "14" : "17"}
-        x2="90"
-        y2="24"
-        stroke={major ? "var(--dim)" : "var(--bezel-strong)"}
-        strokeWidth={major ? 1.5 : 1}
-        transform={`rotate(${i * 15} 90 90)`}
-      />
-    );
-  }
+/*
+ * The hero mark: a plate extruded from the ground, holding a recessed dial.
+ * It is the design system's whole thesis in one object — raised, inset, and
+ * a single stroke of accent — so the sign-in screen teaches the language
+ * before anyone reaches a dashboard.
+ */
+function HeroMark() {
   return (
-    <svg viewBox="0 0 180 180" className="h-56 w-56" aria-hidden>
-      <circle cx="90" cy="90" r="86" fill="var(--face)" stroke="var(--bezel-strong)" strokeWidth="2" />
-      <circle cx="90" cy="90" r="78" fill="none" stroke="var(--bezel)" strokeWidth="1" />
-      {ticks}
-      <text x="90" y="64" textAnchor="middle" fill="var(--dim)" fontSize="9" letterSpacing="3" fontFamily="inherit">
-        OPERATIONS
-      </text>
-      <line x1="90" y1="90" x2="138" y2="52" stroke="var(--phos)" strokeWidth="3" strokeLinecap="round" />
-      <line x1="90" y1="90" x2="70" y2="106" stroke="var(--phos)" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-      <circle cx="90" cy="90" r="5" fill="var(--phos)" />
-      <text x="90" y="128" textAnchor="middle" fill="var(--ink)" fontSize="13" fontWeight="bold" letterSpacing="1" fontFamily="inherit">
-        NITAQ
-      </text>
-    </svg>
+    <div className="grid h-56 w-56 place-items-center rounded-full bg-face shadow-neo">
+      <div className="grid h-40 w-40 place-items-center rounded-full bg-well shadow-neo-inset">
+        <svg viewBox="0 0 120 120" className="h-32 w-32" aria-hidden>
+          {/* Track */}
+          <circle
+            cx="60"
+            cy="60"
+            r="48"
+            fill="none"
+            stroke="var(--edge-strong)"
+            strokeWidth="3"
+            opacity="0.5"
+          />
+          {/* One stroke of accent — 72% of the ring, opening at the top */}
+          <circle
+            cx="60"
+            cy="60"
+            r="48"
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray="217 302"
+            transform="rotate(-125 60 60)"
+          />
+          <text
+            x="60"
+            y="58"
+            textAnchor="middle"
+            fill="var(--ink)"
+            fontSize="21"
+            fontWeight="800"
+            letterSpacing="-0.5"
+            fontFamily="inherit"
+          >
+            Nitaq
+          </text>
+          <text
+            x="60"
+            y="76"
+            textAnchor="middle"
+            fill="var(--faint)"
+            fontSize="8"
+            fontWeight="700"
+            letterSpacing="3"
+            fontFamily="inherit"
+          >
+            ACADEMY
+          </text>
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -54,52 +81,46 @@ export default async function LoginPage() {
   const academyName = await fetchAcademyName();
 
   return (
-    <div
-      className="dark flex min-h-screen items-center justify-center bg-panel p-4 text-ink"
-      style={{
-        backgroundImage:
-          "radial-gradient(640px 520px at 32% 42%, rgba(57,255,154,0.05), transparent 70%), radial-gradient(900px 700px at 85% 90%, rgba(85,200,240,0.03), transparent 70%)",
-      }}
-    >
-      <div className="grid w-full max-w-4xl items-center gap-10 lg:grid-cols-[1fr_420px]">
+    <div className="flex min-h-screen items-center justify-center bg-panel p-4 text-ink sm:p-8">
+      <div className="grid w-full max-w-4xl items-center gap-12 lg:grid-cols-[1fr_420px]">
         {/* Statement panel */}
-        <div className="hidden flex-col items-start gap-6 lg:flex">
-          <HeroGauge />
+        <div className="hidden flex-col items-start gap-8 lg:flex">
+          <HeroMark />
           <div>
-            <h1 className="text-3xl font-bold uppercase leading-tight tracking-[0.06em] text-ink">
-              Trust your
+            <h1 className="text-[34px] font-extrabold leading-[1.1] tracking-[-0.03em] text-ink">
+              Everything the
               <br />
-              instruments
+              academy runs on.
             </h1>
-            <p className="mt-3 max-w-sm text-sm leading-6 text-dim">
-              Admissions, classes, money, and compliance on one panel —
-              cross-checked, reconciled, and ready before you ask.
+            <p className="mt-4 max-w-sm text-[15px] leading-7 text-dim">
+              Admissions, classes, money and compliance on one surface —
+              reconciled and ready before you ask.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="placard">{academyName}</span>
-            <span className="h-px w-8 bg-bezel-strong" aria-hidden />
+            <span className="h-px w-8 bg-edge-strong" aria-hidden />
             <span className="placard">Sharjah</span>
           </div>
         </div>
 
         {/* Sign-in card */}
-        <div className="face overflow-hidden">
-          <div className="border-b border-bezel px-8 pb-6 pt-8">
+        <div className="overflow-hidden rounded-neo bg-face shadow-neo">
+          <div className="border-b border-edge px-8 pb-6 pt-8">
             <p className="placard">{academyName}</p>
-            <h2 className="mt-1 text-xl font-bold text-ink">Sign in</h2>
-            <p className="mt-1 text-sm text-dim">Operations panel · authorized staff only</p>
+            <h2 className="mt-2 text-2xl font-extrabold tracking-[-0.02em] text-ink">Sign in</h2>
+            <p className="mt-1.5 text-sm text-dim">Authorized staff only</p>
           </div>
           <Suspense
             fallback={
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-phos" />
+                <Loader2 className="h-6 w-6 animate-spin text-accent" />
               </div>
             }
           >
             <LoginForm />
           </Suspense>
-          <div className="border-t border-bezel bg-well px-8 py-3.5">
+          <div className="border-t border-edge bg-well px-8 py-4">
             <p className="placard text-center">{academyName} · Confidential</p>
           </div>
         </div>

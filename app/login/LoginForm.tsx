@@ -68,7 +68,7 @@ export default function LoginForm() {
   const err = ERRORS[errorCode] ?? (errorCode ? ERRORS.default : null);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 px-8 py-6">
+    <form onSubmit={handleSubmit} className="space-y-5 px-8 py-7">
       <Field label="Email address" htmlFor="login-email">
         <div className="relative">
           <Mail className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
@@ -80,7 +80,7 @@ export default function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@nitaqacademy.com"
-            className="ps-9"
+            className="ps-10"
           />
         </div>
       </Field>
@@ -96,13 +96,13 @@ export default function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="ps-9 pe-10"
+            className="ps-10 pe-11"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             aria-label={showPassword ? "Hide password" : "Show password"}
-            className="absolute end-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition hover:text-dim"
+            className="absolute end-3 top-1/2 -translate-y-1/2 rounded-neo-xs p-1 text-faint transition hover:text-ink"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
@@ -134,7 +134,7 @@ export default function LoginForm() {
       {err && (
         <div
           role="alert"
-          className={`flex items-start gap-2.5 rounded-ctl border px-3.5 py-3 text-sm font-semibold ${
+          className={`flex items-start gap-2.5 rounded-neo-sm border px-3.5 py-3 text-sm font-semibold ${
             err.isDB
               ? "border-caution/30 bg-[var(--lamp-caution-bg)] text-caution"
               : "border-alert/30 bg-[var(--lamp-alert-bg)] text-alert"

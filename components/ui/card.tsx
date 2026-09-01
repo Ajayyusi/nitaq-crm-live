@@ -1,12 +1,13 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-/* Instrument face — the standard surface of the panel. */
+/* The standard raised surface. Depth comes from the shadow; the hairline
+   is only there to hold an edge when two cards sit flush. */
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("rounded-card border border-bezel bg-face shadow-card", className)}
+      className={cn("rounded-neo border border-edge bg-face shadow-neo-sm", className)}
       {...props}
     />
   )
@@ -18,7 +19,7 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
     <div
       ref={ref}
       className={cn(
-        "flex flex-wrap items-center justify-between gap-2 border-b border-bezel px-4 py-3 sm:px-5",
+        "flex flex-wrap items-center justify-between gap-2 border-b border-edge px-5 py-4 sm:px-6",
         className
       )}
       {...props}
@@ -29,7 +30,7 @@ CardHeader.displayName = "CardHeader";
 
 const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h2 ref={ref} className={cn("text-sm font-bold text-ink", className)} {...props} />
+    <h2 ref={ref} className={cn("text-[15px] font-bold tracking-[-0.01em] text-ink", className)} {...props} />
   )
 );
 CardTitle.displayName = "CardTitle";
@@ -44,7 +45,7 @@ CardDescription.displayName = "CardDescription";
 
 const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("p-4 sm:p-5", className)} {...props} />
+    <div ref={ref} className={cn("p-5 sm:p-6", className)} {...props} />
   )
 );
 CardContent.displayName = "CardContent";
@@ -53,7 +54,7 @@ const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("flex items-center gap-2 border-t border-bezel px-4 py-3 sm:px-5", className)}
+      className={cn("flex items-center gap-2 border-t border-edge px-5 py-4 sm:px-6", className)}
       {...props}
     />
   )

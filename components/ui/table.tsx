@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "./button";
 
 /*
- * Flight-log tables: sunken placard header, hairline rows, tabular numerals.
- * Long text wraps; numeric cells stay right-aligned and mono.
+ * Tables. The CONTAINER is raised; the rows inside stay flat.
+ * Extruding each row or cell is what makes soft UI unreadable at data
+ * density, so depth stops at the shell. Rows separate with a hairline and
+ * respond to hover with a tint, never with a shadow.
  */
 
 export function TableShell({
@@ -21,7 +23,7 @@ export function TableShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("face overflow-hidden", className)}>
+    <div className={cn("overflow-hidden rounded-neo border border-edge bg-face shadow-neo-sm", className)}>
       {/* The horizontal scroller is the scrollport for `sticky` headers.
           Without a bounded height it never scrolls vertically, so the header
           has no travel and appears not to stick — pass maxHeight for long
@@ -37,11 +39,11 @@ export function Table({
   className,
   children,
 }: React.TableHTMLAttributes<HTMLTableElement> & { children: React.ReactNode }) {
-  return <table className={cn("w-full text-sm", className)}>{children}</table>;
+  return <table className={cn("w-full border-collapse text-sm", className)}>{children}</table>;
 }
 
 export function THead({ children }: { children: React.ReactNode }) {
-  return <thead className="sticky top-0 z-10 bg-well">{children}</thead>;
+  return <thead className="sticky top-0 z-10 bg-well shadow-[0_1px_0_var(--edge)]">{children}</thead>;
 }
 
 export function Th({
@@ -53,7 +55,7 @@ export function Th({
   return (
     <th
       className={cn(
-        "placard whitespace-nowrap border-b border-bezel px-3 py-2.5 text-start first:ps-4 last:pe-4",
+        "placard whitespace-nowrap border-b border-edge px-4 py-3 text-start first:ps-5 last:pe-5",
         numeric && "text-end",
         className
       )}
@@ -72,8 +74,8 @@ export function Tr({
   return (
     <tr
       className={cn(
-        "border-b border-bezel/60 last:border-0",
-        clickable && "cursor-pointer transition-colors hover:bg-well focus-within:bg-well",
+        "border-b border-edge/60 last:border-0",
+        clickable && "cursor-pointer transition-colors duration-150 hover:bg-well focus-within:bg-well",
         className
       )}
       {...props}
@@ -90,7 +92,7 @@ export function Td({
   return (
     <td
       className={cn(
-        "px-3 py-2.5 align-middle text-ink first:ps-4 last:pe-4",
+        "px-4 py-3 align-middle text-ink first:ps-5 last:pe-5",
         numeric && "readout text-end",
         className
       )}
@@ -113,7 +115,7 @@ export function TableFooter({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-2 border-t border-bezel px-4 py-2.5 text-xs text-dim",
+        "flex flex-wrap items-center justify-between gap-2 border-t border-edge bg-well/50 px-5 py-3 text-xs text-dim",
         className
       )}
     >

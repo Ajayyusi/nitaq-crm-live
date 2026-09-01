@@ -100,7 +100,7 @@ function FollowUpBadge() {
   if (count === 0) return null;
   return (
     <span
-      className="readout ml-auto rounded-lamp border border-caution/30 bg-[var(--lamp-caution-bg)] px-1.5 py-px text-[10px] font-bold leading-4 text-caution"
+      className="readout ml-auto rounded-neo-xs border border-warn/25 bg-[var(--warn-soft)] px-1.5 py-px text-[10px] font-bold leading-4 text-warn"
       data-numeric
       aria-label={`${count} follow-ups due today`}
     >
@@ -186,7 +186,7 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 start-0 z-40 flex w-[248px] flex-col border-e border-bezel bg-face transition-transform duration-300 ${
+      className={`fixed inset-y-0 start-0 z-40 flex w-[264px] flex-col bg-face shadow-neo transition-transform duration-300 lg:inset-y-3 lg:start-3 lg:rounded-neo ${
         isOpen
           ? "translate-x-0"
           : "ltr:-translate-x-full rtl:translate-x-full lg:ltr:translate-x-0 lg:rtl:translate-x-0"
@@ -194,7 +194,7 @@ export default function Sidebar({
       aria-label="Main navigation"
     >
       {/* Identity plate */}
-      <div className="flex items-center gap-3 border-b border-bezel px-4 py-4">
+      <div className="flex items-center gap-3 border-b border-edge px-5 py-5">
         <div className="grid h-9 w-9 flex-shrink-0 place-items-center overflow-hidden rounded-full">
           {logoBase64 ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -210,18 +210,18 @@ export default function Sidebar({
         <button
           onClick={onClose}
           aria-label="Close navigation"
-          className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-ctl text-dim transition hover:bg-well hover:text-ink lg:hidden"
+          className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-neo-sm text-dim transition hover:bg-well hover:text-ink active:shadow-neo-inset-sm lg:hidden"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 overflow-y-auto px-3.5 py-5">
         {visibleGroups.map((group) => (
-          <div key={group.label} className="mb-5 last:mb-0">
-            <p className="placard mb-1.5 px-3">{group.label}</p>
-            <div className="space-y-px">
+          <div key={group.label} className="mb-6 last:mb-0">
+            <p className="placard mb-2 px-3">{group.label}</p>
+            <div className="space-y-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -232,22 +232,22 @@ export default function Sidebar({
                     href={item.href}
                     onClick={onClose}
                     aria-current={active ? "page" : undefined}
-                    className={`group relative flex min-h-9 items-center gap-3 rounded-ctl px-3 py-2 text-[13px] font-semibold transition-colors ${
+                    className={`group relative flex min-h-10 items-center gap-3 rounded-neo-sm px-3 py-2.5 text-[13px] font-semibold transition-[box-shadow,background-color,color] duration-200 ease-out ${
                       active
-                        ? "bg-[var(--lamp-ok-bg)] text-phos"
-                        : "text-dim hover:bg-well hover:text-ink"
+                        ? "bg-well text-accent shadow-neo-inset-sm"
+                        : "text-dim hover:bg-well/60 hover:text-ink"
                     }`}
                   >
-                    {/* needle tick for the current position */}
+                    {/* Accent rail: state must not depend on reading a shadow */}
                     <span
                       aria-hidden
-                      className={`absolute start-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full transition-all ${
-                        active ? "bg-phos" : "bg-transparent"
+                      className={`absolute start-1 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full transition-all duration-200 ${
+                        active ? "bg-accent" : "bg-transparent"
                       }`}
                     />
                     <Icon
-                      className={`h-4 w-4 flex-shrink-0 ${
-                        active ? "text-phos" : "text-faint group-hover:text-dim"
+                      className={`h-[18px] w-[18px] flex-shrink-0 transition-colors ${
+                        active ? "text-accent" : "text-faint group-hover:text-dim"
                       }`}
                       aria-hidden
                     />
@@ -262,9 +262,9 @@ export default function Sidebar({
       </nav>
 
       {/* Crew plate */}
-      <div className="border-t border-bezel p-3">
-        <div className="flex items-center gap-3 rounded-card border border-bezel bg-well p-3">
-          <div className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full border border-phos/40 text-xs font-bold text-phos">
+      <div className="border-t border-edge p-3.5">
+        <div className="flex items-center gap-3 rounded-neo-sm bg-well p-3 shadow-neo-inset-sm">
+          <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full bg-accent text-xs font-bold text-accent-ink shadow-neo-xs">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
@@ -275,7 +275,7 @@ export default function Sidebar({
             onClick={() => signOut({ callbackUrl: "/login" })}
             title="Sign out"
             aria-label="Sign out"
-            className="flex-shrink-0 rounded-ctl p-1.5 text-faint transition hover:bg-face hover:text-alert"
+            className="flex-shrink-0 rounded-neo-xs p-2 text-faint transition hover:bg-face hover:text-danger active:shadow-neo-inset-sm"
           >
             <LogOut className="h-4 w-4" />
           </button>

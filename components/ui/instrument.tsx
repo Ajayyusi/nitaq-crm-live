@@ -3,9 +3,10 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /*
- * Instrument — the six-pack stat readout.
- * Value reads like a gauge (mono, tabular); the placard label sits beneath
- * it like an engraved plate; an optional lamp/delta rides top-right.
+ * Stat card — the KPI tile.
+ * Label first so a row of tiles can be scanned by name, then the figure at
+ * display size. Cards in a row are forced to equal height by the grid; the
+ * flex column pins the footer to the bottom regardless of content length.
  */
 export function Instrument({
   label,
@@ -34,31 +35,37 @@ export function Instrument({
 }) {
   const toneClass = {
     ink: "text-ink",
-    phos: "text-phos",
-    caution: "text-caution",
-    alert: "text-alert",
-    advisory: "text-advisory",
+    phos: "text-accent",
+    caution: "text-warn",
+    alert: "text-danger",
+    advisory: "text-info",
   }[tone];
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <span className={cn("readout text-[26px] font-bold leading-8", toneClass)} data-numeric>
-          {value}
-        </span>
-        {corner}
+      <div className="flex items-start justify-between gap-3">
+        <span className="placard leading-4">{label}</span>
+        {corner && (
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-neo-xs bg-well text-dim shadow-neo-inset-sm">
+            {corner}
+          </span>
+        )}
       </div>
+      <span
+        className={cn("readout mt-3 block text-[28px] font-extrabold leading-9", toneClass)}
+        data-numeric
+      >
+        {value}
+      </span>
       {children}
-      <div className="mt-2 border-t border-bezel pt-2">
-        <span className="placard">{label}</span>
-        {sub && <p className="mt-0.5 truncate text-xs text-faint">{sub}</p>}
-      </div>
+      {sub && <p className="mt-1 truncate text-xs text-dim">{sub}</p>}
     </>
   );
 
   const cls = cn(
-    "face group block p-4 transition-all duration-150",
-    href && "hover:border-bezel-strong hover:shadow-raise",
+    "group flex h-full flex-col rounded-neo border border-edge bg-face p-5 shadow-neo-sm",
+    "transition-[box-shadow,transform] duration-200 ease-out",
+    href && "hover:-translate-y-0.5 hover:shadow-neo focus-visible:-translate-y-0.5",
     className
   );
 
@@ -81,7 +88,7 @@ export function InstrumentRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6", className)}>
+    <div className={cn("grid grid-cols-2 items-stretch gap-4 md:grid-cols-3 xl:grid-cols-6", className)}>
       {children}
     </div>
   );

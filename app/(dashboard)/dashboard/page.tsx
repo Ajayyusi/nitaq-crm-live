@@ -399,7 +399,7 @@ export default async function DashboardPage({
       </section>
 
       {/* ── The six-pack ──────────────────────────────────────────────────── */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid grid-cols-2 items-stretch gap-4 lg:grid-cols-3">
         {sixPack.map((kpi, i) => (
           <div key={kpi.label} className="animate-power-on" style={{ animationDelay: `${i * 70}ms` }}>
             <Instrument

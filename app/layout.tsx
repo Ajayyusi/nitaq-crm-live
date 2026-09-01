@@ -1,20 +1,15 @@
 import type { Metadata } from "next";
-import { B612, B612_Mono, Readex_Pro } from "next/font/google";
+import { Plus_Jakarta_Sans, Readex_Pro } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
-/* Panel typography: B612 was designed by Airbus for cockpit displays —
-   the exact lineage of this interface. Readex Pro carries Arabic. */
-const b612 = B612({
-  weight: ["400", "700"],
+/* Plus Jakarta Sans carries the interface: a humanist geometric with real
+   tabular figures, so a column of money lines up without a separate mono.
+   Readex Pro carries Arabic. */
+const jakarta = Plus_Jakarta_Sans({
+  weight: ["400", "500", "600", "700", "800"],
   subsets: ["latin"],
-  variable: "--font-b612",
-  display: "swap",
-});
-const b612Mono = B612_Mono({
-  weight: ["400", "700"],
-  subsets: ["latin"],
-  variable: "--font-b612-mono",
+  variable: "--font-jakarta",
   display: "swap",
 });
 const readex = Readex_Pro({
@@ -42,18 +37,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#0B0D0F" />
+        <meta name="theme-color" content="#EEF1F5" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#21252C" media="(prefers-color-scheme: dark)" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body
-        className={`${b612.variable} ${b612Mono.variable} ${readex.variable} antialiased`}
+        className={`${jakarta.variable} ${readex.variable} antialiased`}
         suppressHydrationWarning
       >
-        {/* Runs before hydration to prevent theme flash. Night panel is the
-            default; day is the explicit opt-in ("theme" = "light"). */}
+        {/* Runs before hydration to prevent theme flash. The soft light panel
+            is the default — neomorphic depth needs a white highlight to exist.
+            Dark is the explicit opt-in ("theme" = "dark"). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t!=='light')document.documentElement.classList.add('dark');}catch(e){document.documentElement.classList.add('dark');}})()`,
+            __html: `(function(){try{if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark');}catch(e){}})()`,
           }}
         />
         <Providers>{children}</Providers>

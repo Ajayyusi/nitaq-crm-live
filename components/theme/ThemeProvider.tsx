@@ -4,11 +4,11 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 
 type Theme = "light" | "dark";
 
-/* Night panel ("dark") is the default; day ("light") is the explicit opt-in.
+/* The soft light panel is the default; dark is the explicit opt-in.
    Must stay in sync with the pre-hydration script in app/layout.tsx, which
    reads the same localStorage "theme" key. */
 const ThemeCtx = createContext<{ theme: Theme; toggle: () => void }>({
-  theme: "dark",
+  theme: "light",
   toggle: () => {},
 });
 
@@ -17,11 +17,11 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     const stored = localStorage.getItem("theme");
-    const initial: Theme = stored === "light" ? "light" : "dark";
+    const initial: Theme = stored === "dark" ? "dark" : "light";
     setTheme(initial);
     document.documentElement.classList.toggle("dark", initial === "dark");
   }, []);

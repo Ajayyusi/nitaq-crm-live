@@ -112,12 +112,12 @@ function TwoFactorModal({ onClose }: { onClose: () => void }) {
             </ol>
             {qr && (
               // bg-[#fff] (not bg-white) escapes the night remap — QR codes must stay white to scan
-              <div className="flex justify-center rounded-card border border-bezel bg-[#fff] p-3">
+              <div className="flex justify-center rounded-neo border border-edge bg-[#fff] p-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qr} alt="2FA QR code" className="h-48 w-48" />
               </div>
             )}
-            <p className="break-all rounded-ctl bg-well px-3 py-2 text-center text-xs text-dim">
+            <p className="break-all rounded-neo-sm bg-well px-3 py-2.5 text-center text-xs text-dim shadow-neo-inset-sm">
               Can&apos;t scan? Enter manually: <strong className="readout">{manualKey}</strong>
             </p>
             <Input
@@ -228,13 +228,13 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
     .toUpperCase() || "NA";
 
   return (
-    <header className="border-b border-bezel bg-panel/90 backdrop-blur">
-      <div className="flex h-14 items-center gap-2 px-4 sm:gap-3 sm:px-6 2xl:px-10">
+    <header className="border-b border-edge bg-panel/85 backdrop-blur-md">
+      <div className="flex h-16 items-center gap-2 px-4 sm:gap-3 sm:px-6 lg:px-8 2xl:px-10">
         <button
           type="button"
           onClick={onMenuOpen}
           aria-label="Open navigation menu"
-          className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-ctl border border-bezel text-dim transition hover:border-phos hover:text-phos lg:hidden"
+          className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-neo-sm bg-face text-dim shadow-neo-xs transition-[box-shadow,color] duration-200 hover:text-accent active:shadow-neo-inset-sm lg:hidden"
         >
           <Menu className="h-4 w-4" />
         </button>
@@ -253,7 +253,7 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="grid h-9 w-9 place-items-center rounded-ctl border border-bezel bg-face text-xs font-bold text-ink transition hover:border-phos hover:text-phos"
+              className="grid h-10 w-10 place-items-center rounded-full bg-accent text-xs font-bold text-accent-ink shadow-neo-xs transition-[box-shadow] duration-200 hover:shadow-neo-sm active:shadow-neo-inset-sm"
               title={userName || "Account"}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
@@ -275,9 +275,9 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
                 />
                 <div
                   role="menu"
-                  className="absolute right-0 top-11 z-50 w-56 rounded-card border border-bezel bg-raised shadow-raise"
+                  className="absolute right-0 top-12 z-50 w-60 rounded-neo border border-edge bg-raised p-1 shadow-neo-pop"
                 >
-                  <div className="border-b border-bezel px-4 py-3">
+                  <div className="border-b border-edge px-4 py-3">
                     <p className="placard">Signed in as</p>
                     <p className="mt-0.5 truncate text-sm font-semibold text-ink">{userName || "User"}</p>
                   </div>
@@ -285,7 +285,7 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
                     <button
                       role="menuitem"
                       onClick={() => { setMenuOpen(false); setPwOpen(true); }}
-                      className="flex w-full items-center gap-3 rounded-ctl px-3 py-2.5 text-sm font-semibold text-dim transition hover:bg-well hover:text-ink"
+                      className="flex w-full items-center gap-3 rounded-neo-sm px-3 py-2.5 text-sm font-semibold text-dim transition hover:bg-well hover:text-ink"
                     >
                       <KeyRound className="h-4 w-4" />
                       Change Password
@@ -293,7 +293,7 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
                     <button
                       role="menuitem"
                       onClick={() => { setMenuOpen(false); setTfaOpen(true); }}
-                      className="flex w-full items-center gap-3 rounded-ctl px-3 py-2.5 text-sm font-semibold text-dim transition hover:bg-well hover:text-ink"
+                      className="flex w-full items-center gap-3 rounded-neo-sm px-3 py-2.5 text-sm font-semibold text-dim transition hover:bg-well hover:text-ink"
                     >
                       <ShieldCheck className="h-4 w-4" />
                       Two-Factor Auth

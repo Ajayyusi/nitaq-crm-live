@@ -92,7 +92,7 @@ function useDialogBehavior(open: boolean, mounted: boolean, onClose: () => void)
 function Backdrop({ onClick }: { onClick?: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 bg-[rgba(27,36,48,0.45)] backdrop-blur-[3px]"
       onClick={onClick}
       aria-hidden="true"
     />
@@ -135,12 +135,12 @@ export function Dialog({
           aria-label={title}
           tabIndex={-1}
           className={cn(
-            "animate-power-on w-full rounded-card border border-bezel bg-raised shadow-raise outline-none",
+            "animate-power-on w-full rounded-neo border border-edge bg-raised shadow-neo-pop outline-none",
             width
           )}
         >
-          <div className="flex items-center justify-between gap-3 border-b border-bezel px-5 py-3.5">
-            <h2 className="text-sm font-bold text-ink">{title}</h2>
+          <div className="flex items-center justify-between gap-3 border-b border-edge px-6 py-4">
+            <h2 className="text-base font-bold tracking-[-0.01em] text-ink">{title}</h2>
             <Button
               variant="ghost"
               size="iconSm"
@@ -151,9 +151,9 @@ export function Dialog({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
+          <div className="max-h-[70vh] overflow-y-auto px-6 py-5">{children}</div>
           {footer && (
-            <div className="flex items-center justify-end gap-2 border-t border-bezel px-5 py-3.5">
+            <div className="flex items-center justify-end gap-3 border-t border-edge px-6 py-4">
               {footer}
             </div>
           )}
@@ -199,12 +199,12 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          "animate-drawer-in fixed inset-y-0 end-0 z-50 flex w-full flex-col border-s border-bezel bg-raised shadow-raise outline-none",
+          "animate-drawer-in fixed inset-y-0 end-0 z-50 flex w-full flex-col border-s border-edge bg-raised shadow-neo-pop outline-none",
           width
         )}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-bezel px-5 py-4">
-          <h2 className="text-sm font-bold text-ink">{title}</h2>
+        <div className="flex items-center justify-between gap-3 border-b border-edge px-6 py-5">
+          <h2 className="text-base font-bold tracking-[-0.01em] text-ink">{title}</h2>
           <Button
             variant="ghost"
             size="iconSm"
@@ -215,9 +215,9 @@ export function Drawer({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-bezel px-5 py-4">
+          <div className="flex items-center justify-end gap-3 border-t border-edge px-6 py-5">
             {footer}
           </div>
         )}

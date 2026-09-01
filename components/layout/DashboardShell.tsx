@@ -15,7 +15,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           later in the DOM and stayed lit and clickable behind the nav. */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-[35] bg-black/60 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 z-[35] bg-[rgba(27,36,48,0.45)] backdrop-blur-[3px] lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -23,13 +23,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="min-h-screen lg:ps-[248px]">
+      <div className="min-h-screen lg:ps-[288px]">
         {/* One sticky stack: banner and header never fight over top-0 */}
         <div className="sticky top-0 z-30">
           <ImpersonationBanner />
           <Header onMenuOpen={() => setSidebarOpen(true)} />
         </div>
-        <main className="mx-auto w-full max-w-[1680px] px-4 py-4 sm:px-6 sm:py-5 md:px-8 md:py-6 2xl:px-10">
+        <main className="mx-auto w-full max-w-[1680px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7 2xl:px-10">
           {children}
         </main>
       </div>

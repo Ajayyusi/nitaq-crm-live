@@ -1,128 +1,257 @@
 /*
-DIRECTION CONTRACT — Night Six-Pack
-THESIS: An academy run like a night flight deck — every number an instrument
-reading, every status an annunciator lamp. Refuses the white-admin,
-gradient-hero, tinted-icon-card dashboard.
-OWN-WORLD: Matte panel #0B0D0F; instrument faces #111417; luminous white
-markings; radio-green #39FF9A for engaged/primary; amber and red reserved for
-caution/warning; cyan advisory; B612 + B612 Mono placard caps and tabular
-numerals; hairline bezels, tick scales, rectangular lamp badges.
-STORY: Staff sign in, sweep their instruments, see what needs chasing, act
-without hunting.
-FIRST VIEWPORT: Dashboard = ranked six-pack of role instruments (two rows of
-three) above panel cards for pipeline and follow-ups; primary action lit green.
-FORM: Night Six-Pack — dealt challenger, user-chosen over assigned direction;
-seed 5b13a029. Staging: ranked instrument rows + annunciator status grammar.
-FINISH: unreviewed and undocumented is unfinished; this build ends with the
-finish review, the verdict, and DESIGN.md
+DESIGN SYSTEM — Soft Panel (subtle neomorphism)
+
+THESIS: A production CRM whose surfaces are extruded from one soft neutral
+ground rather than drawn on top of it. Depth comes from a two-source light
+model — a cool shadow toward the bottom-right, a white highlight toward the
+top-left — never from borders or colour.
+
+RULES THAT MAKE IT PROFESSIONAL RATHER THAN A SOFT-UI EXPERIMENT:
+  1. Readability outranks the effect. Text, inputs and status colour keep
+     WCAG AA contrast; nothing legible is sacrificed to a shadow.
+  2. Depth is semantic, not decorative. Raised = a thing you can act on or a
+     container that holds content. Inset = a thing that receives input, or a
+     state that is currently active/pressed.
+  3. Shadow intensity scales with surface size. A 320px card and a 32px icon
+     button do not share a shadow.
+  4. Data stays flat. Table rows, list items and cells are never individually
+     extruded — the container is raised, the contents are calm.
+  5. Every value below is a token. No component writes a raw shadow, radius
+     or hex; they compose the utilities generated from this file.
+
+TOKEN MAP (Tailwind utilities generated in @theme inline):
+  surfaces   bg-panel · bg-face · bg-raised · bg-well
+  ink        text-ink · text-dim · text-faint
+  accent     text-accent · bg-accent · border-accent  (alias: text-phos etc.)
+  semantic   text-ok · text-warn · text-danger · text-info
+  depth      shadow-neo · shadow-neo-sm · shadow-neo-xs · shadow-neo-inset ·
+             shadow-neo-inset-sm · shadow-neo-pop
+  radius     rounded-neo · rounded-neo-sm · rounded-neo-xs
+  classes    .face · .neo-raised · .neo-inset · .neo-pressable · .placard ·
+             .readout · .page-container
 */
 
 @import "tailwindcss";
 
-/* Class-based dark mode (night panel). Night is the DEFAULT theme;
-   `.dark` is applied by the pre-hydration script unless the user chose day. */
+/* Class-based dark mode. Day (soft light panel) is the DEFAULT — neomorphic
+   depth depends on a white highlight, which only exists on a light ground.
+   `.dark` is applied by the pre-hydration script when the user opts in. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ────────────────────────────────────────────────────────────────────────────
-   PANEL VARIABLES — day values on :root, night values on .dark.
-   Components consume ONLY the token utilities below, never raw hex.
+   TOKENS — light values on :root, dark overrides on .dark.
+   Components consume ONLY the utilities below, never raw hex or shadows.
    ──────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* DAY PANEL (daylight cockpit: aluminum ground, white faces, black markings) */
-  --panel: #e7e9ec;          /* app canvas */
-  --face: #ffffff;           /* instrument face / card */
-  --raised: #ffffff;         /* popover / drawer */
-  --well: #f1f3f5;           /* inset: table heads, input wells */
-  --bezel: #d9dde2;          /* hairline borders */
-  --bezel-strong: #b9c0c8;
-  --ink: #14181d;            /* primary markings */
-  --dim: #4d565f;            /* secondary markings */
-  --faint: #64707c;          /* tertiary / placeholder (≥4.5:1 on face) */
-  --phos: #0b7a4b;           /* radio green, day-legible */
-  --phos-bright: #0f9a5f;
-  --phos-ink: #ffffff;       /* text on phos fill */
-  --phos-glow: rgba(11, 122, 75, 0.22);
-  --caution: #96690a;        /* amber, day-legible text */
-  --caution-fill: #b17d0d;
-  --alert: #c23934;
-  --advisory: #0c7aa6;
-  --lamp-ok-bg: rgba(15, 154, 95, 0.12);
-  --lamp-caution-bg: rgba(177, 125, 13, 0.13);
-  --lamp-alert-bg: rgba(194, 57, 52, 0.11);
-  --lamp-advisory-bg: rgba(12, 122, 166, 0.11);
-  --lamp-off-bg: rgba(20, 24, 29, 0.06);
-  --glow-ok: rgba(15, 154, 95, 0.2);
-  --glow-caution: rgba(177, 125, 13, 0.18);
-  --glow-alert: rgba(194, 57, 52, 0.18);
-  --glow-advisory: rgba(12, 122, 166, 0.18);
-  --shadow-card: 0 1px 2px rgba(20, 24, 29, 0.06), 0 1px 1px rgba(20, 24, 29, 0.04);
-  --shadow-raise: 0 12px 32px rgba(20, 24, 29, 0.16), 0 4px 12px rgba(20, 24, 29, 0.08);
-  --shadow-glow: 0 0 0 1px var(--phos), 0 0 10px var(--phos-glow);
-  --chart-1: #0f9a5f;
-  --chart-2: #0c7aa6;
-  --chart-3: #b17d0d;
-  --chart-4: #7c6bd6;
-  --chart-5: #c23934;
+  /* ── Ground and surfaces ──────────────────────────────────────────────
+     Surfaces sit within ~3% lightness of the ground so depth reads as
+     extrusion, not as stacked cards. The small step still gives the eye an
+     edge to find when a screen holds a dozen panels. */
+  --neo-bg: #eef1f5;
+  --neo-surface: #f3f6fa;
+  --neo-raised: #f8fafc;
+  --neo-well: #e6eaf1;
+
+  --panel: var(--neo-bg);
+  --face: var(--neo-surface);
+  --surface: var(--neo-surface);
+  --raised: var(--neo-raised);
+  --well: var(--neo-well);
+
+  /* ── Edges ────────────────────────────────────────────────────────────
+     Hairlines are a fallback for contrast, not the primary depth cue. */
+  --edge: rgba(163, 177, 198, 0.34);
+  --edge-strong: rgba(148, 162, 185, 0.62);
+  --bezel: var(--edge);
+  --bezel-strong: var(--edge-strong);
+
+  /* ── Text ─────────────────────────────────────────────────────────────
+     Measured against --well, the darkest surface text sits on, not just the
+     page ground — that is where the marginal cases actually fail.
+     Nothing lighter than --faint is allowed to carry meaning. */
+  --ink: #1b2430;
+  --dim: #59657a;
+  --faint: #5f6c82;
+
+  /* ── Accent (brand green) ─────────────────────────────────────────────
+     Used for primary actions and active navigation only. It has to clear AA
+     twice over: as white-on-accent inside a filled button, and as accent-on-
+     well where it labels the active nav item. The second is the tighter one. */
+  --accent: #0a7050;
+  --accent-hover: #0d8a61;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(10, 112, 80, 0.11);
+  --accent-ring: rgba(10, 112, 80, 0.32);
+
+  /* Legacy aliases — the incumbent components speak "phos". */
+  --phos: var(--accent);
+  --phos-bright: var(--accent-hover);
+  --phos-ink: var(--accent-ink);
+  --phos-glow: var(--accent-ring);
+
+  /* ── Semantic status ──────────────────────────────────────────────────
+     Never greyed out by the neutral system: status is the one place a CRM
+     must shout. Each has a text colour (AA on any surface) and a soft fill. */
+  --ok: #0f7a52;
+  --warn: #8a5d0c;
+  --danger: #bf3a2f;
+  --info: #17679f;
+  --caution: var(--warn);
+  --caution-fill: var(--warn);
+  --alert: var(--danger);
+  --advisory: var(--info);
+
+  --ok-soft: rgba(15, 122, 82, 0.12);
+  --warn-soft: rgba(138, 93, 12, 0.13);
+  --danger-soft: rgba(191, 58, 47, 0.11);
+  --info-soft: rgba(23, 103, 159, 0.11);
+  --lamp-ok-bg: var(--ok-soft);
+  --lamp-caution-bg: var(--warn-soft);
+  --lamp-alert-bg: var(--danger-soft);
+  --lamp-advisory-bg: var(--info-soft);
+  --lamp-off-bg: rgba(27, 36, 48, 0.055);
+
+  /* Status chips are engraved, not lit — the neon bloom belongs to the old
+     night panel. Kept as tokens so legacy call sites resolve to nothing. */
+  --glow-ok: transparent;
+  --glow-caution: transparent;
+  --glow-alert: transparent;
+  --glow-advisory: transparent;
+
+  /* ── Depth ────────────────────────────────────────────────────────────
+     Two light sources: cool shadow at bottom-right, white highlight at
+     top-left. Size steps exist so a chip never wears a card's shadow. */
+  --neo-shadow: 8px 8px 18px rgba(163, 177, 198, 0.38),
+    -8px -8px 18px rgba(255, 255, 255, 0.9);
+  --neo-shadow-sm: 4px 4px 10px rgba(163, 177, 198, 0.3),
+    -4px -4px 10px rgba(255, 255, 255, 0.8);
+  --neo-shadow-xs: 2px 2px 5px rgba(163, 177, 198, 0.26),
+    -2px -2px 5px rgba(255, 255, 255, 0.75);
+  --neo-inset: inset 4px 4px 8px rgba(163, 177, 198, 0.3),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.8);
+  --neo-inset-sm: inset 2px 2px 4px rgba(163, 177, 198, 0.24),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.7);
+  /* Modals sit above everything and need to read as lifted off the page. */
+  --neo-pop: 20px 20px 48px rgba(140, 155, 180, 0.42),
+    -12px -12px 32px rgba(255, 255, 255, 0.92);
+
+  --shadow-card: var(--neo-shadow-sm);
+  --shadow-raise: var(--neo-shadow);
+  --shadow-pop: var(--neo-pop);
+  --shadow-glow: 0 0 0 3px var(--accent-ring);
+
+  /* ── Radius ───────────────────────────────────────────────────────────
+     Soft, not inflated: containers 16, controls 10, chips 7. */
+  --neo-radius: 16px;
+  --neo-radius-sm: 10px;
+  --neo-radius-xs: 7px;
+  --radius-card: var(--neo-radius);
+  --radius-ctl: var(--neo-radius-sm);
+  --radius-lamp: var(--neo-radius-xs);
+
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  --neo-transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --neo-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Layout rhythm ────────────────────────────────────────────────────── */
+  --page-pad-x: 16px;
+  --page-pad-y: 16px;
+  --sidebar-w: 264px;
+
+  /* ── Charts ───────────────────────────────────────────────────────────── */
+  --chart-1: #0a7050;
+  --chart-2: #17679f;
+  --chart-3: #b8801a;
+  --chart-4: #6b5fc7;
+  --chart-5: #bf3a2f;
 }
 
 .dark {
-  /* NIGHT PANEL (the committed world) */
-  --panel: #0b0d0f;
-  --face: #111417;
-  --raised: #16191e;
-  --well: #0d1013;
-  --bezel: #22272e;
-  --bezel-strong: #303740;
-  --ink: #f2f5f2;
-  --dim: #a4adb6;
-  --faint: #7d8894;
-  --phos: #39ff9a;
-  --phos-bright: #63ffb1;
-  --phos-ink: #06180e;
-  --phos-glow: rgba(57, 255, 154, 0.22);
-  --caution: #ffb000;
-  --caution-fill: #ffb000;
-  --alert: #ff5148;
-  --advisory: #55c8f0;
-  --lamp-ok-bg: rgba(57, 255, 154, 0.1);
-  --lamp-caution-bg: rgba(255, 176, 0, 0.1);
-  --lamp-alert-bg: rgba(255, 81, 72, 0.11);
-  --lamp-advisory-bg: rgba(85, 200, 240, 0.1);
-  --lamp-off-bg: rgba(242, 245, 242, 0.05);
-  --glow-ok: rgba(57, 255, 154, 0.28);
-  --glow-caution: rgba(255, 176, 0, 0.25);
-  --glow-alert: rgba(255, 81, 72, 0.28);
-  --glow-advisory: rgba(85, 200, 240, 0.25);
-  /* inset top edge-light: the machined lip of every instrument face */
-  --shadow-card: inset 0 1px 0 rgba(242, 245, 242, 0.05), 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-raise: 0 16px 40px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 0 1px var(--phos), 0 0 12px var(--phos-glow);
+  /* Dark neomorphism keeps the same two-source model: the highlight simply
+     drops to a few percent white instead of near-opaque. */
+  --neo-bg: #21252c;
+  --neo-surface: #262b33;
+  --neo-raised: #2c323b;
+  --neo-well: #1b1f25;
+
+  --edge: rgba(255, 255, 255, 0.07);
+  --edge-strong: rgba(255, 255, 255, 0.14);
+
+  --ink: #e9edf3;
+  --dim: #a6b1c1;
+  --faint: #8b97a8;
+
+  --accent: #2fb98a;
+  --accent-hover: #46cfa0;
+  --accent-ink: #06231a;
+  --accent-soft: rgba(47, 185, 138, 0.16);
+  --accent-ring: rgba(47, 185, 138, 0.34);
+
+  --ok: #35c08e;
+  --warn: #d99b28;
+  --danger: #e8695c;
+  --info: #56ade3;
+
+  --ok-soft: rgba(53, 192, 142, 0.14);
+  --warn-soft: rgba(217, 155, 40, 0.14);
+  --danger-soft: rgba(232, 105, 92, 0.15);
+  --info-soft: rgba(86, 173, 227, 0.14);
+  --lamp-off-bg: rgba(233, 237, 243, 0.07);
+
+  --neo-shadow: 8px 8px 18px rgba(0, 0, 0, 0.45),
+    -8px -8px 18px rgba(255, 255, 255, 0.035);
+  --neo-shadow-sm: 4px 4px 10px rgba(0, 0, 0, 0.38),
+    -4px -4px 10px rgba(255, 255, 255, 0.03);
+  --neo-shadow-xs: 2px 2px 5px rgba(0, 0, 0, 0.32),
+    -2px -2px 5px rgba(255, 255, 255, 0.025);
+  --neo-inset: inset 4px 4px 8px rgba(0, 0, 0, 0.42),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.035);
+  --neo-inset-sm: inset 2px 2px 4px rgba(0, 0, 0, 0.36),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.028);
+  --neo-pop: 20px 20px 48px rgba(0, 0, 0, 0.58),
+    -10px -10px 28px rgba(255, 255, 255, 0.04);
+
+  --chart-1: #2fb98a;
+  --chart-2: #56ade3;
+  --chart-3: #d99b28;
+  --chart-4: #9184e0;
+  --chart-5: #e8695c;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
    TOKENS → UTILITIES (Tailwind v4 theme)
-   bg-panel · bg-face · bg-raised · bg-well · border-bezel · text-ink ·
-   text-dim · text-faint · text-phos · bg-phos · text-caution · text-alert ·
-   text-advisory · rounded-ctl · rounded-card · rounded-lamp · shadow-card ·
-   shadow-raise · shadow-glow · font-sans · font-mono
    ──────────────────────────────────────────────────────────────────────────── */
 @theme inline {
   --color-panel: var(--panel);
   --color-face: var(--face);
+  --color-surface: var(--surface);
   --color-raised: var(--raised);
   --color-well: var(--well);
+  --color-edge: var(--edge);
+  --color-edge-strong: var(--edge-strong);
   --color-bezel: var(--bezel);
   --color-bezel-strong: var(--bezel-strong);
   --color-ink: var(--ink);
   --color-dim: var(--dim);
   --color-faint: var(--faint);
-  --color-phos: var(--phos);
-  --color-phos-bright: var(--phos-bright);
-  --color-phos-ink: var(--phos-ink);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-phos: var(--accent);
+  --color-phos-bright: var(--accent-hover);
+  --color-phos-ink: var(--accent-ink);
+
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
   --color-caution: var(--caution);
   --color-caution-fill: var(--caution-fill);
   --color-alert: var(--alert);
   --color-advisory: var(--advisory);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -136,35 +265,43 @@ finish review, the verdict, and DESIGN.md
   --color-card-foreground: var(--ink);
   --color-popover: var(--raised);
   --color-popover-foreground: var(--ink);
-  --color-primary: var(--phos);
-  --color-primary-foreground: var(--phos-ink);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-ink);
   --color-secondary: var(--well);
   --color-secondary-foreground: var(--ink);
   --color-muted: var(--well);
   --color-muted-foreground: var(--dim);
-  --color-accent: var(--well);
-  --color-accent-foreground: var(--ink);
-  --color-destructive: var(--alert);
+  --color-destructive: var(--danger);
   --color-destructive-foreground: #ffffff;
-  --color-border: var(--bezel);
-  --color-input: var(--bezel-strong);
-  --color-ring: var(--phos);
+  --color-border: var(--edge);
+  --color-input: var(--edge-strong);
+  --color-ring: var(--accent);
 
-  --font-sans: var(--font-b612), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-b612-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-sans: var(--font-jakarta), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  --radius-ctl: 6px;
-  --radius-card: 10px;
-  --radius-lamp: 3px;
+  --radius-neo: var(--neo-radius);
+  --radius-neo-sm: var(--neo-radius-sm);
+  --radius-neo-xs: var(--neo-radius-xs);
+  --radius-ctl: var(--radius-ctl);
+  --radius-card: var(--radius-card);
+  --radius-lamp: var(--radius-lamp);
 
+  --shadow-neo: var(--neo-shadow);
+  --shadow-neo-sm: var(--neo-shadow-sm);
+  --shadow-neo-xs: var(--neo-shadow-xs);
+  --shadow-neo-inset: var(--neo-inset);
+  --shadow-neo-inset-sm: var(--neo-inset-sm);
+  --shadow-neo-pop: var(--neo-pop);
   --shadow-card: var(--shadow-card);
   --shadow-raise: var(--shadow-raise);
+  --shadow-pop: var(--shadow-pop);
   --shadow-glow: var(--shadow-glow);
 
-  --animate-needle: needle 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.08) both;
-  --animate-power-on: power-on 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-spin: spin 1s linear infinite;
   --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-needle: needle 0.6s cubic-bezier(0.2, 0.9, 0.25, 1.08) both;
+  --animate-power-on: power-on 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────────
@@ -179,11 +316,12 @@ finish review, the verdict, and DESIGN.md
     height: 100%;
   }
 
-  /* The grain rides on the root canvas, so no element needs a stacking
-     context to sit above it. Fixed attachment keeps it from scrolling. */
+  /* A near-invisible grain on the root canvas. Large soft gradients band on
+     8-bit displays; a trace of noise dithers them away. Fixed attachment
+     keeps it from sliding under scrolled content. */
   html {
     background-color: var(--panel);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.028'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.014'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
     background-attachment: fixed;
     background-repeat: repeat;
   }
@@ -192,26 +330,51 @@ finish review, the verdict, and DESIGN.md
     margin: 0;
     background-color: transparent;
     color: var(--ink);
-    font-family: var(--font-b612), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-jakarta), var(--font-readex), ui-sans-serif, system-ui, sans-serif;
     font-size: 14px;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   ::selection {
-    background: var(--phos-glow);
+    background: var(--accent-soft);
     color: var(--ink);
   }
 
+  /* Focus must survive a design language built on soft edges: a solid ring
+     in the accent, offset clear of the shadow so it is never swallowed. */
   :focus-visible {
-    outline: 2px solid var(--phos);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
+    border-radius: var(--neo-radius-xs);
   }
 
-  /* Numbers read like instruments everywhere */
+  /* Columns of figures line up everywhere */
   table,
   [data-numeric] {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Fallback for raw controls on screens that predate the Input primitive.
+     Deliberately inside @layer base and WITHOUT !important — as an unlayered
+     !important rule this once beat every token utility. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    background-color: var(--well);
+    border-color: var(--edge-strong);
+    color: var(--ink);
+    border-radius: var(--neo-radius-sm);
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--faint);
+    opacity: 1;
+  }
+  select option {
+    background-color: var(--raised);
+    color: var(--ink);
   }
 }
 
@@ -223,45 +386,84 @@ finish review, the verdict, and DESIGN.md
 }
 
 /* ── House utilities ──────────────────────────────────────────────────────── */
-/* Placard: the engraved caps micro-label under every instrument */
+
+/* Raised: a surface extruded from the ground. Cards, panels, widgets. */
+@utility neo-raised {
+  background-color: var(--face);
+  border-radius: var(--neo-radius);
+  box-shadow: var(--neo-shadow-sm);
+}
+
+/* Small raised: chips, icon containers, compact controls. */
+@utility neo-raised-sm {
+  background-color: var(--face);
+  border-radius: var(--neo-radius-sm);
+  box-shadow: var(--neo-shadow-xs);
+}
+
+/* Inset: a surface pressed into the ground. Inputs, wells, active states. */
+@utility neo-inset {
+  background-color: var(--well);
+  border-radius: var(--neo-radius-sm);
+  box-shadow: var(--neo-inset-sm);
+}
+
+/* Pressable: raised at rest, recessed while held. The whole button grammar. */
+@utility neo-pressable {
+  transition: box-shadow var(--neo-transition), transform var(--neo-transition),
+    background-color var(--neo-transition), color var(--neo-transition);
+}
+
+/* The standard card. Kept under its original name so ~40 existing call sites
+   inherit the new surface without edits. */
+@utility face {
+  background-color: var(--face);
+  border: 1px solid var(--edge);
+  border-radius: var(--neo-radius);
+  box-shadow: var(--neo-shadow-sm);
+}
+
+/* Placard: the small caps label above or beneath a value. */
 @utility placard {
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.09em;
   color: var(--dim);
 }
 
-/* Readout: a luminous data value */
+/* Readout: a figure meant to be compared down a column. */
 @utility readout {
-  font-family: var(--font-b612-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
-/* Instrument face: the standard card */
-@utility face {
-  background-color: var(--face);
-  border: 1px solid var(--bezel);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
+/* Page container: one padding system for every route. */
+@utility page-container {
+  width: 100%;
+  max-width: 1680px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  padding-block: 16px;
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--bezel-strong);
+  background: var(--edge-strong);
   border-radius: 9999px;
-  border: 2px solid var(--panel);
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--faint);
+  background-clip: content-box;
 }
 
 /* ── Motion ───────────────────────────────────────────────────────────────── */
@@ -271,7 +473,7 @@ finish review, the verdict, and DESIGN.md
   }
 }
 .animate-spin {
-  animation: spin 1s linear infinite;
+  animation: var(--animate-spin);
 }
 
 @keyframes pulse {
@@ -280,14 +482,24 @@ finish review, the verdict, and DESIGN.md
   }
 }
 .animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: var(--animate-pulse);
 }
 
-/* Needle settle: value elements rise 4px and settle with slight overshoot */
 @keyframes needle {
   from {
+    transform: scaleX(0);
     opacity: 0;
-    transform: translateY(5px);
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes power-on {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -295,54 +507,34 @@ finish review, the verdict, and DESIGN.md
   }
 }
 
-/* Power-on: panels warm up on first paint */
-@keyframes power-on {
+@keyframes drawer-in {
   from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.995);
+    transform: translateX(100%);
   }
   to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(0);
   }
 }
 
-/* Drawer slide-in — direction-aware so RTL enters from the correct edge */
-@keyframes drawer-in {
-  from {
-    transform: translateX(24px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
 @keyframes drawer-in-rtl {
   from {
-    transform: translateX(-24px);
-    opacity: 0;
+    transform: translateX(-100%);
   }
   to {
     transform: translateX(0);
-    opacity: 1;
   }
 }
 .animate-drawer-in {
-  animation: drawer-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-[dir="rtl"] .animate-drawer-in {
-  animation-name: drawer-in-rtl;
+  animation: drawer-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Gauge sweep for tick-gauge fills */
 @keyframes sweep {
-  from {
-    width: 0;
+  to {
+    background-position: 200% 0;
   }
 }
 .animate-sweep {
-  animation: sweep 0.9s cubic-bezier(0.2, 0.9, 0.25, 1.04) both;
+  animation: sweep 1.4s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -351,34 +543,43 @@ finish review, the verdict, and DESIGN.md
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    /* Delays must go too: the dashboard staggers instruments with
-       animation-delay, and `both` fill would hold them invisible. */
     animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
+  }
+  /* Entrance animations that START off-screen must be cancelled outright, not
+     merely shortened. Both use fill-mode `both`, so the backwards fill pins the
+     element at its FROM frame until the animation runs — and at a 0.01ms
+     duration it can be left there, which parked every drawer completely
+     outside the viewport for reduced-motion users. Killing the animation puts
+     the element at its resting position immediately, which is what
+     "reduced motion" should have meant here all along. */
+  .animate-drawer-in,
+  .animate-power-on {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
   }
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
    LEGACY COMPAT (transitional) — the incumbent pages were written in a light
    slate/gray/brand-hex vocabulary. These remaps pull not-yet-migrated screens
-   into the panel world. Delete rules as modules migrate to token utilities.
+   onto the soft panel. Delete rules as modules migrate to token utilities.
+   Class-targeted with !important on purpose — they must beat the arbitrary
+   value utilities they replace. Never add ELEMENT selectors here.
    ──────────────────────────────────────────────────────────────────────────── */
-
-/* Day theme: retire the old green-tinted canvas and brand greens.
-   These are class-targeted with !important on purpose — they must beat the
-   arbitrary-value utilities they replace. Never add ELEMENT selectors here. */
 [class*="bg-[#E8F5E9]"] {
   background-color: var(--panel) !important;
 }
 [class*="bg-[#2E7D32]"],
 [class*="bg-[#1B5E20]"] {
-  background-color: var(--phos) !important;
-  color: var(--phos-ink) !important;
+  background-color: var(--accent) !important;
+  color: var(--accent-ink) !important;
 }
 [class*="text-[#2E7D32]"],
 [class*="text-[#1B5E20]"] {
-  color: var(--phos) !important;
+  color: var(--accent) !important;
 }
 [class*="text-[#0D1F0E]"] {
   color: var(--ink) !important;
@@ -389,164 +590,137 @@ finish review, the verdict, and DESIGN.md
 }
 [class*="ring-[#2E7D32]"],
 [class*="border-[#2E7D32]"] {
-  --tw-ring-color: var(--phos) !important;
-  border-color: var(--phos) !important;
+  --tw-ring-color: var(--accent) !important;
+  border-color: var(--accent) !important;
 }
 [class*="focus:ring-[#E8F5E9]"]:focus {
-  --tw-ring-color: var(--phos-glow) !important;
+  --tw-ring-color: var(--accent-ring) !important;
 }
 
-/* NIGHT remap of the light-authored vocabulary */
-.dark .bg-white {
+/* Neutral vocabulary → soft panel surfaces, in BOTH themes. The old remap
+   only ran under .dark, which left light mode showing pure #fff cards on the
+   soft grey ground — the one thing that breaks the extrusion illusion. */
+.bg-white {
   background-color: var(--face) !important;
 }
-.dark .bg-slate-50,
-.dark .bg-gray-50 {
+.bg-slate-50,
+.bg-gray-50 {
   background-color: var(--well) !important;
 }
-.dark .bg-slate-100,
-.dark .bg-gray-100 {
-  background-color: var(--raised) !important;
+.bg-slate-100,
+.bg-gray-100 {
+  background-color: var(--well) !important;
 }
-.dark .bg-slate-200,
-.dark .bg-gray-200 {
-  background-color: var(--bezel) !important;
+.bg-slate-200,
+.bg-gray-200 {
+  background-color: var(--edge) !important;
 }
-.dark .border-slate-200,
-.dark .border-slate-100,
-.dark .border-gray-200,
-.dark .border-gray-100 {
-  border-color: var(--bezel) !important;
+.border-slate-200,
+.border-slate-100,
+.border-gray-200,
+.border-gray-100 {
+  border-color: var(--edge) !important;
 }
-.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
-.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
-.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
-.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: var(--bezel) !important;
+.divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+.divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--edge) !important;
 }
-.dark .text-slate-950,
-.dark .text-slate-900,
-.dark .text-gray-900,
-.dark .text-black {
+.text-slate-950,
+.text-slate-900,
+.text-gray-900,
+.text-black {
   color: var(--ink) !important;
 }
-.dark .text-slate-800,
-.dark .text-slate-700,
-.dark .text-gray-800,
-.dark .text-gray-700 {
+.text-slate-800,
+.text-slate-700,
+.text-gray-800,
+.text-gray-700,
+.text-slate-600,
+.text-slate-500,
+.text-gray-600,
+.text-gray-500 {
   color: var(--dim) !important;
 }
-.dark .text-slate-600,
-.dark .text-slate-500,
-.dark .text-gray-600,
-.dark .text-gray-500 {
-  color: var(--dim) !important;
-}
-.dark .text-slate-400,
-.dark .text-gray-400 {
+.text-slate-400,
+.text-gray-400 {
   color: var(--faint) !important;
 }
 
-/* Status tints → lamp language */
-.dark .bg-green-50,
-.dark .bg-green-100,
-.dark .bg-emerald-50,
-.dark .bg-emerald-100 {
-  background-color: var(--lamp-ok-bg) !important;
+/* Status tints → the semantic palette */
+.bg-green-50,
+.bg-green-100,
+.bg-emerald-50,
+.bg-emerald-100 {
+  background-color: var(--ok-soft) !important;
 }
-.dark .text-green-700,
-.dark .text-green-600,
-.dark .text-green-800,
-.dark .text-emerald-700,
-.dark .text-emerald-600 {
-  color: var(--phos) !important;
+.text-green-700,
+.text-green-600,
+.text-green-800,
+.text-emerald-700,
+.text-emerald-600 {
+  color: var(--ok) !important;
 }
-.dark .bg-amber-50,
-.dark .bg-amber-100,
-.dark .bg-yellow-50,
-.dark .bg-yellow-100,
-.dark .bg-orange-50,
-.dark .bg-orange-100 {
-  background-color: var(--lamp-caution-bg) !important;
+.bg-amber-50,
+.bg-amber-100,
+.bg-yellow-50,
+.bg-yellow-100,
+.bg-orange-50,
+.bg-orange-100 {
+  background-color: var(--warn-soft) !important;
 }
-.dark .text-amber-700,
-.dark .text-amber-600,
-.dark .text-amber-800,
-.dark .text-orange-700,
-.dark .text-orange-600 {
-  color: var(--caution) !important;
+.text-amber-700,
+.text-amber-600,
+.text-amber-800,
+.text-orange-700,
+.text-orange-600 {
+  color: var(--warn) !important;
 }
-.dark .bg-rose-50,
-.dark .bg-rose-100,
-.dark .bg-red-50,
-.dark .bg-red-100 {
-  background-color: var(--lamp-alert-bg) !important;
+.bg-rose-50,
+.bg-rose-100,
+.bg-red-50,
+.bg-red-100 {
+  background-color: var(--danger-soft) !important;
 }
-.dark .text-rose-700,
-.dark .text-rose-600,
-.dark .text-red-700,
-.dark .text-red-600 {
-  color: var(--alert) !important;
+.text-rose-700,
+.text-rose-600,
+.text-red-700,
+.text-red-600 {
+  color: var(--danger) !important;
 }
-.dark .bg-blue-50,
-.dark .bg-blue-100,
-.dark .bg-sky-50,
-.dark .bg-sky-100,
-.dark .bg-cyan-50,
-.dark .bg-teal-50,
-.dark .bg-teal-100 {
-  background-color: var(--lamp-advisory-bg) !important;
+.bg-blue-50,
+.bg-blue-100,
+.bg-sky-50,
+.bg-sky-100,
+.bg-cyan-50,
+.bg-teal-50,
+.bg-teal-100,
+.bg-purple-50,
+.bg-purple-100,
+.bg-violet-50 {
+  background-color: var(--info-soft) !important;
 }
-.dark .text-blue-700,
-.dark .text-blue-600,
-.dark .text-sky-700,
-.dark .text-teal-700,
-.dark .text-teal-600 {
-  color: var(--advisory) !important;
-}
-.dark .bg-purple-50,
-.dark .bg-purple-100,
-.dark .bg-violet-50 {
-  background-color: var(--lamp-advisory-bg) !important;
-}
-.dark .text-purple-700,
-.dark .text-purple-600 {
-  color: var(--advisory) !important;
+.text-blue-700,
+.text-blue-600,
+.text-sky-700,
+.text-teal-700,
+.text-teal-600,
+.text-purple-700,
+.text-purple-600 {
+  color: var(--info) !important;
 }
 
-/* Forms in untouched pages.
-   Deliberately inside @layer base and WITHOUT !important: this is a fallback
-   for raw, unstyled controls only. As an unlayered !important rule it beat
-   every token utility — a `bg-transparent` input (the ⌘K palette field)
-   rendered with a filled well background instead of blending into its panel. */
-@layer base {
-  .dark input:not([type="checkbox"]):not([type="radio"]),
-  .dark select,
-  .dark textarea {
-    background-color: var(--well);
-    border-color: var(--bezel-strong);
-    color: var(--ink);
-  }
-  .dark input::placeholder,
-  .dark textarea::placeholder {
-    color: var(--faint);
-  }
-  .dark select option {
-    background-color: var(--raised);
-    color: var(--ink);
-  }
+.shadow-sm {
+  box-shadow: var(--neo-shadow-xs) !important;
 }
-
-.dark .shadow-sm {
-  box-shadow: var(--shadow-card) !important;
+.hover\:bg-slate-50:hover,
+.hover\:bg-gray-50:hover,
+.hover\:bg-slate-100:hover {
+  background-color: var(--well) !important;
 }
-.dark .hover\:bg-slate-50:hover,
-.dark .hover\:bg-gray-50:hover,
-.dark .hover\:bg-slate-100:hover {
-  background-color: var(--raised) !important;
-}
-.dark .hover\:bg-\[\#E8F5E9\]\/30:hover {
-  background-color: rgba(57, 255, 154, 0.06) !important;
+.hover\:bg-\[\#E8F5E9\]\/30:hover {
+  background-color: var(--accent-soft) !important;
 }
 
 /* ── Print: vouchers and reports stay black-on-white paper ───────────────── */
@@ -563,9 +737,11 @@ finish review, the verdict, and DESIGN.md
     background: #fff !important;
     color: #000 !important;
   }
+  .face,
+  .neo-raised,
   .print-area {
     box-shadow: none !important;
-    border: none !important;
+    border: 1px solid #ddd !important;
   }
   @page {
     margin: 12mm;
