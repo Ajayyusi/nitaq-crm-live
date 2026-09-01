@@ -1,8 +1,12 @@
 /**
  * Central permissions configuration for Nitaq Academy CRM + Centre Management System.
  *
- * All role-based access decisions (sidebar, pages, API routes, import/export)
- * are derived from this single file. Never hard-code role checks elsewhere.
+ * Governs page access (used by the middleware in proxy.ts via auth.config.ts),
+ * sidebar visibility, import/export entitlements, and the canonical role list.
+ *
+ * API routes are NOT driven from here — each route declares its own allowed
+ * roles inline via requireAuth([...]) in lib/api-auth.ts. Changing a role's
+ * API access means editing that route, not this file.
  */
 
 export const ALL_ROLES = [
@@ -110,51 +114,6 @@ export const SIDEBAR_VISIBILITY: Record<string, AppRole[]> = {
   "/activity":             ["admin", "manager"],
   "/import-export":        ["admin", "manager", "sales", "finance"],
   "/settings":             ["admin"],
-};
-
-// ── API route permissions ───────────────────────────────────────────────────
-export const API_PERMISSIONS: Record<string, { read: AppRole[]; write: AppRole[] }> = {
-  // Existing CRM
-  leads:                { read: ["admin", "manager", "sales"],             write: ["admin", "manager", "sales"] },
-  "follow-ups":         { read: ["admin", "manager", "sales"],             write: ["admin", "manager", "sales"] },
-  students:             { read: ["admin", "manager"],                       write: ["admin", "manager"] },
-  courses:              { read: ["admin", "manager", "sales", "trainer", "assessor", "iqa", "eqa"], write: ["admin", "manager"] },
-  teachers:             { read: ["admin", "manager"],                       write: ["admin", "manager"] },
-  enrollments:          { read: ["admin", "manager", "finance"],           write: ["admin", "manager"] },
-  "enrollment-requests":{ read: ["admin", "manager", "sales"],             write: ["admin", "manager", "sales"] },
-  classes:              { read: ["admin", "manager", "trainer"],           write: ["admin", "manager"] },
-  attendance:           { read: ["admin", "manager", "trainer"],           write: ["admin", "manager", "trainer"] },
-  payments:             { read: ["admin", "manager", "finance"],           write: ["admin", "manager", "finance"] },
-  expenses:             { read: ["admin", "manager", "finance"],           write: ["admin", "manager", "finance"] },
-  users:                { read: ["admin"],                                  write: ["admin"] },
-  seed:                 { read: ["admin"],                                  write: ["admin"] },
-  dashboard:            { read: ["admin", "manager", "sales", "finance", "trainer", "assessor", "iqa", "eqa", "accountant"], write: [] },
-  allocations:          { read: ["admin", "manager"],                       write: ["admin", "manager"] },
-  subjects:             { read: ["admin", "manager", "trainer"],           write: ["admin", "manager"] },
-  // Centre Management System (new)
-  "learner-profiles":   { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: ["admin", "manager", "iqa", "assessor"] },
-  qualifications:       { read: ["admin", "manager", "iqa", "eqa", "assessor", "trainer"], write: ["admin", "manager", "iqa"] },
-  assessments:          { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: ["admin", "manager", "assessor", "iqa"] },
-  "iqa-samples":        { read: ["admin", "manager", "iqa", "eqa"],       write: ["admin", "manager", "iqa"] },
-  "staff-compliance":   { read: ["admin", "manager", "iqa", "eqa"],       write: ["admin", "manager"] },
-  "document-control":   { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: ["admin", "manager", "iqa"] },
-  compliance:           { read: ["admin", "manager", "iqa", "eqa", "assessor"], write: [] },
-  "class-sessions":     { read: ["admin", "manager", "trainer"],   write: ["admin", "manager", "trainer"] },
-  "hour-adjustments":   { read: ["admin", "manager"],               write: ["admin", "manager"] },
-  // Accounting: admin + accountant post; manager is read-only
-  accounting:           { read: ["admin", "accountant", "manager"],  write: ["admin", "accountant"] },
-};
-
-// ── Accounting sub-permissions ─────────────────────────────────────────────
-export const ACCOUNTING_PERMISSIONS: Record<string, AppRole[]> = {
-  view:            ["admin", "accountant", "manager"],
-  manageCoa:       ["admin", "accountant"],
-  createJv:        ["admin", "accountant"],
-  postJv:          ["admin", "accountant"],
-  manageSuppliers: ["admin", "accountant"],
-  viewReports:     ["admin", "accountant", "manager"],
-  exportReports:   ["admin", "accountant", "manager"],
-  manageSettings:  ["admin", "accountant"],
 };
 
 // ── Import/Export permissions per entity ───────────────────────────────────

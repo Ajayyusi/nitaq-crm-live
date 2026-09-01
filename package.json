@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:dev": "node scripts/dev-db.mjs",
+    "seed:dev": "tsx scripts/seed-dev.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -44,6 +46,7 @@
     "eslint-config-next": "15.1.3",
     "mongodb-memory-server": "^11.2.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }

@@ -31,8 +31,6 @@ export function formatDateTime(date: Date | string) {
   });
 }
 
-export type Role = "super_admin" | "admin" | "sales" | "teacher" | "finance" | "academic";
-
 export function getInitials(name: string) {
   return name
     .split(" ")

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
-import AccountingSettings, { getAccountingSettings } from "@/models/accounting/AccountingSettings";
+import { getAccountingSettings } from "@/models/accounting/AccountingSettings";
 import ChartOfAccount from "@/models/accounting/ChartOfAccount";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";

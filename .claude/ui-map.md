@@ -110,7 +110,6 @@ Also endemic: WhatsApp deep links (`buildWhatsAppUrl` + 5 hardcoded emoji templa
 - `/login` — inline-styled credentials + progressive TOTP step; own palette, no dark mode
 - `/access-denied` — centered rose ShieldOff card
 - `/impersonate` — one-shot trainer token redeem, auto-redirect; error card has no action
-- `/setup` — permanently `notFound()`
 
 **Workspace**
 - `/dashboard` — role-aware server home: gradient hero, 5–11 KPI link-cards, pipeline funnel+bars (same data twice), follow-ups, sales table, enrollments, quick actions

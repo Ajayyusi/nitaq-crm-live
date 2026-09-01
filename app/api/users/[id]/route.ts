@@ -61,7 +61,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 }
 
-export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const authed = await requireAuth(["admin"]);
   if (authed instanceof NextResponse) return authed;
 

@@ -229,7 +229,7 @@ function courseLabel(lead: Lead) {
   return lead.course === "Other" && lead.customCourse ? lead.customCourse : lead.course;
 }
 
-export default function LeadsClient({ role = "sales", userName = "" }: { role?: string; userName?: string }) {
+export default function LeadsClient({ role = "sales" }: { role?: string }) {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [searchInput, setSearchInput] = useState("");

@@ -6,10 +6,8 @@ import Enrollment from "@/models/Enrollment";
 import { requireAuth } from "@/lib/api-auth";
 import { serializeLearnerProfile } from "@/lib/serializers";
 import { logAudit } from "@/lib/audit";
-import { documentTypes, documentStatuses, riskLevels } from "@/models/LearnerProfile";
+import { riskLevels } from "@/models/LearnerProfile";
 
-const allowedDocTypes = new Set(documentTypes);
-const allowedDocStatuses = new Set(documentStatuses);
 const allowedRiskLevels = new Set(riskLevels);
 
 function clean(v: unknown) {

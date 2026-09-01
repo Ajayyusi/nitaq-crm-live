@@ -18,9 +18,12 @@ NEXTAUTH_URL=http://localhost:3000
 
 ### 3. Seed admin user
 ```bash
-npx tsx scripts/seed.ts
-# Login: admin@nitaq.com / Nitaq@2024!
+SEED_ADMIN_EMAIL=you@example.com SEED_ADMIN_PASSWORD='a-strong-password' npm run seed:dev
 ```
+Creates the admin user plus the Chart of Accounts and accounting settings.
+Credentials are read from the environment only, and the password must be at
+least 12 characters. For a throwaway local database, run `npm run db:dev` first
+and point `MONGODB_URI` at the URI it prints.
 
 ### 4. Run
 ```bash
@@ -34,12 +37,19 @@ npm run dev
 4. Deploy
 
 ## Roles
-- super_admin — full access + users
+Defined once in `lib/permissions.ts` (`ALL_ROLES`). Page access and sidebar
+visibility are driven from that file; each API route declares its own allowed
+roles inline via `requireAuth([...])`.
+
 - admin — full operations
-- sales — leads + allocations
-- teacher — own classes/attendance
-- finance — payments/expenses/payroll
-- academic — scheduling + allocations
+- manager — operations, no settings
+- sales — leads and follow-ups
+- finance — payments, expenses, payroll
+- trainer — own classes, students and attendance
+- assessor — learner assessments
+- iqa — internal quality assurance sampling
+- eqa — external quality assurance, read-only
+- accountant — accounting module
 
 ## Modules Built (MVP)
 Dashboard · Leads CRM · Students · Courses · Subjects · Teachers

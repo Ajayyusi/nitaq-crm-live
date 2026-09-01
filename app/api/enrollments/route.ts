@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     // Trainers only ever see registrations assigned to them — never the
     // whole student body (enforced here, not just in the UI).
     if (authed.role === "trainer") {
-      const { getTeacherForUser, taughtByFilter, applyTaughtBy } = await import("@/lib/teacher");
+      const { getTeacherForUser, applyTaughtBy } = await import("@/lib/teacher");
       const teacher = await getTeacherForUser(authed);
       if (!teacher) return NextResponse.json({ enrollments: [] });
       // Co-teaching counts: match the primary trainer or the full list.

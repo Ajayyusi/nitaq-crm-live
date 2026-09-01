@@ -5,7 +5,6 @@ export default async function LeadsPage() {
   const session = await auth();
   const rawRole = (session?.user as { role?: string })?.role ?? "sales";
   const role = rawRole === "staff" ? "sales" : rawRole;
-  const userName = session?.user?.name ?? "";
 
-  return <LeadsClient role={role} userName={userName} />;
+  return <LeadsClient role={role} />;
 }
