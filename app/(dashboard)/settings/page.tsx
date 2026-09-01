@@ -618,45 +618,45 @@ function BackfillButton() {
   );
 }
 
-// ── Seed button ───────────────────────────────────────────────────────────────
-function SeedButton() {
+// ── Legacy role migration ─────────────────────────────────────────────────────
+function RoleMigrationButton() {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [msg, setMsg]     = useState("");
   const [confirming, setConfirming] = useState(false);
 
-  async function seed() {
+  async function migrate() {
     setConfirming(false);
     setState("loading");
     try {
-      const res = await fetch("/api/seed", { method: "POST" }).then((r) => r.json());
+      const res = await fetch("/api/admin/migrate-roles", { method: "POST" }).then((r) => r.json());
       if (res.error) throw new Error(res.error);
-      setMsg(res.message ?? "Seed data loaded.");
+      setMsg(res.message ?? "Migration complete.");
       setState("done");
-      toast.success("Seed data loaded successfully.");
+      toast.success("Role migration complete.");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Seed failed.");
+      setMsg(e instanceof Error ? e.message : "Migration failed.");
       setState("error");
-      toast.error("Seed failed.");
+      toast.error("Role migration failed.");
     }
   }
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-dim">
-        Load realistic sample data: 3 staff accounts, 15 leads, 5 enrollments, 6 payments, 8 follow-ups, 5 expenses.
-        Also runs the legacy role migration (staff → sales).
+        Converts any account still on the retired &ldquo;staff&rdquo; role to &ldquo;sales&rdquo;.
+        Safe to run more than once — it does nothing when no legacy accounts remain.
       </p>
       <div className="flex flex-wrap items-center gap-4">
         <Button
           variant="secondary"
           onClick={() => setConfirming(true)}
-          disabled={state === "loading" || state === "done"}
+          disabled={state === "loading"}
         >
           {state === "loading" && <Spinner className="h-4 w-4" />}
-          {state === "loading" ? "Loading…" : state === "done" ? "Done" : "Load Seed Data"}
+          {state === "loading" ? "Migrating…" : "Migrate Legacy Roles"}
         </Button>
         {msg && (
-          <p role={state === "error" ? "alert" : undefined} className={cn("text-sm font-medium", state === "error" ? "text-alert" : "text-phos")}>
+          <p role={state === "error" ? "alert" : undefined} className={cn("text-sm font-medium", state === "error" ? "text-danger" : "text-accent")}>
             {msg}
           </p>
         )}
@@ -664,15 +664,16 @@ function SeedButton() {
       <ConfirmDialog
         open={confirming}
         onClose={() => setConfirming(false)}
-        onConfirm={() => void seed()}
-        title="Load Seed Data"
-        message="This will add sample records to the database. Continue?"
-        confirmLabel="Load Data"
+        onConfirm={() => void migrate()}
+        title="Migrate Legacy Roles"
+        message={'Any user still on the "staff" role will be moved to "sales". Continue?'}
+        confirmLabel="Run Migration"
         danger={false}
       />
     </div>
   );
 }
+
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
@@ -942,9 +943,9 @@ export default function SettingsPage() {
           <StaffManagement currentUserId={currentUserId} />
         </Section>
 
-        {/* Seed data */}
-        <Section icon={Database} title="Demo / Seed Data">
-          <SeedButton />
+        {/* Legacy data migration */}
+        <Section icon={Database} title="Legacy Role Migration">
+          <RoleMigrationButton />
         </Section>
 
         {/* Logo */}
