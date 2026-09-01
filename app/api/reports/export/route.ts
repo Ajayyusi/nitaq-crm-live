@@ -5,11 +5,7 @@ import Enrollment from "@/models/Enrollment";
 import { Payment, Expense } from "@/models/Financial";
 import { requireAuth } from "@/lib/api-auth";
 import { buildDateFilter } from "@/lib/dateRange";
-
-const esc = (v: string | number) => {
-  const s = String(v ?? "");
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
+import { csvEscape as esc } from "@/lib/utils";
 
 /** Downloads the business report (all sections) as one Excel-compatible CSV. */
 export async function GET(request: NextRequest) {

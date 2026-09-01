@@ -4,6 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, Tooltip as PieTooltip,
 } from "recharts";
+import { formatAED as fmtAED } from "@/lib/utils";
 
 type MonthlyRow = { month: string; revenue: number; expenses: number; net: number };
 type CourseRow = { name: string; value: number };
@@ -17,9 +18,7 @@ const PIE_COLORS = [
   "var(--chart-5)",
 ];
 
-function formatAED(v: number) {
-  return "AED " + v.toLocaleString("en-AE", { minimumFractionDigits: 0 });
-}
+const formatAED = (v: number) => fmtAED(v, { decimals: 0 });
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function PanelTooltip({ active, payload, label }: any) {

@@ -23,7 +23,7 @@ import {
   Pagination,
 } from "@/components/ui/table";
 import { SkeletonRows, LoadError, Spinner } from "@/components/ui/feedback";
-import { formatCurrency } from "@/lib/utils";
+import { formatAED } from "@/lib/utils";
 
 type Batch = {
   id: string; batchId: string; batchName: string; startDate: string; endDate: string;
@@ -333,8 +333,8 @@ export default function CoursesPage() {
                           </Td>
                           <Td className="text-dim">{c.category}</Td>
                           <Td numeric>
-                            {formatCurrency(c.priceExVat)}
-                            <span className="block text-[11px] text-faint">incl. VAT {formatCurrency(c.priceInclVat)}</span>
+                            {formatAED(c.priceExVat)}
+                            <span className="block text-[11px] text-faint">incl. VAT {formatAED(c.priceInclVat)}</span>
                           </Td>
                           <Td numeric>{c.registeredStudents}</Td>
                           <Td numeric>{c.batches.length}</Td>

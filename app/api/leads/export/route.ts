@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Lead from "@/models/Lead";
 import { requireAuth } from "@/lib/api-auth";
+import { csvEscape } from "@/lib/utils";
 
 const columns = [
   "leadId",
@@ -15,11 +16,6 @@ const columns = [
   "assignedTo",
   "notes",
 ];
-
-function csvEscape(value: unknown) {
-  const text = value == null ? "" : String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 export async function GET(req: Request) {
   const authed = await requireAuth(["admin", "manager", "sales"]);

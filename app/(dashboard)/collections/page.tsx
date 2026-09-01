@@ -7,6 +7,7 @@ import EmptyState from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/input";
 import { Lamp } from "@/components/ui/lamp";
+import { downloadCsv, formatAED, toCsv } from "@/lib/utils";
 import {
   TableShell, Table, THead, Th, Tr, Td, TableFooter, usePagination, Pagination,
 } from "@/components/ui/table";
@@ -22,7 +23,7 @@ interface Row {
 }
 interface Totals { count: number; outstanding: number; overdueCount: number; overdueAmount: number }
 
-const fmt = (n: number) => "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = formatAED;
 
 /** Polite, ready-to-send reminder. Staff can edit before sending in WhatsApp. */
 function reminderText(r: Row) {
@@ -64,19 +65,11 @@ export default function CollectionsPage() {
 
   const exportCsv = () => {
     const headers = ["Enrollment", "Student", "Phone", "Course", "Total Fee", "Paid", "Balance", "Payment Status", "Last Paid", "Days Since"];
-    const esc = (v: string | number) => {
-      const s = String(v ?? "");
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const csv = [headers.join(","), ...filtered.map((r) => [
+    const csv = toCsv(headers, filtered.map((r) => [
       r.enrollmentId, r.fullName, r.phone, r.course, r.totalFee, r.amountPaid, r.balanceDue,
       r.paymentStatus, r.lastPaid, r.daysSince ?? "",
-    ].map(esc).join(","))].join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `collections-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
+    ]));
+    downloadCsv(`collections-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
 
   return (

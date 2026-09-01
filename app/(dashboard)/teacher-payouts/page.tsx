@@ -8,6 +8,7 @@ import { AccountSelect, usePostingAccounts } from "@/components/accounting/share
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { Drawer } from "@/components/ui/dialog";
+import { formatAED } from "@/lib/utils";
 import {
   TableShell, Table, THead, Th, Tr, Td, TableFooter, usePagination, Pagination,
 } from "@/components/ui/table";
@@ -33,7 +34,7 @@ interface Payout {
   paidDate: string; journalEntryId: string; createdBy: string;
 }
 
-const fmt = (n: number) => "AED " + n.toLocaleString("en-AE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = formatAED;
 
 export default function TeacherPayoutsPage() {
   const { accounts } = usePostingAccounts();

@@ -14,7 +14,7 @@ import PageHeader from "@/components/shared/PageHeader";
 import EmptyState from "@/components/shared/EmptyState";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
-import { formatCurrency, getInitials } from "@/lib/utils";
+import { formatAED, getInitials } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Lamp } from "@/components/ui/lamp";
 import { Input, Textarea, Select, Field, SearchInput } from "@/components/ui/input";
@@ -336,7 +336,7 @@ export default function TrainersPage() {
                       <Td numeric>
                         {t.paymentRate ? (
                           <>
-                            {formatCurrency(t.paymentRate)}
+                            {formatAED(t.paymentRate)}
                             <span className="block text-[11px] text-faint">{uiPaymentType(t.paymentType)}</span>
                           </>
                         ) : (

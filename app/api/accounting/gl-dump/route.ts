@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import JournalEntry from "@/models/accounting/JournalEntry";
 import { requireAuth } from "@/lib/api-auth";
+import { csvEscape as esc } from "@/lib/utils";
 import { buildDateFilter } from "@/lib/dateRange";
 
 /**
@@ -48,10 +49,6 @@ export async function GET(request: NextRequest) {
       "Account Code", "Account Name", "Description", "Debit", "Credit",
       "Student", "Supplier", "Course", "Created By", "Posted By",
     ];
-    const esc = (v: string | number) => {
-      const s = String(v ?? "");
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
     const csv = [
       headers.join(","),
       ...rows.map((r) => [
