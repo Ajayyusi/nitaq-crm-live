@@ -32,6 +32,9 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import { buttonVariants } from "@/components/ui/button";
 import { Table, THead, Th, Tr, Td } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { stagger } from "@/lib/motion";
+import PageTransition from "@/components/motion/PageTransition";
+import CountUp from "@/components/motion/CountUp";
 
 const solidAction = cn(buttonVariants({ variant: "solid" }));
 const quietAction = cn(
@@ -303,11 +306,11 @@ export default async function DashboardPage({
       sub: "Currently enrolled", href: "/students", tone: "ink" as const,
     },
     data.showFinance && {
-      label: `Revenue · ${periodLabel}`, value: fmt(data.monthlyRevenue),
+      label: `Revenue · ${periodLabel}`, value: data.monthlyRevenue, format: "aed" as const,
       sub: "Received payments", href: "/finance", tone: "phos" as const,
     },
     data.showFinance && {
-      label: "Pending Collection", value: fmt(data.pendingPayments),
+      label: "Pending Collection", value: data.pendingPayments, format: "aed" as const,
       sub: "Awaiting collection", href: "/collections",
       tone: data.pendingPayments > 0 ? ("caution" as const) : ("ink" as const),
     },
@@ -332,7 +335,7 @@ export default async function DashboardPage({
       tone: data.certificatesDue > 0 ? ("advisory" as const) : ("ink" as const),
     },
   ].filter(Boolean).slice(0, 6) as {
-    label: string; value: number | string; sub: string; href: string;
+    label: string; value: number; format?: "aed"; sub: string; href: string;
     tone: "ink" | "phos" | "caution" | "alert" | "advisory";
   }[];
 
@@ -365,9 +368,10 @@ export default async function DashboardPage({
   const funnelMax = Math.max(1, ...funnel.map((f) => f.value));
 
   return (
+    <PageTransition>
     <div className="space-y-5">
       {/* ── Command strip ─────────────────────────────────────────────────── */}
-      <section className="flex flex-wrap items-end justify-between gap-4">
+      <section className="motion-rise flex flex-wrap items-end justify-between gap-4" style={stagger(0)}>
         <div>
           <p className="text-sm text-dim">
             {greet}, <span className="font-bold text-ink">{firstName}</span>
@@ -401,10 +405,10 @@ export default async function DashboardPage({
       {/* ── The six-pack ──────────────────────────────────────────────────── */}
       <section className="grid grid-cols-2 items-stretch gap-4 lg:grid-cols-3">
         {sixPack.map((kpi, i) => (
-          <div key={kpi.label} className="animate-power-on" style={{ animationDelay: `${i * 70}ms` }}>
+          <div key={kpi.label} className="motion-rise" style={stagger(i + 1)}>
             <Instrument
               label={kpi.label}
-              value={typeof kpi.value === "number" ? kpi.value.toLocaleString() : kpi.value}
+              value={<CountUp value={kpi.value} format={kpi.format ?? "integer"} delay={(i + 1) * 60} />}
               sub={kpi.sub}
               tone={kpi.tone}
               href={kpi.href}
@@ -416,8 +420,8 @@ export default async function DashboardPage({
       {/* ── Annunciator strip — lit only when something needs a human ─────── */}
       {annunciators.length > 0 && (
         <section className="flex flex-wrap gap-2" aria-label="Attention required">
-          {annunciators.map((a) => (
-            <Link key={a.label} href={a.href} className="group">
+          {annunciators.map((a, i) => (
+            <Link key={a.label} href={a.href} className="motion-pop group" style={{ animationDelay: `${420 + i * 80}ms` }}>
               <Lamp variant={a.variant} className="px-2.5 py-1.5 text-[11px] transition group-hover:brightness-125">
                 {a.label}
               </Lamp>
@@ -428,7 +432,7 @@ export default async function DashboardPage({
 
       {/* ── Pipeline + Follow-ups (Sales / Admin / Manager only) ─────────── */}
       {data.showSales && (
-        <section className="grid gap-4 xl:grid-cols-2">
+        <section className="motion-rise grid gap-4 xl:grid-cols-2" style={stagger(7)}>
           <Card>
             <CardHeader>
               <div>
@@ -456,8 +460,8 @@ export default async function DashboardPage({
                       </div>
                       <div className="h-2 overflow-hidden rounded-sm bg-well">
                         <div
-                          className="h-full rounded-sm"
-                          style={{ width: `${width}%`, background: STAGE_COLORS[i] }}
+                          className="motion-bar h-full rounded-sm"
+                          style={{ width: `${width}%`, background: STAGE_COLORS[i], ...stagger(i) }}
                         />
                       </div>
                     </div>
@@ -493,13 +497,14 @@ export default async function DashboardPage({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {data.todayFollowUps.map((f) => {
+                  {data.todayFollowUps.map((f, idx) => {
                     const Icon = followUpTypeIcon[f.type] ?? BellRing;
                     const waLink = (buildWhatsAppUrl(f.phone) ?? "#");
                     return (
                       <div
                         key={f.id}
-                        className="flex items-start gap-3 rounded-ctl border border-bezel bg-well px-3.5 py-2.5 transition hover:border-phos/40"
+                        className="motion-row flex items-start gap-3 rounded-ctl border border-bezel bg-well px-3.5 py-2.5 transition hover:-translate-y-px hover:border-phos/40"
+                        style={stagger(idx + 6)}
                       >
                         <div className="mt-0.5 grid h-8 w-8 flex-shrink-0 place-items-center rounded-ctl border border-bezel bg-face">
                           <Icon className="h-4 w-4 text-phos" aria-hidden />
@@ -555,7 +560,7 @@ export default async function DashboardPage({
 
       {/* ── Sales Team Performance (admin/manager only) ─────────────────── */}
       {!data.isSalesOnly && data.showSales && data.salesPerformance.length > 0 && (
-        <Card className="overflow-hidden">
+        <Card className="motion-rise overflow-hidden" style={stagger(8)}>
           <CardHeader>
             <div>
               <CardTitle>Sales Team Performance</CardTitle>
@@ -579,11 +584,11 @@ export default async function DashboardPage({
                 </tr>
               </THead>
               <tbody>
-                {data.salesPerformance.map((s) => {
+                {data.salesPerformance.map((s, idx) => {
                   const rate = s.total > 0 ? Math.round((s.converted / s.total) * 100) : 0;
                   const donePct = s.fuTotal > 0 ? Math.round((s.fuDone / s.fuTotal) * 100) : null;
                   return (
-                    <Tr key={s.name}>
+                    <Tr key={s.name} className="motion-row" style={stagger(idx + 4)}>
                       <Td className="font-semibold">{s.name}</Td>
                       <Td numeric>{s.total}</Td>
                       <Td numeric className="text-advisory">{s.interested}</Td>
@@ -609,7 +614,7 @@ export default async function DashboardPage({
       )}
 
       {/* ── Course breakdown + Enrollments / Payments ────────────────────── */}
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="motion-rise grid gap-4 xl:grid-cols-[1.1fr_0.9fr]" style={stagger(8)}>
         {(data.showFinance || (data.showSales && !data.isSalesOnly)) && (
           <Card className="overflow-hidden">
             <CardHeader>
@@ -632,8 +637,8 @@ export default async function DashboardPage({
                   </tr>
                 </THead>
                 <tbody>
-                  {data.recentEnrollments.map((e) => (
-                    <Tr key={e.id}>
+                  {data.recentEnrollments.map((e, idx) => (
+                    <Tr key={e.id} className="motion-row" style={stagger(idx + 6)}>
                       <Td>
                         <p className="text-sm font-semibold text-ink">{e.fullName}</p>
                         <p className="readout text-[11px] text-faint" data-numeric>{e.enrollmentId}</p>
@@ -702,7 +707,7 @@ export default async function DashboardPage({
                         </div>
                       </div>
                       <div className="h-2 overflow-hidden rounded-sm bg-well">
-                        <div className="h-full rounded-sm" style={{ width: `${width}%`, background: color }} />
+                        <div className="motion-bar h-full rounded-sm" style={{ width: `${width}%`, background: color, ...stagger(idx) }} />
                       </div>
                     </div>
                   );
@@ -719,8 +724,8 @@ export default async function DashboardPage({
                   </Link>
                 </div>
                 <div className="space-y-2">
-                  {data.recentPayments.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between rounded-ctl bg-well px-3 py-2.5">
+                  {data.recentPayments.map((p, idx) => (
+                    <div key={p.id} className="motion-row flex items-center justify-between rounded-ctl bg-well px-3 py-2.5" style={stagger(idx + 8)}>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-ink">{p.studentName}</p>
                         <p className="readout text-[11px] text-faint" data-numeric>{p.datePaid}</p>
@@ -738,7 +743,7 @@ export default async function DashboardPage({
       </section>
 
       {/* ── Quick actions — quiet utility row (no duplicates of the command strip) ── */}
-      <section className="flex flex-wrap gap-2">
+      <section className="motion-rise flex flex-wrap gap-2" style={stagger(8)}>
         {data.showSales && (
           <>
             <Link href="/follow-ups" className={quietAction}>
@@ -776,5 +781,6 @@ export default async function DashboardPage({
         )}
       </section>
     </div>
+    </PageTransition>
   );
 }

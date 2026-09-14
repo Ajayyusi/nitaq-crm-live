@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, CreditCard, Pencil, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
+import PageTransition from "@/components/motion/PageTransition";
+import CountUp from "@/components/motion/CountUp";
+import { stagger } from "@/lib/motion";
 import EmptyState from "@/components/shared/EmptyState";
 import StatusBadge from "@/components/shared/StatusBadge";
 import DatePicker from "@/components/shared/DatePicker";
@@ -245,6 +248,7 @@ export default function PaymentsPage() {
   const enr = form.enrollmentId ? enrollments.find((e) => e.id === form.enrollmentId) : undefined;
 
   return (
+    <PageTransition>
     <div>
       <PageHeader
         title="Receipts"
@@ -261,7 +265,7 @@ export default function PaymentsPage() {
         {overdue.length > 0 && (
           <div
             role="status"
-            className="flex items-start gap-3 rounded-card border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-3"
+            className="motion-pop flex items-start gap-3 rounded-card border border-alert/30 bg-[var(--lamp-alert-bg)] px-4 py-3"
           >
             <span className="mt-0.5 h-2 w-2 flex-shrink-0 animate-pulse rounded-lamp bg-alert" aria-hidden />
             <p className="text-sm text-ink">
@@ -276,15 +280,23 @@ export default function PaymentsPage() {
 
         {/* Instruments */}
         <InstrumentRow className="xl:grid-cols-4">
-          <Instrument label={`Received (${periodLabel})`} value={fmt(totalRevenue)} tone="phos" />
-          <Instrument label="Pending / Overdue" value={fmt(totalPending)} tone="caution" sub="Not yet collected" />
-          <Instrument
-            label="Overdue Records"
-            value={overdue.length}
-            tone={overdue.length > 0 ? "alert" : "ink"}
-            sub="In current view"
-          />
-          <Instrument label="Total Records" value={payments.length} sub="In current view" />
+          <div className="motion-rise" style={stagger(2)}>
+            <Instrument label={`Received (${periodLabel})`} value={fmt(totalRevenue)} tone="phos" />
+          </div>
+          <div className="motion-rise" style={stagger(3)}>
+            <Instrument label="Pending / Overdue" value={fmt(totalPending)} tone="caution" sub="Not yet collected" />
+          </div>
+          <div className="motion-rise" style={stagger(4)}>
+            <Instrument
+              label="Overdue Records"
+              value={<CountUp value={overdue.length} delay={200} />}
+              tone={overdue.length > 0 ? "alert" : "ink"}
+              sub="In current view"
+            />
+          </div>
+          <div className="motion-rise" style={stagger(5)}>
+            <Instrument label="Total Records" value={<CountUp value={payments.length} delay={250} />} sub="In current view" />
+          </div>
         </InstrumentRow>
 
         {/* Filter bar */}
@@ -345,7 +357,7 @@ export default function PaymentsPage() {
             />
           </TableShell>
         ) : (
-          <TableShell>
+          <TableShell className="motion-rise">
             <Table className="min-w-[820px]">
               <THead>
                 <tr>
@@ -361,11 +373,12 @@ export default function PaymentsPage() {
                 </tr>
               </THead>
               <tbody>
-                {slice.map((p) => (
+                {slice.map((p, rowIndex) => (
                   <Tr
                     key={p.id}
                     clickable
-                    className={p.status === "Overdue" ? "bg-[var(--lamp-alert-bg)]" : undefined}
+                    className={`motion-row${p.status === "Overdue" ? " bg-[var(--lamp-alert-bg)]" : ""}`}
+                    style={stagger(rowIndex)}
                     onClick={() => openEdit(p)}
                   >
                     <Td className="readout text-xs text-faint" data-numeric>{p.paymentId}</Td>
@@ -656,5 +669,6 @@ export default function PaymentsPage() {
         }
       />
     </div>
+    </PageTransition>
   );
 }

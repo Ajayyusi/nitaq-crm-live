@@ -92,7 +92,7 @@ function useDialogBehavior(open: boolean, mounted: boolean, onClose: () => void)
 function Backdrop({ onClick }: { onClick?: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-50 bg-[rgba(27,36,48,0.45)] backdrop-blur-[3px]"
+      className="motion-fade fixed inset-0 z-50 bg-[rgba(27,36,48,0.45)] backdrop-blur-[3px]"
       onClick={onClick}
       aria-hidden="true"
     />
@@ -135,7 +135,7 @@ export function Dialog({
           aria-label={title}
           tabIndex={-1}
           className={cn(
-            "animate-power-on w-full rounded-neo border border-edge bg-raised shadow-neo-pop outline-none",
+            "motion-pop w-full rounded-neo border border-edge bg-raised shadow-neo-pop outline-none",
             width
           )}
         >

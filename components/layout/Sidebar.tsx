@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, ViewTransition } from "react";
 import {
   Activity,
   ArrowUpDown,
@@ -100,7 +100,7 @@ function FollowUpBadge() {
   if (count === 0) return null;
   return (
     <span
-      className="readout ml-auto rounded-neo-xs border border-warn/25 bg-[var(--warn-soft)] px-1.5 py-px text-[10px] font-bold leading-4 text-warn"
+      className="readout motion-pop ml-auto rounded-neo-xs border border-warn/25 bg-[var(--warn-soft)] px-1.5 py-px text-[10px] font-bold leading-4 text-warn"
       data-numeric
       aria-label={`${count} follow-ups due today`}
     >
@@ -191,6 +191,8 @@ export default function Sidebar({
           ? "translate-x-0"
           : "ltr:-translate-x-full rtl:translate-x-full lg:ltr:translate-x-0 lg:rtl:translate-x-0"
       }`}
+      // Anchored during route transitions (see app/globals.css)
+      style={{ viewTransitionName: "app-sidebar" }}
       aria-label="Main navigation"
     >
       {/* Identity plate */}
@@ -232,26 +234,31 @@ export default function Sidebar({
                     href={item.href}
                     onClick={onClose}
                     aria-current={active ? "page" : undefined}
-                    className={`group relative flex min-h-10 items-center gap-3 rounded-neo-sm px-3 py-2.5 text-[13px] font-semibold transition-[box-shadow,background-color,color] duration-200 ease-out ${
-                      active
-                        ? "bg-well text-accent shadow-neo-inset-sm"
-                        : "text-dim hover:bg-well/60 hover:text-ink"
+                    className={`group relative flex min-h-10 items-center gap-3 rounded-neo-sm px-3 py-2.5 text-[13px] font-semibold transition-[background-color,color] duration-200 ease-out ${
+                      active ? "text-accent" : "text-dim hover:bg-well/60 hover:text-ink"
                     }`}
                   >
-                    {/* Accent rail: state must not depend on reading a shadow */}
-                    <span
-                      aria-hidden
-                      className={`absolute start-1 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full transition-all duration-200 ${
-                        active ? "bg-accent" : "bg-transparent"
-                      }`}
-                    />
+                    {/* The active pill is ONE shared element: on navigation it
+                        glides from the old item to the new one instead of
+                        blinking out and in. State never depends on the shadow
+                        alone — the pill carries an accent rail. */}
+                    {active && (
+                      <ViewTransition name="nav-active-pill" share="nav-morph" default="none">
+                        <span
+                          aria-hidden
+                          className="absolute inset-0 rounded-neo-sm bg-well shadow-neo-inset-sm"
+                        >
+                          <span className="absolute start-1 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent" />
+                        </span>
+                      </ViewTransition>
+                    )}
                     <Icon
-                      className={`h-[18px] w-[18px] flex-shrink-0 transition-colors ${
+                      className={`relative h-[18px] w-[18px] flex-shrink-0 transition-[color,transform] duration-200 group-hover:scale-110 ${
                         active ? "text-accent" : "text-faint group-hover:text-dim"
                       }`}
                       aria-hidden
                     />
-                    <span className="truncate">{item.label}</span>
+                    <span className="relative truncate">{item.label}</span>
                     {item.badge && <FollowUpBadge />}
                   </Link>
                 );

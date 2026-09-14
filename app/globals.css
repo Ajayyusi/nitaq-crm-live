@@ -152,6 +152,13 @@ TOKEN MAP (Tailwind utilities generated in @theme inline):
   /* ── Motion ───────────────────────────────────────────────────────────── */
   --neo-transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --neo-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Motion system (see the Motion system section below and DESIGN.md) */
+  --dur-exit: 140ms;
+  --dur-enter: 260ms;
+  --dur-move: 460ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-quick: cubic-bezier(0.4, 0, 1, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
 
   /* ── Layout rhythm ────────────────────────────────────────────────────── */
   --page-pad-x: 16px;
@@ -537,6 +544,152 @@ TOKEN MAP (Tailwind utilities generated in @theme inline):
   animation: sweep 1.4s linear infinite;
 }
 
+/* ── Motion system ────────────────────────────────────────────────────────────
+   Expressive, but every movement means something:
+   - Route change: the old page leaves fast and low, the new page rises in
+     after it. Exit is faster than enter, so navigation never feels blocked.
+     The sidebar and header are anchored and never move.
+   - Selection: the active nav pill morphs to the item you chose.
+   - Arrival: sections and KPI tiles rise in a short stagger (callers keep it
+     to ~8 steps). Table rows only fade up a few pixels with a tiny per-row
+     delay capped at 12 rows — no overshoot on data, it reads as sloppy.
+   - Magnitude: KPI figures count up (components/motion/CountUp), bars grow
+     from their start edge.
+   Reduced motion removes all of it — see the media block below. */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Sections, cards, KPI tiles */
+@utility motion-rise {
+  animation: rise var(--dur-move) var(--ease-out-expo) both;
+  animation-delay: calc(var(--stagger, 0) * 50ms);
+}
+/* Table rows and list items: quiet, 30ms apart, capped at 12 rows */
+@utility motion-row {
+  animation: row-in var(--dur-enter) var(--ease-out-expo) both;
+  animation-delay: calc(min(var(--stagger, 0), 12) * 30ms);
+}
+/* Dialogs */
+@utility motion-pop {
+  animation: pop-in var(--dur-move) var(--ease-out-expo) both;
+}
+/* Backdrops */
+@utility motion-fade {
+  animation: fade-in var(--dur-enter) ease-out both;
+}
+/* Progress / breakdown bars grow from their start edge (RTL-aware) */
+@utility motion-bar {
+  transform-origin: left center;
+  animation: bar-grow 720ms var(--ease-out-expo) both;
+  animation-delay: calc(160ms + var(--stagger, 0) * 70ms);
+}
+[dir="rtl"] .motion-bar {
+  transform-origin: right center;
+}
+
+/* ── View transitions (React <ViewTransition>, components/motion) ─────────── */
+@layer base {
+  /* Clicks during a transition reach the live page instead of the overlay */
+  ::view-transition {
+    pointer-events: none;
+  }
+  /* Only named parts animate; the rest of the page swaps without a crossfade */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+  /* Anchored chrome: the sidebar and header are the spatial reference */
+  ::view-transition-group(app-sidebar),
+  ::view-transition-group(app-header) {
+    animation: none;
+    z-index: 100;
+  }
+  ::view-transition-old(app-sidebar),
+  ::view-transition-old(app-header) {
+    display: none;
+  }
+  ::view-transition-new(app-sidebar),
+  ::view-transition-new(app-header) {
+    animation: none;
+  }
+  /* Page content: leave fast and low, arrive after it */
+  ::view-transition-old(.page-exit) {
+    animation: page-out var(--dur-exit) var(--ease-in-quick) both;
+  }
+  ::view-transition-new(.page-enter) {
+    animation: page-in var(--dur-move) var(--ease-out-expo) var(--dur-exit) both;
+  }
+  /* The active nav pill glides between items; drawn above the anchored sidebar */
+  ::view-transition-group(.nav-morph) {
+    animation-duration: var(--dur-move);
+    animation-timing-function: var(--ease-emphasized);
+    z-index: 101;
+  }
+}
+@keyframes page-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+    filter: blur(3px);
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -547,6 +700,20 @@ TOKEN MAP (Tailwind utilities generated in @theme inline):
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
   }
+  /* Entrance utilities start invisible or offset with fill-mode `both`, so a
+     shortened animation could leave them parked at the FROM frame. Cancel
+     them outright, at their resting state. */
+  .motion-rise,
+  .motion-row,
+  .motion-pop,
+  .motion-fade,
+  .motion-bar {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+  }
+
   /* Entrance animations that START off-screen must be cancelled outright, not
      merely shortened. Both use fill-mode `both`, so the backwards fill pins the
      element at its FROM frame until the animation runs — and at a 0.01ms
@@ -559,6 +726,18 @@ TOKEN MAP (Tailwind utilities generated in @theme inline):
     animation: none !important;
     transform: none !important;
     opacity: 1 !important;
+  }
+}
+
+/* Route transitions under reduced motion: content swaps instantly. */
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(*),
+    ::view-transition-new(*),
+    ::view-transition-group(*) {
+      animation-duration: 0s !important;
+      animation-delay: 0s !important;
+    }
   }
 }
 

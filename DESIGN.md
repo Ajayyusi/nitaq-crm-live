@@ -239,6 +239,46 @@ Grids stay `items-stretch` so cards in a row share a height, and KPI tiles are
 - **Navigation** (`layout/Sidebar.tsx`) — active item is recessed *and* carries
   an accent rail, so state never depends on reading a shadow.
 
+## Motion
+
+Motion is expressive but never decorative: every movement answers a question
+the user has at that moment. Tokens and utilities live in `app/globals.css`
+(Motion system section); components never write their own durations.
+
+| Token | Value | Used for |
+|---|---|---|
+| `--dur-exit` | 140ms | Anything leaving (old page) — always faster than enter |
+| `--dur-enter` | 260ms | Rows, list items, backdrops |
+| `--dur-move` | 460ms | Sections, dialogs, page arrival, nav pill |
+| `--ease-out-expo` | `cubic-bezier(0.16,1,0.3,1)` | Arriving (decelerate) |
+| `--ease-in-quick` | `cubic-bezier(0.4,0,1,1)` | Leaving (accelerate) |
+| `--ease-emphasized` | `cubic-bezier(0.2,0,0,1)` | Shared-element morphs |
+
+| Pattern | How | What it tells the user |
+|---|---|---|
+| Route change | `components/motion/PageTransition` in each `page.tsx` (never a layout) — React `<ViewTransition>` | "I went somewhere"; sidebar and header are anchored and never move |
+| Active nav item | Named `<ViewTransition name="nav-active-pill">` in the sidebar | "This is where I am now" — the pill glides from the old item |
+| Arrival | `.motion-rise` + `stagger(i)` from `lib/motion.ts`, 50ms apart, ≤ 8 steps per view | Reading order: title → actions → KPIs → content |
+| Rows / list items | `.motion-row` + `stagger(i)`, 30ms apart, capped at 12 rows, no overshoot | New data arrived — quietly |
+| Magnitude | `components/motion/CountUp` (counts from the previous value when filters change) | How big, and how much it changed |
+| Bars | `.motion-bar` grows from the start edge (RTL-aware) | Proportion |
+| Dialogs | `.motion-pop` panel over a `.motion-fade` backdrop | Something opened on top |
+| Press | Buttons scale to 0.98 and recess while held | "Your press registered" |
+
+Rules:
+
+- **Data stays calm.** Tables get the quiet row cascade only; bounce or overshoot on
+  informational UI reads as sloppy. Filters and form cards don't animate.
+- **Never block.** `::view-transition` ignores pointer events, and no entrance
+  delays interaction. Counters show the final figure to screen readers at once.
+- **Transform and opacity only** (plus a short blur on arrival). Never animate
+  width, height or position — bars scale, they don't resize.
+- **Reduced motion removes it all.** Entrance utilities are cancelled outright at
+  their resting state (not shortened — fill-mode `both` would park them at their
+  first frame), view transitions drop to zero duration, and counters render the
+  final value.
+- Without View Transitions support (older browsers), pages simply swap.
+
 ## Accessibility
 
 Neomorphism fails on contrast by default, so this system was measured rather

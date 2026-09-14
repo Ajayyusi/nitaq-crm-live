@@ -25,7 +25,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       <div className="min-h-screen lg:ps-[288px]">
         {/* One sticky stack: banner and header never fight over top-0 */}
-        <div className="sticky top-0 z-30">
+        <div className="sticky top-0 z-30" style={{ viewTransitionName: "app-header" }}>
           <ImpersonationBanner />
           <Header onMenuOpen={() => setSidebarOpen(true)} />
         </div>

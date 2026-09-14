@@ -31,15 +31,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-accent text-accent-ink shadow-neo-xs hover:bg-accent-hover hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
+          "bg-accent text-accent-ink shadow-neo-xs hover:bg-accent-hover hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px active:scale-[0.98]",
         solid:
-          "bg-accent text-accent-ink shadow-neo-xs hover:bg-accent-hover hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
+          "bg-accent text-accent-ink shadow-neo-xs hover:bg-accent-hover hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px active:scale-[0.98]",
         secondary:
-          "bg-face text-ink shadow-neo-xs hover:text-accent hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
+          "bg-face text-ink shadow-neo-xs hover:text-accent hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px active:scale-[0.98]",
         ghost:
           "bg-transparent text-dim shadow-none hover:bg-well hover:text-ink active:shadow-neo-inset-sm",
         danger:
-          "bg-danger text-white shadow-neo-xs hover:brightness-110 hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px",
+          "bg-danger text-white shadow-neo-xs hover:brightness-110 hover:shadow-neo-sm active:shadow-neo-inset-sm active:translate-y-px active:scale-[0.98]",
         link: "border-none normal-case tracking-normal text-accent shadow-none underline-offset-4 hover:underline",
       },
       size: {

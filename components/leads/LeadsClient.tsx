@@ -40,6 +40,8 @@ import DatePicker from "@/components/shared/DatePicker";
 import { thisMonthRange } from "@/lib/dateRange";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import PageHeader from "@/components/shared/PageHeader";
+import CountUp from "@/components/motion/CountUp";
+import { stagger } from "@/lib/motion";
 import EmptyState from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -948,7 +950,7 @@ export default function LeadsClient({ role = "sales" }: { role?: string }) {
 
         {/* Stage pipeline strip */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-10" role="group" aria-label="Filter by stage">
-          {leadStages.map((s) => {
+          {leadStages.map((s, i) => {
             const active = stage === s;
             return (
               <button
@@ -956,11 +958,14 @@ export default function LeadsClient({ role = "sales" }: { role?: string }) {
                 type="button"
                 onClick={() => setStage(active ? "all" : s)}
                 aria-pressed={active}
-                className={`face p-3 text-center transition-all duration-150 hover:border-bezel-strong ${
+                style={stagger(Math.min(i + 2, 8))}
+                className={`motion-rise face p-3 text-center transition-all duration-150 hover:-translate-y-0.5 hover:border-bezel-strong active:scale-[0.98] ${
                   active ? "border-phos shadow-glow" : ""
                 }`}
               >
-                <p className="readout text-xl font-bold text-ink" data-numeric>{stageCounts[s]}</p>
+                <p className="readout text-xl font-bold text-ink" data-numeric>
+                  <CountUp value={stageCounts[s] ?? 0} delay={Math.min(i + 2, 8) * 50} duration={700} />
+                </p>
                 <div className="mt-1 flex items-center justify-center gap-1">
                   <span aria-hidden className={`h-1.5 w-1.5 flex-shrink-0 rounded-lamp ${stageDot[stageLamp[s]]}`} />
                   <span className="placard leading-tight">{s}</span>
@@ -1107,7 +1112,7 @@ export default function LeadsClient({ role = "sales" }: { role?: string }) {
             />
           </TableShell>
         ) : (
-          <TableShell>
+          <TableShell className="motion-rise">
             <Table>
               <THead>
                 <tr>
@@ -1133,7 +1138,7 @@ export default function LeadsClient({ role = "sales" }: { role?: string }) {
                 </tr>
               </THead>
               <tbody>
-                {pageLeads.map((lead) => {
+                {pageLeads.map((lead, rowIndex) => {
                   const urgency = getFollowUpUrgency(lead.nextFollowUpDate);
                   const waUrl = whatsappUrl(lead.phone);
                   const notesPreview = lead.notes?.trim().slice(0, 90);
@@ -1143,6 +1148,8 @@ export default function LeadsClient({ role = "sales" }: { role?: string }) {
                     <Tr
                       key={lead.id}
                       clickable
+                      className="motion-row"
+                      style={stagger(rowIndex)}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest("button, a, input, [role='menu']")) return;
                         openViewPanel(lead);
