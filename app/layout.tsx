@@ -37,8 +37,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#EEF1F5" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#21252C" media="(prefers-color-scheme: dark)" />
+        {/* Light is the default theme, so the browser chrome matches it for
+            everyone — following the OS setting tinted the toolbar dark over a
+            light page on dark-mode machines. */}
+        <meta name="theme-color" content="#EEF1F5" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body
