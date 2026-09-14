@@ -1,27 +1,31 @@
-# Firebase App Hosting — STAGING backend for the Nitaq CRM (Next.js 16).
+# Firebase App Hosting — PRODUCTION backend for the Nitaq CRM (Next.js 16).
 #
-# Project: nitaq-crm · backend: nitaq-crm-staging (see firebase.json)
-# This deployment must point at a SEPARATE staging MongoDB database, never
-# the production database the Vercel app uses (SYSTEM_AUDIT.md §3).
+# Project: nitaq-crm · backend: nitaq-crm (see firebase.json)
+# Replaces the Vercel deployment and uses the same production MongoDB. Before
+# the first deploy: back up the database and run the duplicate-postings check
+# against it (SYSTEM_AUDIT.md §3), then apply the audit's index migration.
 #
 # No secret values live in this file or in git. The project owner creates
 # them once, from their own terminal:
 #   firebase apphosting:secrets:set MONGODB_URI --project nitaq-crm
 #   firebase apphosting:secrets:set AUTH_SECRET --project nitaq-crm
-# (AUTH_SECRET: a new random value for staging, e.g. `openssl rand -base64 32`.)
+# (AUTH_SECRET: reuse the Vercel value so nobody is signed out at cutover.)
 #
 # MongoDB Atlas: App Hosting runs on Cloud Run without a fixed outbound IP,
-# so the staging cluster's Network Access list must allow it.
+# so the cluster's Network Access list must allow it. Create the backend in
+# the Google Cloud region closest to the Atlas cluster — distance between the
+# server and the database is most of the per-request lag.
 
 runConfig:
-  minInstances: 0
-  maxInstances: 2
+  # One instance always warm: no cold-start wait after quiet periods.
+  minInstances: 1
+  maxInstances: 4
   concurrency: 80
   cpu: 1
   memoryMiB: 1024
 
 env:
-  # Database connection string for the STAGING database.
+  # Production database connection string.
   # BUILD as well as RUNTIME: `next build` imports route modules while
   # collecting page data.
   - variable: MONGODB_URI

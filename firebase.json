@@ -1,7 +1,7 @@
 {
   "apphosting": [
     {
-      "backendId": "nitaq-crm-staging",
+      "backendId": "nitaq-crm",
       "rootDir": ".",
       "alwaysDeployFromSource": true,
       "ignore": [
