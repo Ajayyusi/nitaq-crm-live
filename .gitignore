@@ -45,3 +45,6 @@ next-env.d.ts
 .firebase/
 firebase-debug.log
 firebase-debug.*.log
+
+# Local database backups (contain customer data)
+/backups/
