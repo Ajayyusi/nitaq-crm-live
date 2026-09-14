@@ -1,0 +1,45 @@
+# Firebase App Hosting — STAGING backend for the Nitaq CRM (Next.js 16).
+#
+# Project: nitaq-crm · backend: nitaq-crm-staging (see firebase.json)
+# This deployment must point at a SEPARATE staging MongoDB database, never
+# the production database the Vercel app uses (SYSTEM_AUDIT.md §3).
+#
+# No secret values live in this file or in git. The project owner creates
+# them once, from their own terminal:
+#   firebase apphosting:secrets:set MONGODB_URI --project nitaq-crm
+#   firebase apphosting:secrets:set AUTH_SECRET --project nitaq-crm
+# (AUTH_SECRET: a new random value for staging, e.g. `openssl rand -base64 32`.)
+#
+# MongoDB Atlas: App Hosting runs on Cloud Run without a fixed outbound IP,
+# so the staging cluster's Network Access list must allow it.
+
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 1024
+
+env:
+  # Database connection string for the STAGING database.
+  # BUILD as well as RUNTIME: `next build` imports route modules while
+  # collecting page data.
+  - variable: MONGODB_URI
+    secret: MONGODB_URI
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # NextAuth session signing key.
+  - variable: AUTH_SECRET
+    secret: AUTH_SECRET
+    availability:
+      - RUNTIME
+
+  # The app resolves its own URL from the request host (auth.ts sets
+  # trustHost), so the *.hosted.app address works without AUTH_URL.
+  - variable: AUTH_TRUST_HOST
+    value: "true"
+    availability:
+      - BUILD
+      - RUNTIME
