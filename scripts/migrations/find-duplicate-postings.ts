@@ -21,7 +21,8 @@ import Enrollment from "../../models/Enrollment";
 async function main() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI is not set (pass --env-file=.env.local).");
-  await mongoose.connect(uri);
+  // autoIndex off: importing the models must not build indexes on the target database.
+  await mongoose.connect(uri, { autoIndex: false });
 
   const scanned = await JournalEntry.countDocuments({ status: "Posted", sourceId: { $type: "string" } });
   const dupPostings = await JournalEntry.aggregate<{

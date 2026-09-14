@@ -54,7 +54,8 @@ async function activeSourceIds(sourceTypes: string[]): Promise<Set<string>> {
 async function main() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI is not set (pass --env-file=.env.local).");
-  await mongoose.connect(uri);
+  // autoIndex off: importing the models must not build indexes on the target database.
+  await mongoose.connect(uri, { autoIndex: false });
   console.log(APPLY ? "MODE: APPLY — missing entries will be posted." : "MODE: DRY RUN — nothing will be written.");
 
   // 1. Payments
