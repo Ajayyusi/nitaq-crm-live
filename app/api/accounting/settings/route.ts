@@ -71,7 +71,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     await settings.save();
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "AccountingSettings",
       entityId: "singleton", entityLabel: "Accounting Settings",

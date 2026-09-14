@@ -4,6 +4,7 @@ import Teacher from "@/models/Teacher";
 import { trainerStatuses, tamamStatuses, contractStatuses, paymentTypes } from "@/models/Teacher";
 import { serializeTrainer } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { parseAmount } from "@/lib/money";
 
 const allowedStatuses = new Set<string>(trainerStatuses);
 
@@ -69,7 +70,9 @@ export async function POST(request: NextRequest) {
         : "No Contract",
       contractStartDate: body.contractStartDate ? new Date(body.contractStartDate) : undefined,
       contractEndDate: body.contractEndDate ? new Date(body.contractEndDate) : undefined,
-      paymentRate: body.paymentRate ? Number(body.paymentRate) : undefined,
+      // A negative or non-numeric rate used to be stored and then silently
+      // reduced other registrations' pay in the payout total.
+      paymentRate: body.paymentRate ? parseAmount(body.paymentRate, { field: "Payment rate", allowZero: true }) : undefined,
       paymentType: paymentTypes.includes(clean(body.paymentType) as any)
         ? clean(body.paymentType)
         : "Per Hour",

@@ -67,7 +67,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const a = await LearnerAssessment.findByIdAndUpdate(id, ops, { new: true, runValidators: true });
     if (!a) return NextResponse.json({ message: "Not found." }, { status: 404 });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "LearnerAssessment",
       entityId: id, entityLabel: a.unitCode,

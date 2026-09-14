@@ -28,7 +28,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if ("openingCredit" in body) account.openingCredit = Math.max(0, Number(body.openingCredit) || 0);
 
     await account.save();
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "ChartOfAccount",
       entityId: account._id.toString(), entityLabel: `${account.code} ${account.name}`,
@@ -62,7 +62,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
 
   await account.deleteOne();
-  logAudit({
+  await logAudit({
     userName: authed.name, userRole: authed.role,
     action: "deleted", entity: "ChartOfAccount",
     entityId: code, entityLabel: `${code} ${account.name}`,

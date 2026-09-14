@@ -5,10 +5,12 @@ import Enrollment from "@/models/Enrollment";
 import { enrollmentStatuses, paymentStatuses, scheduleFormats, teacherPayBases } from "@/models/Enrollment";
 import { Payment, paymentMethods } from "@/models/Financial";
 import { getNextSequence } from "@/models/Counter";
-import { serializeEnrollment } from "@/lib/serializers";
+import { serializeEnrollment, serializeEnrollmentForTrainer } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
-import { postStudentInvoice, postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
+import { planStudentInvoice, planCustomerReceipt, postForNewDocument } from "@/lib/accounting/postings";
+import { parseAmount } from "@/lib/money";
+import { apiError } from "@/lib/api-error";
 
 const allowedPaymentMethods = new Set<string>(paymentMethods);
 
@@ -33,7 +35,9 @@ function clean(v: unknown) {
 
 
 export async function GET(request: NextRequest) {
-  const authed = await requireAuth(["admin", "manager", "sales", "finance", "trainer"]);
+  // Sales is deliberately NOT here: no sales screen reads this list, and it
+  // returned every student's Emirates ID, fees and balance to any sales login.
+  const authed = await requireAuth(["admin", "manager", "finance", "trainer"]);
   if (authed instanceof NextResponse) return authed;
 
 
@@ -73,7 +77,8 @@ export async function GET(request: NextRequest) {
     }
 
     const enrollments = await Enrollment.find(query).sort({ createdAt: -1 }).lean();
-    return NextResponse.json({ enrollments: enrollments.map(serializeEnrollment) });
+    const serialize = authed.role === "trainer" ? serializeEnrollmentForTrainer : serializeEnrollment;
+    return NextResponse.json({ enrollments: enrollments.map(serialize) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load enrollments.";
     return NextResponse.json({ message }, { status: 500 });
@@ -105,6 +110,9 @@ export async function POST(request: NextRequest) {
     if (!allowedPaymentStatuses.has(paymentStatus)) throw new Error("Invalid payment status.");
     if (!allowedFormats.has(format)) throw new Error("Invalid format.");
 
+    const totalFee = parseAmount(body.totalFee, { field: "Total fee", allowZero: true });
+    const amountPaid = parseAmount(body.amountPaid, { field: "Amount paid", allowZero: true });
+
     const seq = await getNextSequence("enrollment");
     const enrollmentId = `E-${String(seq).padStart(3, "0")}`;
 
@@ -119,8 +127,8 @@ export async function POST(request: NextRequest) {
       endDate: body.endDate ? new Date(body.endDate) : undefined,
       schedule: clean(body.schedule) || undefined,
       format, status, paymentStatus,
-      totalFee: Number(body.totalFee) || 0,
-      amountPaid: Number(body.amountPaid) || 0,
+      totalFee,
+      amountPaid,
       notes: clean(body.notes) || undefined,
       leadId: body.leadId || undefined,
       // Teacher assignment & hour tracking. teacherIds is the source of
@@ -139,7 +147,7 @@ export async function POST(request: NextRequest) {
       teacherPayRate:
         body.teacherPayRate === "" || body.teacherPayRate == null
           ? undefined
-          : Math.max(0, Number(body.teacherPayRate) || 0),
+          : parseAmount(body.teacherPayRate, { field: "Trainer pay rate", allowZero: true }),
       teacherPayBasis: allowedPayBases.has(clean(body.teacherPayBasis))
         ? clean(body.teacherPayBasis)
         : undefined,
@@ -173,26 +181,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Accounting: invoice entry — Dr A/R, Cr Course Revenue (+ Cr Output VAT)
-    if ((Number(body.totalFee) || 0) > 0) {
-      await postSafely(() => postStudentInvoice({
+    // Accounting: invoice entry — Dr A/R, Cr Course Revenue (+ Cr Output VAT).
+    // A posting failure is recorded on the registration and reported, instead
+    // of being swallowed as it used to be.
+    const warnings: string[] = [];
+    if (totalFee > 0) {
+      const { postingError } = await postForNewDocument(await planStudentInvoice({
         sourceId: enrollment._id.toString(),
         sourceNumber: enrollmentId,
         date: enrollment.registrationDate ?? new Date(),
         studentName: fullName,
         course,
-        totalFee: Number(body.totalFee) || 0,
+        totalFee,
         createdBy: authed.name,
       }));
+      if (postingError) {
+        enrollment.postingError = postingError;
+        await enrollment.save();
+        warnings.push(`the invoice entry failed: ${postingError}`);
+      }
     }
 
-    const amountPaid = Number(body.amountPaid) || 0;
+    let paymentRef = "";
     if (amountPaid > 0) {
       const paymentType = derivePaymentType(paymentStatus, true);
       const rawMethod = typeof body.paymentMethod === "string" ? body.paymentMethod.trim() : "";
       const paymentMethod = allowedPaymentMethods.has(rawMethod) ? rawMethod : "Cash";
       const seq = await getNextSequence("payment");
       const paymentId = `P-${String(seq).padStart(3, "0")}`;
+      paymentRef = paymentId;
       const payment = await Payment.create({
         paymentId,
         enrollmentId: enrollment._id,
@@ -204,13 +221,14 @@ export async function POST(request: NextRequest) {
         paymentMethod,
         status: "Received",
         datePaid: new Date(),
+        recordedBy: authed.name,
         notes: `Auto-recorded from enrollment ${enrollment.enrollmentId}`,
       });
       // Accounting: receipt entry — Dr Cash/Bank, Cr A/R
-      const entry = await postSafely(() => postCustomerReceipt({
+      const { entry, postingError } = await postForNewDocument(await planCustomerReceipt({
         sourceId: payment._id.toString(),
         sourceNumber: paymentId,
-        date: new Date(),
+        date: payment.datePaid!,
         studentName: fullName,
         course,
         amount: amountPaid,
@@ -218,16 +236,31 @@ export async function POST(request: NextRequest) {
         createdBy: authed.name,
         enrollmentId: enrollment._id.toString(),
       }));
-      if (entry) {
-        payment.journalEntryId = entry._id as never;
+      if (entry || postingError) {
+        if (entry) payment.journalEntryId = entry._id as never;
+        if (postingError) {
+          payment.postingError = postingError;
+          warnings.push(`the receipt entry failed: ${postingError}`);
+        }
         await payment.save();
       }
     }
 
-    logAudit({ userName: authed.name, userRole: authed.role, action: "created", entity: "Enrollment", entityId: enrollment._id.toString(), entityLabel: enrollment.fullName, detail: `${enrollment.course} · ${enrollment.enrollmentId}` });
-    return NextResponse.json({ enrollment: serializeEnrollment(enrollment) }, { status: 201 });
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "created", entity: "Enrollment",
+      entityId: enrollment._id.toString(), entityLabel: enrollment.fullName,
+      detail: `${enrollment.course} · ${enrollment.enrollmentId} · fee AED ${totalFee}` +
+        `${amountPaid > 0 ? ` · paid AED ${amountPaid} (${paymentRef})` : ""}` +
+        `${warnings.length ? ` · LEDGER POSTING FAILED: ${warnings.join("; ")}` : ""}`,
+    });
+    return NextResponse.json(
+      {
+        enrollment: serializeEnrollment(enrollment),
+        ...(warnings.length ? { warning: `Saved, but ${warnings.join("; ")}` } : {}),
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create enrollment.";
-    return NextResponse.json({ message }, { status: 400 });
+    return apiError(error, "Failed to create enrollment.", "enrollments");
   }
 }

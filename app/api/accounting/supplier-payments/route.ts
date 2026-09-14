@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       await payment.save();
     }
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "SupplierPayment",
       entityId: payment._id.toString(), entityLabel: `${paymentNumber} · ${supplier.name}`,

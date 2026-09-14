@@ -1,11 +1,19 @@
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import { Payment } from "@/models/Financial";
 import { paymentMethods, paymentTypes, txStatuses } from "@/models/Financial";
+import Enrollment from "@/models/Enrollment";
 import { getNextSequence } from "@/models/Counter";
 import { serializePayment } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
-import { postCustomerReceipt, postSafely } from "@/lib/accounting/postings";
+import { logAudit } from "@/lib/audit";
+import { parseAmount } from "@/lib/money";
+import { apiError } from "@/lib/api-error";
+import { parseOptionalDate } from "@/lib/mongo-update";
+import { preflightJournalEntry } from "@/lib/accounting/engine";
+import { planForPayment, postForNewDocument } from "@/lib/accounting/postings";
+import { applyPaymentToEnrollment } from "@/lib/enrollment-balance";
 
 const allowedMethods = new Set<string>(paymentMethods);
 const allowedTypes = new Set<string>(paymentTypes);
@@ -50,8 +58,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ payments: payments.map(serializePayment), totalRevenue, totalPending });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load payments.";
-    return NextResponse.json({ message }, { status: 500 });
+    return apiError(error, "Failed to load payments.", "payments");
   }
 }
 
@@ -66,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     const studentName = clean(body.studentName);
     if (!studentName) throw new Error("Student name is required.");
-    if (!body.amount || Number(body.amount) <= 0) throw new Error("Amount must be greater than 0.");
+    const amount = parseAmount(body.amount);
 
     const paymentMethod = clean(body.paymentMethod) || "Cash";
     const paymentType = clean(body.paymentType) || "Full Payment";
@@ -76,54 +83,73 @@ export async function POST(request: NextRequest) {
     if (!allowedTypes.has(paymentType)) throw new Error("Invalid payment type.");
     if (!allowedStatuses.has(status)) throw new Error("Invalid status.");
 
-    const seq = await getNextSequence("payment");
-    const paymentId = `P-${String(seq).padStart(3, "0")}`;
+    let enrollmentId: string | undefined;
+    if (body.enrollmentId) {
+      enrollmentId = String(body.enrollmentId);
+      if (!mongoose.Types.ObjectId.isValid(enrollmentId) || !(await Enrollment.exists({ _id: enrollmentId }))) {
+        throw new Error("The linked enrollment does not exist.");
+      }
+    }
+
+    // Money that was received has a date. Without one the payment was missing
+    // from every date-filtered report while its ledger entry used "today".
+    const datePaid = parseOptionalDate(body.datePaid, "Payment date") ?? (status === "Received" ? new Date() : undefined);
 
     const installmentNumber = body.installmentNumber ? Number(body.installmentNumber) : undefined;
     const totalInstallments = body.totalInstallments ? Number(body.totalInstallments) : undefined;
 
-    const payment = await Payment.create({
+    const seq = await getNextSequence("payment");
+    const paymentId = `P-${String(seq).padStart(3, "0")}`;
+
+    const payment = new Payment({
       paymentId,
       studentName,
       studentPhone: clean(body.studentPhone) || undefined,
       course: clean(body.course) || undefined,
-      amount: Number(body.amount),
+      amount,
       paymentType,
       paymentMethod,
       status,
-      datePaid: body.datePaid ? new Date(body.datePaid) : undefined,
-      dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
+      datePaid,
+      dueDate: parseOptionalDate(body.dueDate, "Due date"),
       receiptRef: clean(body.receiptRef) || undefined,
       notes: clean(body.notes) || undefined,
       recordedBy: authed.name || undefined,
-      enrollmentId: body.enrollmentId || undefined,
+      enrollmentId,
       installmentNumber: installmentNumber && installmentNumber >= 1 ? installmentNumber : undefined,
       totalInstallments: totalInstallments && totalInstallments >= 1 ? totalInstallments : undefined,
     });
 
-    // Auto double-entry: Dr money account / Cr A/R (invoiced) or Fees Advance (standalone)
-    if (status === "Received") {
-      const entry = await postSafely(() => postCustomerReceipt({
-        sourceId: payment._id.toString(),
-        sourceNumber: paymentId,
-        date: payment.datePaid ?? new Date(),
-        studentName,
-        course: payment.course,
-        amount: payment.amount,
-        paymentMethod,
-        asAdvance: !payment.enrollmentId,
-        enrollmentId: payment.enrollmentId?.toString(),
-        createdBy: authed.name,
-      }));
-      if (entry) {
-        payment.journalEntryId = entry._id as never;
-        await payment.save();
-      }
-    }
+    // Auto double-entry: a receipt (Dr money / Cr A/R or Fees Advance) or, for
+    // a refund, money out. Checked BEFORE saving: a payment the ledger would
+    // refuse (e.g. dated in a locked period) is refused, instead of being saved
+    // with no entry as it used to be.
+    const plan = await planForPayment(payment, authed.name);
+    if (plan) await preflightJournalEntry(plan);
 
-    return NextResponse.json({ payment: serializePayment(payment) }, { status: 201 });
+    await payment.save();
+    const { entry, postingError } = await postForNewDocument(plan);
+    if (entry || postingError) {
+      if (entry) payment.journalEntryId = entry._id as never;
+      if (postingError) payment.postingError = postingError;
+      await payment.save();
+    }
+    await applyPaymentToEnrollment(null, payment);
+
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "created", entity: "Payment",
+      entityId: payment._id.toString(), entityLabel: payment.studentName,
+      detail: `${paymentId} · ${paymentType} · ${status} · AED ${amount}${postingError ? ` · LEDGER POSTING FAILED: ${postingError}` : ""}`,
+    });
+
+    return NextResponse.json(
+      {
+        payment: serializePayment(payment),
+        ...(postingError ? { warning: `Payment saved, but the accounting entry failed: ${postingError}` } : {}),
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to record payment.";
-    return NextResponse.json({ message }, { status: 400 });
+    return apiError(error, "Failed to record payment.", "payments");
   }
 }

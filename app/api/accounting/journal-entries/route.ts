@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "JournalEntry",
       entityId: entry._id.toString(), entityLabel: entry.jvNumber,

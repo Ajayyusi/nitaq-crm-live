@@ -4,7 +4,7 @@ import Enrollment from "@/models/Enrollment";
 import ClassSession from "@/models/ClassSession";
 import { requireAuth } from "@/lib/api-auth";
 import { getTeacherForUser, taughtByFilter } from "@/lib/teacher";
-import { serializeEnrollment } from "@/lib/serializers";
+import { serializeEnrollment, serializeEnrollmentForTrainer } from "@/lib/serializers";
 
 /**
  * Teacher's own dashboard data: ONLY registrations assigned to the
@@ -45,7 +45,8 @@ export async function GET() {
     ClassSession.find({ teacherId: teacher._id }).sort({ createdAt: -1 }).limit(5).lean(),
   ]);
 
-  const students = enrollments.map(serializeEnrollment);
+  // Trainers get the redacted view (no fees, balance or ID documents).
+  const students = enrollments.map(authed.role === "trainer" ? serializeEnrollmentForTrainer : serializeEnrollment);
   const lowHours = students.filter((s) => s.totalRegisteredHours > 0 && s.remainingHours > 0 && s.remainingHours <= 5);
 
   return NextResponse.json({

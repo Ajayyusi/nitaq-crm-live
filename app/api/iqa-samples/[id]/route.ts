@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const sample = await IQASample.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true });
     if (!sample) return NextResponse.json({ message: "Not found." }, { status: 404 });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "IQASample",
       entityId: id, entityLabel: sample.unitCode,

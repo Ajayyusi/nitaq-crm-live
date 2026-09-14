@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       status:           "Planned",
     });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "IQASample",
       entityId: sample._id.toString(), entityLabel: sample.unitCode,

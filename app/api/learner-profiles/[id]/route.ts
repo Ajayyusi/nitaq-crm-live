@@ -108,7 +108,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if ("documents" in update) changes.push("Documents updated");
     if (changes.length === 0) changes.push("Details updated");
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "LearnerProfile",
       entityId: id, entityLabel: profile.fullName,

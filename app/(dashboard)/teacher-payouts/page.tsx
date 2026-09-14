@@ -27,6 +27,7 @@ interface Due {
   sessionCount: number; totalHours: number; suggestedAmount: number;
   periodFrom: string; periodTo: string; note: string;
   lines: PayLine[]; mixed: boolean;
+  salaryPeriod?: { current: string; paid: boolean; payoutNumber?: string };
 }
 interface Payout {
   id: string; payoutNumber: string; teacherName: string; basis: string;
@@ -57,6 +58,8 @@ export default function TeacherPayoutsPage() {
   const [expenseAccountCode, setExpenseAccountCode] = useState("");
   const [paymentAccountCode, setPaymentAccountCode] = useState("");
   const [notes, setNotes] = useState("");
+  // Monthly trainers: which salary month this payment covers (server refuses a repeat)
+  const [periodMonth, setPeriodMonth] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -83,6 +86,7 @@ export default function TeacherPayoutsPage() {
     setAmount(String(d.suggestedAmount));
     setPaidDate(new Date().toISOString().slice(0, 10));
     setReason(""); setNotes(""); setError("");
+    setPeriodMonth(d.salaryPeriod?.current ?? "");
   };
 
   const submit = async () => {
@@ -97,6 +101,7 @@ export default function TeacherPayoutsPage() {
           amount: Number(amount) || 0,
           adjustmentReason: reason,
           paidDate, expenseAccountCode, paymentAccountCode, notes,
+          periodMonth: target.basis === "Monthly" ? periodMonth : undefined,
         }),
       });
       const d = await res.json();
@@ -290,7 +295,10 @@ export default function TeacherPayoutsPage() {
               <Button
                 variant="solid"
                 onClick={submit}
-                disabled={saving || !(Number(amount) > 0) || (!!adjusted && reason.trim().length < 3)}
+                disabled={
+                  saving || !(Number(amount) > 0) || (!!adjusted && reason.trim().length < 3) ||
+                  (target.basis === "Monthly" && !/^\d{4}-\d{2}$/.test(periodMonth))
+                }
               >
                 {saving ? "Recording…" : `Mark Paid · ${fmt(Number(amount) || 0)}`}
               </Button>
@@ -405,6 +413,22 @@ export default function TeacherPayoutsPage() {
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="e.g. advance already given, bonus, deduction"
+                />
+              </Field>
+            )}
+
+            {target.basis === "Monthly" && (
+              <Field
+                label="Salary Month"
+                required
+                htmlFor="payout-period"
+                help="Each month's salary can only be recorded once."
+              >
+                <Input
+                  id="payout-period"
+                  type="month"
+                  value={periodMonth}
+                  onChange={(e) => setPeriodMonth(e.target.value)}
                 />
               </Field>
             )}

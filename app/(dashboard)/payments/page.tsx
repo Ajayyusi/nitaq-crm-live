@@ -202,8 +202,14 @@ export default function PaymentsPage() {
         body: JSON.stringify(payload),
       }).then((r) => r.json());
       if (res.message && !res.payment) throw new Error(res.message);
-      setDrawerOpen(false);
       fetchPayments();
+      // Saved, but the ledger entry failed — keep the drawer open so the
+      // warning is seen rather than silently leaving the books out of step.
+      if (res.warning) {
+        setFormError(res.warning);
+        return;
+      }
+      setDrawerOpen(false);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Couldn't save this receipt. Check the details and try again.");
     } finally {
@@ -216,7 +222,13 @@ export default function PaymentsPage() {
     setDeleting(true);
     setDeleteError("");
     try {
-      await fetch(`/api/payments/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/payments/${deleteTarget.id}`, { method: "DELETE" });
+      // A refused delete (not an admin, locked period) used to close the dialog as if it worked
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.message || data.error || "Couldn't delete this receipt.");
+        return;
+      }
       setDeleteTarget(null);
       void fetchPayments();
     } catch {

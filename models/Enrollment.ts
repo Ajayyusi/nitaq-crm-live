@@ -42,10 +42,12 @@ export interface IEnrollment extends Document {
   amountPaid: number;
   notes?: string;
   registrationDate: Date;
+  /** Why the invoice entry for this registration could not be posted (cleared on success). */
+  postingError?: string;
   arAccountCode?: string;   // this student's ledger account under Accounts Receivable
-  // ── Teacher assignment & hour tracking (per course registration) ──
+  // ââ Teacher assignment & hour tracking (per course registration) ââ
   /**
-   * Primary trainer. Always mirrors teacherIds[0] — kept as a scalar so
+   * Primary trainer. Always mirrors teacherIds[0] â kept as a scalar so
    * payroll, class sessions and every existing query keep working.
    */
   teacherId?: mongoose.Types.ObjectId;
@@ -57,7 +59,7 @@ export interface IEnrollment extends Document {
   teacherPayRate?: number;
   teacherPayBasis?: TeacherPayBasis;
   totalRegisteredHours?: number;
-  completedHours?: number;              // recalculated from ClassSession records — never edited directly
+  completedHours?: number;              // recalculated from ClassSession records â never edited directly
   expectedCompletionDate?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -85,6 +87,7 @@ const EnrollmentSchema = new Schema<IEnrollment>(
     notes: { type: String, trim: true, maxlength: 2000 },
     registrationDate: { type: Date, default: Date.now },
     arAccountCode: { type: String, trim: true },
+    postingError: { type: String, trim: true, maxlength: 500 },
     teacherId: { type: Schema.Types.ObjectId, ref: "Teacher" },
     teacherName: { type: String, trim: true },
     teacherIds: [{ type: Schema.Types.ObjectId, ref: "Teacher" }],
@@ -101,6 +104,16 @@ const EnrollmentSchema = new Schema<IEnrollment>(
 EnrollmentSchema.index({ status: 1, createdAt: -1 });
 EnrollmentSchema.index({ course: 1, status: 1 });
 EnrollmentSchema.index({ registrationDate: -1 });
+// One registration per lead. Conversion was read-then-create, so two saves at
+// once (edit drawer + Convert, two tabs) created two enrollments for the same
+// lead — and, once fees were set, two invoices. Partial: registrations
+// entered without a lead are unaffected. Check existing data first with
+// scripts/migrations/find-duplicate-postings.ts (it also reports leads with
+// more than one enrollment).
+EnrollmentSchema.index(
+  { leadId: 1 },
+  { unique: true, name: "uniq_enrollment_per_lead", partialFilterExpression: { leadId: { $type: "objectId" } } }
+);
 
 const Enrollment =
   (mongoose.models.Enrollment as mongoose.Model<IEnrollment>) ||

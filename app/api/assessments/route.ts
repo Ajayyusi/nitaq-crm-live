@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       fileRef:          String(body.fileRef ?? "").trim() || undefined,
     });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "LearnerAssessment",
       entityId: assessment._id.toString(), entityLabel: `${assessment.unitCode}`,

@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     const hours = await recalcEnrollmentHours(enrollmentId);
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "ClassSession",
       entityId: session._id.toString(), entityLabel: `${enrollment.fullName} · ${enrollment.course}`,

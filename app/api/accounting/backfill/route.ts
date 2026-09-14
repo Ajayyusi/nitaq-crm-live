@@ -4,7 +4,7 @@ import Enrollment from "@/models/Enrollment";
 import { Payment, Expense } from "@/models/Financial";
 import ChartOfAccount from "@/models/accounting/ChartOfAccount";
 import JournalEntry from "@/models/accounting/JournalEntry";
-import { postStudentInvoice, postCustomerReceipt, postExpensePaid } from "@/lib/accounting/postings";
+import { postStudentInvoice, postExpensePaid, planForPayment, postForNewDocument } from "@/lib/accounting/postings";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
 
@@ -28,8 +28,11 @@ export async function POST() {
     );
   }
 
-  // Pre-load existing entry source ids to skip cheaply
-  const existing = await JournalEntry.find({ sourceId: { $type: "string" } }).select("sourceType sourceId").lean();
+  // Pre-load ACTIVE entries to skip cheaply. Reversed/cancelled entries must
+  // not count: a document whose only entry was reversed (e.g. by the old
+  // payment-edit bug) is exactly what a backfill has to re-post.
+  const existing = await JournalEntry.find({ sourceId: { $type: "string" }, status: { $in: ["Draft", "Posted"] } })
+    .select("sourceType sourceId").lean();
   const have = new Set(existing.map((e) => `${e.sourceType}:${e.sourceId}`));
 
   let invoices = 0, receipts = 0, expenses = 0, failed = 0;
@@ -57,23 +60,20 @@ export async function POST() {
   const payments = await Payment.find({ status: "Received", amount: { $gt: 0 } }).lean();
   for (const p of payments) {
     const id = p._id.toString();
-    if (have.has(`Receipt:${id}`)) continue;
+    if (have.has(`Receipt:${id}`) || have.has(`Refund:${id}`)) continue;
+    // Refund-type payments post money OUT (planForPayment picks the rule)
+    let plan = null;
     try {
-      const entry = await postCustomerReceipt({
-        sourceId: id,
-        sourceNumber: p.paymentId ?? id,
-        date: p.datePaid ?? p.createdAt ?? new Date(),
-        studentName: p.studentName,
-        course: p.course,
-        amount: p.amount,
-        paymentMethod: p.paymentMethod ?? "Cash",
-        asAdvance: !p.enrollmentId,
-        enrollmentId: p.enrollmentId?.toString(),
-        createdBy: `${authed.name} (backfill)`,
-      });
-      if (entry) await Payment.updateOne({ _id: p._id }, { $set: { journalEntryId: entry._id } });
+      plan = await planForPayment({ ...p, datePaid: p.datePaid ?? p.createdAt }, `${authed.name} (backfill)`);
+    } catch { failed++; continue; }
+    const { entry, postingError } = await postForNewDocument(plan);
+    if (entry) {
+      await Payment.updateOne({ _id: p._id }, { $set: { journalEntryId: entry._id }, $unset: { postingError: 1 } });
       receipts++;
-    } catch { failed++; }
+    } else if (postingError) {
+      await Payment.updateOne({ _id: p._id }, { $set: { postingError } });
+      failed++;
+    }
   }
 
   // 3. Expenses → expense entries (Dr expense / Cr money)
@@ -101,9 +101,9 @@ export async function POST() {
     } catch { failed++; }
   }
 
-  const message = `Backfill complete: ${invoices} invoices, ${receipts} receipts, ${expenses} expenses posted${failed ? `, ${failed} skipped (already posted or invalid)` : ""}.`;
+  const message = `Backfill complete: ${invoices} invoices, ${receipts} receipts, ${expenses} expenses posted${failed ? `, ${failed} could not be posted (see each document's posting error)` : ""}.`;
 
-  logAudit({
+  await logAudit({
     userName: authed.name, userRole: authed.role,
     action: "created", entity: "JournalEntry", entityId: "backfill",
     entityLabel: "CRM Backfill", detail: message,

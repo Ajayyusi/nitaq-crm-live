@@ -133,6 +133,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const body = (await request.json()) as LeadUpdatePayload & { appendNote?: string };
     // Sales cannot reassign leads to others
     if (authed.role === "sales") delete body.assignedTo;
+    // Moving a lead to Enrolled creates a registration. Registrations are an
+    // admin/manager decision (POST /api/enrollments is admin/manager only);
+    // sales used to bypass that — and the enrollment-request approval — simply
+    // by picking "Enrolled" in the edit drawer.
+    if (authed.role === "sales" && body.stage === "Enrolled" && existing.stage !== "Enrolled") {
+      return NextResponse.json(
+        { message: "Sales can't enrol a student directly — submit an enrollment request for approval." },
+        { status: 403 }
+      );
+    }
 
     // Handle note append separately via $push
     const { appendNote, ...rest } = body;
@@ -155,7 +165,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if ("nextFollowUpDate" in $set) changes.push("Follow-up date updated");
     if (appendNote) changes.push("Note added");
     if (changes.length === 0 && Object.keys($set).length > 0) changes.push("Details updated");
-    logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Lead", entityId: id, entityLabel: lead.fullName, detail: changes.join(" · ") });
+    await logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "Lead", entityId: id, entityLabel: lead.fullName, detail: changes.join(" · ") });
 
     // A converted or closed lead is no longer being chased: clear its
     // follow-up state so it can never keep surfacing as an overdue chase on
@@ -169,7 +179,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         { $set: { status: "Done" } }
       );
       if (closed.modifiedCount > 0) {
-        logAudit({
+        await logAudit({
           userName: authed.name, userRole: authed.role,
           action: "updated", entity: "FollowUp", entityId: id, entityLabel: lead.fullName,
           detail: `${closed.modifiedCount} pending follow-up${closed.modifiedCount === 1 ? "" : "s"} closed — lead moved to ${stageAfter}`,
@@ -186,21 +196,30 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         const seq = await getNextSequence("enrollment");
         const enrollmentIdStr = `E-${String(seq).padStart(3, "0")}`;
         const course = lead.course === "Other" && lead.customCourse ? lead.customCourse : lead.course;
-        const enrollment = await Enrollment.create({
-          enrollmentId: enrollmentIdStr,
-          leadId:       lead._id,
-          fullName:     lead.fullName,
-          phone:        lead.phone,
-          email:        lead.email || undefined,
-          course,
-          status:       "Active",
-          paymentStatus:"Instalment 1 Paid",
-          totalFee:     0,
-          amountPaid:   0,
-          registrationDate: new Date(),
-        });
+        // Two saves at once (edit drawer + Convert, two tabs) both pass the
+        // findOne above; the unique index on leadId lets only one create.
+        let enrollment;
+        try {
+          enrollment = await Enrollment.create({
+            enrollmentId: enrollmentIdStr,
+            leadId:       lead._id,
+            fullName:     lead.fullName,
+            phone:        lead.phone,
+            email:        lead.email || undefined,
+            course,
+            status:       "Active",
+            paymentStatus:"Instalment 1 Paid",
+            totalFee:     0,
+            amountPaid:   0,
+            registrationDate: new Date(),
+          });
+        } catch (err) {
+          if ((err as { code?: number }).code !== 11000) throw err;
+          const winner = await Enrollment.findOne({ leadId: id }).lean();
+          return NextResponse.json({ lead: serializeLead(lead), enrollmentId: winner?._id.toString() });
+        }
         enrollmentId = enrollment._id.toString();
-        logAudit({
+        await logAudit({
           userName: authed.name, userRole: authed.role,
           action: "created", entity: "Enrollment",
           entityId: enrollmentId, entityLabel: lead.fullName,
@@ -229,6 +248,6 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   await connectDB();
   const lead = await Lead.findByIdAndDelete(id);
   if (!lead) return NextResponse.json({ message: "Lead not found." }, { status: 404 });
-  logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "Lead", entityId: id, entityLabel: lead.fullName });
+  await logAudit({ userName: authed.name, userRole: authed.role, action: "deleted", entity: "Lead", entityId: id, entityLabel: lead.fullName });
   return NextResponse.json({ message: "Lead deleted." });
 }

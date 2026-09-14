@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       user.twoFactorPendingSecret = undefined;
       user.twoFactorEnabled = true;
       await user.save();
-      logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "User", entityId: authed.id, entityLabel: authed.name, detail: "2FA enabled" });
+      await logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "User", entityId: authed.id, entityLabel: authed.name, detail: "2FA enabled" });
       return NextResponse.json({ enabled: true, message: "Two-factor authentication is now ON." });
     }
 
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       user.twoFactorSecret = undefined;
       user.twoFactorPendingSecret = undefined;
       await user.save();
-      logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "User", entityId: authed.id, entityLabel: authed.name, detail: "2FA disabled" });
+      await logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "User", entityId: authed.id, entityLabel: authed.name, detail: "2FA disabled" });
       return NextResponse.json({ enabled: false, message: "Two-factor authentication is OFF." });
     }
 

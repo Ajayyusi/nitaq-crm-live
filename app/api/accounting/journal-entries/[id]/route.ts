@@ -2,13 +2,14 @@ import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import JournalEntry from "@/models/accounting/JournalEntry";
-import ChartOfAccount from "@/models/accounting/ChartOfAccount";
-import { postJournalEntry, reverseJournalEntry, AccountingError } from "@/lib/accounting/engine";
+import {
+  postJournalEntry, reverseJournalEntry, AccountingError,
+  validateJournalLines, loadPostingAccounts, assertOpenPeriod,
+} from "@/lib/accounting/engine";
 import { requireAuth } from "@/lib/api-auth";
 import { logAudit } from "@/lib/audit";
 
 type RouteContext = { params: Promise<{ id: string }> };
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const authed = await requireAuth(["admin", "accountant", "manager"]);
@@ -61,12 +62,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (body.action === "post") {
       const entry = await postJournalEntry(id, authed.name);
-      logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "JournalEntry", entityId: id, entityLabel: entry.jvNumber, detail: "Posted" });
+      await logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "JournalEntry", entityId: id, entityLabel: entry.jvNumber, detail: "Posted" });
       return NextResponse.json({ entry });
     }
     if (body.action === "reverse") {
       const reversal = await reverseJournalEntry(id, authed.name, body.reason);
-      logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "JournalEntry", entityId: id, entityLabel: reversal.jvNumber, detail: "Reversal created" });
+      await logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "JournalEntry", entityId: id, entityLabel: reversal.jvNumber, detail: "Reversal created" });
       return NextResponse.json({ entry: reversal });
     }
     if (body.action === "cancel") {
@@ -75,7 +76,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (entry.status !== "Draft") throw new AccountingError("Only Draft entries can be cancelled.");
       entry.status = "Cancelled";
       await entry.save();
-      logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "JournalEntry", entityId: id, entityLabel: entry.jvNumber, detail: "Cancelled" });
+      await logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "JournalEntry", entityId: id, entityLabel: entry.jvNumber, detail: "Cancelled" });
       return NextResponse.json({ entry });
     }
 
@@ -85,39 +86,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (entry.status !== "Draft")
       throw new AccountingError("Posted entries are immutable — use Reverse instead.");
 
-    if ("date" in body) entry.date = new Date(body.date);
+    // Draft edits obey the same rules as creating an entry. They used to skip
+    // them, so a draft could be moved into a locked period or given a line
+    // with both a debit and a credit, and then posted.
+    if ("date" in body) {
+      const d = new Date(body.date);
+      if (Number.isNaN(d.getTime())) throw new AccountingError("Entry date is not a valid date.");
+      await assertOpenPeriod(d, "date a draft in");
+      entry.date = d;
+    }
     if ("description" in body) entry.description = String(body.description).trim();
     if ("reference" in body) entry.reference = String(body.reference).trim() || undefined;
 
-    if ("lines" in body && Array.isArray(body.lines)) {
-      let totalDebit = 0, totalCredit = 0;
-      const codes = [...new Set(body.lines.map((l: { accountCode: string }) => String(l.accountCode).trim()))];
-      const accounts = await ChartOfAccount.find({ code: { $in: codes } }).lean();
-      const byCode = new Map(accounts.map((a) => [a.code, a]));
-      const lines = [];
-      for (const l of body.lines) {
-        const code = String(l.accountCode).trim();
-        const acc = byCode.get(code);
-        if (!acc) throw new AccountingError(`Account ${code} not found.`);
-        if (!acc.isPosting) throw new AccountingError(`Account ${code} is a parent account.`);
-        const debit = round2(Number(l.debit) || 0);
-        const credit = round2(Number(l.credit) || 0);
-        totalDebit = round2(totalDebit + debit);
-        totalCredit = round2(totalCredit + credit);
-        lines.push({
-          accountCode: code, accountName: acc.name, debit, credit,
-          description: String(l.description ?? "").trim() || undefined,
-          studentRef: l.studentRef || undefined,
-          supplierRef: l.supplierRef || undefined,
-          courseRef: l.courseRef || undefined,
-        });
-      }
-      entry.lines = lines as never;
+    if ("lines" in body) {
+      const { lines, totalDebit, totalCredit } = validateJournalLines(body.lines);
+      const byCode = await loadPostingAccounts(lines.map((l) => l.accountCode));
+      entry.lines = lines.map((l) => ({ ...l, accountName: byCode.get(l.accountCode)!.name })) as never;
       entry.totalDebit = totalDebit;
       entry.totalCredit = totalCredit;
     }
 
     await entry.save();
+    await logAudit({ userName: authed.name, userRole: authed.role, action: "updated", entity: "JournalEntry", entityId: id, entityLabel: entry.jvNumber, detail: `Draft edited · AED ${entry.totalDebit}` });
     return NextResponse.json({ entry });
   } catch (error) {
     const status = error instanceof AccountingError ? 400 : 500;

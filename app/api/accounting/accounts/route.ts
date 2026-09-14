@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       isSystem: false,
     });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "ChartOfAccount",
       entityId: account._id.toString(), entityLabel: `${code} ${name}`,

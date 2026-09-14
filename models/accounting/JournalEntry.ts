@@ -104,10 +104,25 @@ const JournalEntrySchema = new Schema<IJournalEntry>(
 
 JournalEntrySchema.index({ date: -1, status: 1 });
 JournalEntrySchema.index({ "lines.accountCode": 1, date: 1 });
-// One ACTIVE journal entry per CRM source document is enforced in the engine
-// (Reversed/Cancelled entries may share a sourceId with their repost, so this
-// index is intentionally NOT unique).
+// Lookup index for entries by CRM source document. Not unique: Reversed and
+// Cancelled entries share a sourceId with their repost.
 JournalEntrySchema.index({ sourceType: 1, sourceId: 1 });
+// The database-level guarantee behind "one POSTED entry per source document".
+// The engine's findOne check alone is read-then-write, so two concurrent
+// requests (double-click, retry, parallel backfill) could both pass it and
+// post the same payment twice. Partial: only Posted entries that carry a
+// sourceId take part, so reversed originals and manual JVs are unaffected.
+// Key order differs from the lookup index on purpose (distinct key pattern).
+// Existing duplicates would stop this index building — check first with
+// scripts/migrations/find-duplicate-postings.ts.
+JournalEntrySchema.index(
+  { sourceId: 1, sourceType: 1 },
+  {
+    unique: true,
+    name: "uniq_posted_entry_per_source",
+    partialFilterExpression: { status: "Posted", sourceId: { $type: "string" } },
+  }
+);
 
 export default (mongoose.models.JournalEntry as mongoose.Model<IJournalEntry>) ||
   mongoose.model<IJournalEntry>("JournalEntry", JournalEntrySchema);

@@ -174,6 +174,25 @@ export function serializeEnrollment(e: any) {
   };
 }
 
+/**
+ * A registration as a TRAINER may see it. Same shape as serializeEnrollment
+ * (so trainer screens keep working), but the student's identity documents and
+ * the academy's money facts are blanked: trainers used to receive every
+ * assigned student's Emirates ID, nationality, fee, amount paid and balance.
+ * Their own pay rate for the registration stays visible.
+ */
+export function serializeEnrollmentForTrainer(e: any) {
+  return {
+    ...serializeEnrollment(e),
+    emiratesId: "",
+    nationality: "",
+    totalFee: 0,
+    amountPaid: 0,
+    balanceDue: 0,
+    paymentStatus: "",
+  };
+}
+
 export function serializePayment(p: any) {
   return {
     id: p._id.toString(),

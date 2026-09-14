@@ -30,7 +30,9 @@ export async function POST() {
   try {
     await connectDB();
     const admin = await User.findById(u.impersonatorId).lean();
-    if (!admin || !admin.active) {
+    // Still an active ADMIN: a demoted or deactivated admin must not be able to
+    // mint themselves a fresh admin session from a lingering impersonation.
+    if (!admin || !admin.active || admin.role !== "admin") {
       return NextResponse.json(
         { message: "Your own account is no longer available. Please sign in again." },
         { status: 400 }
@@ -50,7 +52,7 @@ export async function POST() {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    logAudit({
+    await logAudit({
       userName: admin.name,
       userRole: admin.role,
       action: "updated",

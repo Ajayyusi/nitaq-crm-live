@@ -62,6 +62,19 @@ describe("csvEscape", () => {
     expect(csvEscape("a\nb")).toBe('"a\nb"');
     expect(csvEscape("a\r\nb")).toBe('"a\r\nb"');
   });
+
+  it("neutralises spreadsheet formulas typed into a text field", () => {
+    expect(csvEscape('=HYPERLINK("http://x","click")')).toBe(`"'=HYPERLINK(""http://x"",""click"")"`);
+    expect(csvEscape("+971 cmd")).toBe("'+971 cmd");
+    expect(csvEscape("@SUM(A1)")).toBe("'@SUM(A1)");
+    expect(csvEscape("-2+3")).toBe("'-2+3");
+  });
+
+  it("leaves real numbers numeric, including negatives", () => {
+    expect(csvEscape(-40.5)).toBe("-40.5");
+    expect(csvEscape("-40.5")).toBe("-40.5");
+    expect(csvEscape("+5")).toBe("+5");
+  });
 });
 
 describe("toCsv", () => {

@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "Supplier",
       entityId: supplier._id.toString(), entityLabel: `${supplierCode} ${name}`,

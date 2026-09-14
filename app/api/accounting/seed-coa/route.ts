@@ -55,7 +55,7 @@ export async function POST() {
   // Ensure the settings singleton exists with sensible defaults
   await getAccountingSettings();
 
-  logAudit({
+  await logAudit({
     userName: authed.name, userRole: authed.role,
     action: "created", entity: "ChartOfAccount", entityId: "seed",
     entityLabel: "COA Seed", detail: `${created} accounts created, ${existing} already existed`,

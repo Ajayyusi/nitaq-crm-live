@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       leadId: body.leadId || undefined,
     });
 
-    logAudit({ userName: authed.name, userRole: authed.role, action: "created", entity: "FollowUp", entityId: followUp._id.toString(), entityLabel: followUp.contactName, detail: `${followUp.type} · ${new Date(followUp.followUpDate).toLocaleDateString("en-GB")}` });
+    await logAudit({ userName: authed.name, userRole: authed.role, action: "created", entity: "FollowUp", entityId: followUp._id.toString(), entityLabel: followUp.contactName, detail: `${followUp.type} · ${new Date(followUp.followUpDate).toLocaleDateString("en-GB")}` });
     return NextResponse.json({ followUp: serializeFollowUp(followUp) }, { status: 201 });
   } catch (error) {
     const message =

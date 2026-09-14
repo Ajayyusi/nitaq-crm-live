@@ -37,6 +37,8 @@ export interface ITeacherPayout extends Document {
   paidDate: Date;
   expenseAccountCode: string;
   paymentAccountCode: string;
+  /** Salary month (YYYY-MM, UAE time) — set on Monthly payouts only. */
+  periodKey?: string;
   journalEntryId?: mongoose.Types.ObjectId;
   notes?: string;
   createdBy: string;
@@ -83,6 +85,7 @@ const TeacherPayoutSchema = new Schema<ITeacherPayout>(
     paidDate:     { type: Date, required: true },
     expenseAccountCode: { type: String, required: true, trim: true },
     paymentAccountCode: { type: String, required: true, trim: true },
+    periodKey:    { type: String, trim: true, match: /^\d{4}-(0[1-9]|1[0-2])$/ },
     journalEntryId: { type: Schema.Types.ObjectId, ref: "JournalEntry" },
     notes:        { type: String, trim: true, maxlength: 1000 },
     createdBy:    { type: String, required: true, trim: true },
@@ -91,6 +94,14 @@ const TeacherPayoutSchema = new Schema<ITeacherPayout>(
 );
 
 TeacherPayoutSchema.index({ teacherId: 1, paidDate: -1 });
+// A monthly salary is paid once per trainer per month. Nothing else ties a
+// Monthly payout to a period (it has no sessions to claim), so without this a
+// second click, or a second admin, pays the same month again. Partial: payouts
+// written before periodKey existed, and non-monthly payouts, are unaffected.
+TeacherPayoutSchema.index(
+  { teacherId: 1, periodKey: 1 },
+  { unique: true, name: "uniq_monthly_salary_period", partialFilterExpression: { periodKey: { $type: "string" } } }
+);
 
 export default (mongoose.models.TeacherPayout as mongoose.Model<ITeacherPayout>) ||
   mongoose.model<ITeacherPayout>("TeacherPayout", TeacherPayoutSchema);

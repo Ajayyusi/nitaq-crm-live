@@ -2,9 +2,14 @@ import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import { Expense, expenseCategories, expensePaymentMethods } from "@/models/Financial";
+import JournalEntry from "@/models/accounting/JournalEntry";
 import { serializeExpense } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
-import { postExpensePaid, postSafely, reverseEntryForSource } from "@/lib/accounting/postings";
+import { logAudit } from "@/lib/audit";
+import { parseAmount, round2 } from "@/lib/money";
+import { apiError } from "@/lib/api-error";
+import { parseOptionalDate, sameDay, toMongoUpdate } from "@/lib/mongo-update";
+import { planExpensePaid, syncSourceEntry } from "@/lib/accounting/postings";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -42,6 +47,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     await connectDB();
     const body = await request.json();
+
+    const existing = await Expense.findById(id).lean();
+    if (!existing) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
+
     const update: Record<string, unknown> = {};
 
     if ("category" in body) {
@@ -49,12 +58,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (!allowedCategories.has(v)) throw new Error("Invalid category.");
       update.category = v;
     }
-    if ("amount" in body) {
-      const amt = Number(body.amount);
-      if (amt <= 0) throw new Error("Amount must be greater than 0.");
-      update.amount = amt;
+    if ("amount" in body) update.amount = parseAmount(body.amount);
+    if ("expenseDate" in body) {
+      const d = parseOptionalDate(body.expenseDate, "Expense date");
+      if (!d) throw new Error("Expense date is required.");
+      if (!sameDay(d, existing.expenseDate)) update.expenseDate = d;
     }
-    if ("expenseDate" in body) update.expenseDate = body.expenseDate ? new Date(body.expenseDate) : undefined;
     if ("paymentMethod" in body) {
       const v = clean(body.paymentMethod);
       update.paymentMethod = allowedExpenseMethods.has(v) ? v : undefined;
@@ -65,53 +74,79 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     // Expense ledger account (Chart of Accounts) — the account the payment posts to
     if ("expenseAccountCode" in body) update.expenseAccountCode = clean(body.expenseAccountCode) || undefined;
 
-    // Books must follow the CRM: reverse the old entry when money facts change
-    const existing = await Expense.findById(id).lean();
-    if (!existing) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
-    const affectsEntry =
-      ("amount" in update && update.amount !== existing.amount) ||
-      ("category" in update && update.category !== existing.category) ||
-      ("paymentMethod" in update && update.paymentMethod !== existing.paymentMethod) ||
-      ("expenseAccountCode" in update && update.expenseAccountCode !== existing.expenseAccountCode) ||
-      ("expenseDate" in update);
-    if (affectsEntry && existing.journalEntryId) {
-      await postSafely(() => reverseEntryForSource("Expense", id, authed.name, "Expense edited in CRM"));
-      update.journalEntryId = undefined;
-      // recompute VAT split on the new amount (keeps prior vatRate)
-      const total = Number(update.amount ?? existing.amount) || 0;
+    const next = { ...existing, ...update };
+
+    // The VAT split always follows the current amount — it used to be
+    // recomputed only when an entry existed, so stale figures could be posted.
+    if (next.amount !== existing.amount) {
       const vatRate = existing.vatRate ?? 0;
-      const vatAmount = vatRate > 0 ? Math.round(total * vatRate / (100 + vatRate) * 100) / 100 : 0;
-      update.vatAmount = vatAmount;
-      update.amountBeforeVAT = Math.round((total - vatAmount) * 100) / 100;
+      const vatAmount = vatRate > 0 ? round2(next.amount * vatRate / (100 + vatRate)) : 0;
+      update.vatAmount = next.vatAmount = vatAmount;
+      update.amountBeforeVAT = next.amountBeforeVAT = round2(next.amount - vatAmount);
     }
 
-    const expense = await Expense.findByIdAndUpdate(id, update, { new: true, runValidators: true });
+    const moneyChanged =
+      next.amount !== existing.amount ||
+      next.category !== existing.category ||
+      next.paymentMethod !== existing.paymentMethod ||
+      next.expenseAccountCode !== existing.expenseAccountCode ||
+      "expenseDate" in update;
+    // An expense with no live entry (e.g. broken by the old edit bug) is
+    // re-posted on its next edit.
+    const missingEntry =
+      !moneyChanged &&
+      !(await JournalEntry.exists({ sourceType: "Expense", sourceId: id, status: "Posted" }));
+    const affectsLedger = moneyChanged || missingEntry;
+
+    const plan = affectsLedger
+      ? await planExpensePaid({
+          sourceId: id,
+          sourceNumber: existing.expenseId,
+          date: next.expenseDate ?? new Date(),
+          expenseAccountCode: next.expenseAccountCode,
+          category: next.category,
+          description: next.description ?? "",
+          amountBeforeVAT: next.amountBeforeVAT ?? next.amount,
+          vatAmount: next.vatAmount ?? 0,
+          paymentMethod: next.paymentMethod ?? "Cash",
+          createdBy: authed.name,
+        })
+      : null;
+    if (affectsLedger) {
+      update.journalEntryId = undefined;
+      update.postingError = undefined;
+    }
+
+    const sync = await syncSourceEntry({
+      sourceTypes: ["Expense"],
+      sourceId: id,
+      plan,
+      affectsLedger,
+      actor: authed.name,
+      reason: "Expense edited in CRM",
+      applyChange: () => Expense.findByIdAndUpdate(id, toMongoUpdate(update), { new: true, runValidators: true }),
+    });
+    const expense = sync.result;
     if (!expense) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
-
-    // Re-post if the active entry was reversed above
-    if (affectsEntry && !expense.journalEntryId) {
-      const entry = await postSafely(() => postExpensePaid({
-        sourceId: id,
-        sourceNumber: expense.expenseId,
-        date: expense.expenseDate ?? new Date(),
-        expenseAccountCode: expense.expenseAccountCode,
-        category: expense.category,
-        description: expense.description ?? "",
-        amountBeforeVAT: expense.amountBeforeVAT ?? expense.amount,
-        vatAmount: expense.vatAmount ?? 0,
-        paymentMethod: expense.paymentMethod ?? "Cash",
-        createdBy: authed.name,
-      }));
-      if (entry) {
-        expense.journalEntryId = entry._id as never;
-        await expense.save();
-      }
+    if (sync.entry || sync.postingError) {
+      if (sync.entry) expense.journalEntryId = sync.entry._id as never;
+      if (sync.postingError) expense.postingError = sync.postingError;
+      await expense.save();
     }
 
-    return NextResponse.json({ expense: serializeExpense(expense) });
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "updated", entity: "Expense",
+      entityId: id, entityLabel: `${expense.expenseId} · ${expense.category}`,
+      detail: `AED ${existing.amount} → ${expense.amount}` +
+        `${sync.postingError ? ` · LEDGER POSTING FAILED: ${sync.postingError}` : ""}`,
+    });
+
+    return NextResponse.json({
+      expense: serializeExpense(expense),
+      ...(sync.postingError ? { warning: `Expense saved, but the accounting entry failed: ${sync.postingError}` } : {}),
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update expense.";
-    return NextResponse.json({ message }, { status: 400 });
+    return apiError(error, "Failed to update expense.", "expenses");
   }
 }
 
@@ -119,15 +154,36 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   const authed = await requireAuth(["admin", "manager", "finance"]);
   if (authed instanceof NextResponse) return authed;
 
+  try {
+    const { id } = await context.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
+    }
+    await connectDB();
+    const existing = await Expense.findById(id).lean();
+    if (!existing) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
 
-  const { id } = await context.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
+    // Reverse first, so a locked period keeps the expense instead of leaving
+    // a live entry for an expense that no longer exists.
+    const sync = await syncSourceEntry({
+      sourceTypes: ["Expense"],
+      sourceId: id,
+      plan: null,
+      affectsLedger: true,
+      actor: authed.name,
+      reason: "Expense deleted in CRM",
+      order: "reverse-first",
+      applyChange: () => Expense.findByIdAndDelete(id),
+    });
+
+    // Expense deletion used to leave no audit trail at all.
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "deleted", entity: "Expense",
+      entityId: id, entityLabel: `${existing.expenseId} · ${existing.category}`,
+      detail: `AED ${existing.amount}${sync.reversed ? ` · reversal ${sync.reversed.jvNumber}` : ""}`,
+    });
+    return NextResponse.json({ message: "Expense deleted." });
+  } catch (error) {
+    return apiError(error, "Failed to delete expense.", "expenses");
   }
-  await connectDB();
-  const expense = await Expense.findByIdAndDelete(id);
-  if (!expense) return NextResponse.json({ message: "Expense not found." }, { status: 404 });
-  // Keep the books in sync: reverse this expense's journal entry
-  await postSafely(() => reverseEntryForSource("Expense", id, authed.name, "Expense deleted in CRM"));
-  return NextResponse.json({ message: "Expense deleted." });
 }

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       notes:     String(body.notes ?? "").trim() || undefined,
     });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "StaffCompliance",
       entityId: record._id.toString(), entityLabel: record.staffName,

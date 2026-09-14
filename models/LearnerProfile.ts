@@ -121,7 +121,8 @@ const LearnerProfileSchema = new Schema<ILearnerProfile>(
 
 LearnerProfileSchema.index({ fullName: "text" });
 LearnerProfileSchema.index({ riskStatus: 1, isActive: 1 });
-LearnerProfileSchema.index({ enrollmentId: 1 });
+// enrollmentId is already indexed by its unique constraint above; a second plain
+// index on the same key made the unique one fail to build when created first.
 
 export default mongoose.models.LearnerProfile ??
   mongoose.model<ILearnerProfile>("LearnerProfile", LearnerProfileSchema);

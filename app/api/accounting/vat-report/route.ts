@@ -21,8 +21,12 @@ export async function GET(request: NextRequest) {
   const dateFilter = buildDateFilter(searchParams.get("from") ?? undefined, searchParams.get("to") ?? undefined);
 
   const vatCodes = [settings.inputVatAccount, settings.outputVatAccount];
+  // Active entries only — the same rule as the trial balance, ledger and
+  // receivables. Including reversed originals AND their reversals listed a
+  // corrected invoice three times and overstated the taxable base.
   const match: Record<string, unknown> = {
-    status: { $in: ["Posted", "Reversed"] },
+    status: "Posted",
+    sourceType: { $ne: "Reversal" },
     "lines.accountCode": { $in: vatCodes },
   };
   if (dateFilter) match.date = dateFilter;

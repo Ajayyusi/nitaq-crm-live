@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       commsLog:  [],
     });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "LearnerProfile",
       entityId: profile._id.toString(), entityLabel: profile.fullName,

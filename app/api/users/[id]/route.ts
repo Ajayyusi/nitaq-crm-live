@@ -5,6 +5,7 @@ import User from "@/models/User";
 import { userRoles } from "@/models/User";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
+import { logAudit } from "@/lib/audit";
 
 const allowedRoles = new Set<string>(userRoles);
 
@@ -21,6 +22,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     await connectDB();
     const body = await request.json();
     const updates: Record<string, unknown> = {};
+    const target = await User.findById(id).select("name email role active").lean();
+    if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 });
 
     if (body.name !== undefined) updates.name = String(body.name).trim();
     if (body.email !== undefined) {
@@ -35,6 +38,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (body.role !== undefined) {
       const role = String(body.role).trim();
       if (!allowedRoles.has(role)) return NextResponse.json({ error: "Invalid role." }, { status: 400 });
+      if (id === authed.id && role !== target.role) {
+        return NextResponse.json({ error: "You cannot change your own role." }, { status: 400 });
+      }
       updates.role = role;
     }
     if (body.active !== undefined) {
@@ -50,8 +56,33 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       updates.password = await bcrypt.hash(pw, 12);
     }
 
+    // Never leave the academy without an active administrator.
+    const losesAdmin =
+      target.role === "admin" && target.active &&
+      ((updates.role !== undefined && updates.role !== "admin") || updates.active === false);
+    if (losesAdmin) {
+      const otherAdmins = await User.countDocuments({ _id: { $ne: id }, role: "admin", active: true });
+      if (otherAdmins === 0) {
+        return NextResponse.json({ error: "This is the last active administrator — make someone else an admin first." }, { status: 409 });
+      }
+    }
+
     const user = await User.findByIdAndUpdate(id, { $set: updates }, { new: true, select: "-password" });
     if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+    // Role changes, deactivations and password resets used to leave no trail.
+    const changes: string[] = [];
+    if (updates.role !== undefined && updates.role !== target.role) changes.push(`Role: ${target.role} → ${String(updates.role)}`);
+    if (updates.active !== undefined && updates.active !== target.active) changes.push(updates.active ? "Reactivated" : "Deactivated");
+    if (updates.email !== undefined && updates.email !== target.email) changes.push(`Email: ${target.email} → ${String(updates.email)}`);
+    if (updates.password !== undefined) changes.push("Password reset by admin");
+    if (updates.name !== undefined && updates.name !== target.name) changes.push(`Name: ${target.name} → ${String(updates.name)}`);
+    if (changes.length) {
+      await logAudit({
+        userName: authed.name, userRole: authed.role, action: "updated", entity: "User",
+        entityId: id, entityLabel: user.name, detail: changes.join(" · "),
+      });
+    }
 
     return NextResponse.json({
       user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role, active: user.active, mobileNumber: user.mobileNumber ?? "" },
@@ -77,8 +108,20 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     }
 
     await connectDB();
+    const target = await User.findById(id).select("role active").lean();
+    if (!target) return NextResponse.json({ error: "User not found." }, { status: 404 });
+    if (target.role === "admin" && target.active) {
+      const otherAdmins = await User.countDocuments({ _id: { $ne: id }, role: "admin", active: true });
+      if (otherAdmins === 0) {
+        return NextResponse.json({ error: "This is the last active administrator and can't be deleted." }, { status: 409 });
+      }
+    }
     const user = await User.findByIdAndDelete(id);
     if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "deleted", entity: "User",
+      entityId: id, entityLabel: user.name, detail: `${user.email} · ${user.role}`,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

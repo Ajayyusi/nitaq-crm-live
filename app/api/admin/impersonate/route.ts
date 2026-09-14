@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       expiresAt: new Date(Date.now() + 60_000), // 60 seconds to redeem
     });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "Impersonation",
       entityId: target._id.toString(), entityLabel: target.name,

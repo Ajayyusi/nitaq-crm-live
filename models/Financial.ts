@@ -68,6 +68,8 @@ export interface IPayment extends Document {
   installmentNumber?: number;
   totalInstallments?: number;
   journalEntryId?: mongoose.Types.ObjectId;   // link to auto-generated accounting entry
+  /** Why the ledger entry for this document could not be posted (cleared on success). */
+  postingError?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -106,6 +108,7 @@ const PaymentSchema = new Schema<IPayment>(
     installmentNumber: { type: Number, min: 1 },
     totalInstallments: { type: Number, min: 1 },
     journalEntryId: { type: Schema.Types.ObjectId, ref: "JournalEntry" },
+    postingError: { type: String, trim: true, maxlength: 500 },
   },
   { timestamps: true },
 );
@@ -133,6 +136,8 @@ export interface IExpense extends Document {
   expenseAccountCode?: string;                 // COA posting account (5xxx)
   supplierId?: mongoose.Types.ObjectId;
   journalEntryId?: mongoose.Types.ObjectId;
+  /** Why the ledger entry for this document could not be posted (cleared on success). */
+  postingError?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -153,6 +158,7 @@ const ExpenseSchema = new Schema<IExpense>(
     expenseAccountCode: { type: String, trim: true },
     supplierId: { type: Schema.Types.ObjectId, ref: "Supplier" },
     journalEntryId: { type: Schema.Types.ObjectId, ref: "JournalEntry" },
+    postingError: { type: String, trim: true, maxlength: 500 },
   },
   { timestamps: true },
 );

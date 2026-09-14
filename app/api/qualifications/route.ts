@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       units:             sanitizeUnits(body.units),
     });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "Qualification",
       entityId: qual._id.toString(), entityLabel: qual.title,

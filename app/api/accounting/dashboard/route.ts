@@ -17,7 +17,7 @@ export async function GET() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const [accounts, allTime, thisMonth] = await Promise.all([
-    ChartOfAccount.find({ isPosting: true }).select("code type openingDebit openingCredit mainAccount category").lean(),
+    ChartOfAccount.find({ isPosting: true }).select("code type openingDebit openingCredit mainAccount category parentCode").lean(),
     aggregateBalances(),
     aggregateBalances(monthStart, now),
   ]);
@@ -41,6 +41,9 @@ export async function GET() {
     const netAll = round2((a.openingDebit ?? 0) - (a.openingCredit ?? 0) + (all?.periodDebit ?? 0) - (all?.periodCredit ?? 0));
     if (a.mainAccount === "CASH") cashBalance = round2(cashBalance + netAll);
     if (a.mainAccount === "BANKS") bankBalance = round2(bankBalance + netAll);
+    // Every per-student receivable lives under parent 10103 (the same set the
+    // Receivables report sums). Reading only the control account showed ~0.
+    if (a.parentCode === "10103") arBalance = round2(arBalance + netAll);
     if (a.mainAccount === "Accounts Payable") apBalance = round2(apBalance - netAll); // liability: credit positive
     if (a.type === "Revenue") {
       revenueAll = round2(revenueAll - netAll);
@@ -51,7 +54,6 @@ export async function GET() {
       expensesMonth = round2(expensesMonth + (month ? month.periodDebit - month.periodCredit : 0));
     }
   }
-  arBalance = net(settings.accountsReceivable);
   const outputVat = -net(settings.outputVatAccount); // liability
   const inputVat = net(settings.inputVatAccount);
   const vatPayable = round2(outputVat - inputVat);

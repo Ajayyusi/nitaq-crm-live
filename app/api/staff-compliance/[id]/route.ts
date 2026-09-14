@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
     if (!record) return NextResponse.json({ message: "Not found." }, { status: 404 });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "StaffCompliance",
       entityId: id, entityLabel: record.staffName,

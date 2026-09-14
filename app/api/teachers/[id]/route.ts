@@ -5,6 +5,7 @@ import Teacher from "@/models/Teacher";
 import { trainerStatuses, tamamStatuses, contractStatuses, paymentTypes } from "@/models/Teacher";
 import { serializeTrainer } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
+import { parseAmount } from "@/lib/money";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -65,7 +66,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       update.contractEndDate = body.contractEndDate ? new Date(body.contractEndDate) : undefined;
     }
     if ("paymentRate" in body) {
-      update.paymentRate = body.paymentRate ? Number(body.paymentRate) : undefined;
+      // A negative or non-numeric rate used to be stored and then silently
+      // reduced other registrations' pay in the payout total.
+      update.paymentRate = body.paymentRate ? parseAmount(body.paymentRate, { field: "Payment rate", allowZero: true }) : undefined;
     }
 
     const trainer = await Teacher.findByIdAndUpdate(id, update, { new: true, runValidators: true });

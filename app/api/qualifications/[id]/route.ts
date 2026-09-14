@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const qual = await Qualification.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true });
     if (!qual) return NextResponse.json({ message: "Not found." }, { status: 404 });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "Qualification",
       entityId: id, entityLabel: qual.title,

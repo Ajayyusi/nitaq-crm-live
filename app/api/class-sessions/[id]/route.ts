@@ -30,6 +30,31 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (!session) return NextResponse.json({ message: "Class record not found." }, { status: 404 });
 
     const body = await request.json();
+
+    // A session already settled to the trainer is part of a payout and its
+    // journal entry. Changing what it was paid for (hours, status, date) would
+    // silently desync pay from the books, so those edits are refused; notes,
+    // topic, homework and attendance stay editable.
+    if (session.payoutId) {
+      const changed: string[] = [];
+      if ("deliveredHours" in body && Math.round((Number(body.deliveredHours) || 0) * 100) / 100 !== session.deliveredHours) {
+        changed.push("hours");
+      }
+      if ("classStatus" in body && clean(body.classStatus) !== session.classStatus) changed.push("class status");
+      if (
+        "classDate" in body && body.classDate &&
+        new Date(body.classDate).toISOString().slice(0, 10) !== session.classDate.toISOString().slice(0, 10)
+      ) {
+        changed.push("date");
+      }
+      if (changed.length) {
+        return NextResponse.json(
+          { message: `This class has already been paid to the trainer, so its ${changed.join(", ")} can't be changed. Correct it with an adjustment on the trainer's next payout.` },
+          { status: 409 }
+        );
+      }
+    }
+
     if ("deliveredHours" in body) {
       const h = Math.round((Number(body.deliveredHours) || 0) * 100) / 100;
       if (h <= 0) return NextResponse.json({ message: "Delivered hours must be greater than zero." }, { status: 400 });
@@ -53,7 +78,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       // allowed (fully consumed) — but warn via notification to admins
     }
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "ClassSession",
       entityId: id, entityLabel: `${session.studentName} · ${session.course}`,
@@ -83,12 +108,20 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ message: "Invalid ID." }, { status: 400 });
 
   await connectDB();
-  const session = await ClassSession.findByIdAndDelete(id);
-  if (!session) return NextResponse.json({ message: "Class record not found." }, { status: 404 });
+  // Deleting a paid session would let the same hours be recorded and paid
+  // again, and it is also what the fixed-course-fee "already paid" check
+  // relies on. The conditional delete makes the check and delete atomic.
+  const session = await ClassSession.findOneAndDelete({ _id: id, payoutId: null });
+  if (!session) {
+    const paid = await ClassSession.exists({ _id: id });
+    return paid
+      ? NextResponse.json({ message: "This class has already been paid to the trainer and can't be deleted." }, { status: 409 })
+      : NextResponse.json({ message: "Class record not found." }, { status: 404 });
+  }
 
   const hours = await recalcEnrollmentHours(session.enrollmentId.toString());
 
-  logAudit({
+  await logAudit({
     userName: authed.name, userRole: authed.role,
     action: "deleted", entity: "ClassSession",
     entityId: id, entityLabel: `${session.studentName} · ${session.course}`,

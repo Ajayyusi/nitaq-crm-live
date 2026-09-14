@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "JournalEntry", entityId: "import",
       entityLabel: "JV Import", detail: `${created}/${groups.size} vouchers imported`,

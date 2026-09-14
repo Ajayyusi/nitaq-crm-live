@@ -4,6 +4,7 @@ import connectDB from "@/lib/db";
 import User from "@/models/User";
 import { userRoles } from "@/models/User";
 import bcrypt from "bcryptjs";
+import { logAudit } from "@/lib/audit";
 
 const allowedRoles = new Set<string>(userRoles);
 
@@ -72,6 +73,10 @@ export async function POST(request: NextRequest) {
 
     const hashed = await bcrypt.hash(password, 12);
     const user = await User.create({ name, email, password: hashed, role, active: true, mobileNumber: mobileNumber || undefined });
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "created", entity: "User",
+      entityId: user._id.toString(), entityLabel: user.name, detail: `${user.email} · ${user.role}`,
+    });
 
     return NextResponse.json({
       user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role, active: user.active, mobileNumber: user.mobileNumber ?? "" },

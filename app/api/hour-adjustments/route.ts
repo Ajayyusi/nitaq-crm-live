@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     });
     const result = await recalcEnrollmentHours(enrollmentId);
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "created", entity: "HourAdjustment",
       entityId: adjustment._id.toString(),

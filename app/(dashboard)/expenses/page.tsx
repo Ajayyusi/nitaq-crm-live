@@ -122,8 +122,14 @@ export default function ExpensesPage() {
         body: JSON.stringify({ ...form, amount: Number(form.amount) }),
       }).then((r) => r.json());
       if (res.message && !res.expense) throw new Error(res.message);
-      setDrawerOpen(false);
       fetchExpenses();
+      // Saved, but the ledger entry failed — keep the drawer open so the
+      // warning is seen rather than silently leaving the books out of step.
+      if (res.warning) {
+        setFormError(res.warning);
+        return;
+      }
+      setDrawerOpen(false);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Couldn't save this expense. Check the details and try again.");
     } finally {
@@ -136,7 +142,13 @@ export default function ExpensesPage() {
     setDeleting(true);
     setDeleteError("");
     try {
-      await fetch(`/api/expenses/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/expenses/${deleteTarget.id}`, { method: "DELETE" });
+      // A refused delete (locked period) used to close the dialog as if it worked
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.message || data.error || "Couldn't delete this expense.");
+        return;
+      }
       setDeleteTarget(null);
       void fetchExpenses();
     } catch {

@@ -62,7 +62,14 @@ export function slugify(text: string) {
  * corrupts every column after it.
  */
 export function csvEscape(value: unknown) {
-  const s = value == null ? "" : String(value);
+  let s = value == null ? "" : String(value);
+  // Spreadsheet formula injection: a cell starting with = + - @ (or a tab/CR)
+  // is executed by Excel/Sheets. Anyone who can type a lead name or a note
+  // could plant =HYPERLINK(...) for a manager to open. Real numbers (-40.5)
+  // are left alone so exported figures stay numeric.
+  if (typeof value !== "number" && /^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(\.\d+)?$/.test(s)) {
+    s = `'${s}`;
+  }
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

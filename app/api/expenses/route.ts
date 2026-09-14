@@ -4,7 +4,12 @@ import { Expense, expenseCategories, expensePaymentMethods } from "@/models/Fina
 import { getNextSequence } from "@/models/Counter";
 import { serializeExpense } from "@/lib/serializers";
 import { requireAuth } from "@/lib/api-auth";
-import { postExpensePaid, postSafely } from "@/lib/accounting/postings";
+import { logAudit } from "@/lib/audit";
+import { parseAmount } from "@/lib/money";
+import { apiError } from "@/lib/api-error";
+import { parseOptionalDate } from "@/lib/mongo-update";
+import { preflightJournalEntry } from "@/lib/accounting/engine";
+import { planExpensePaid, postForNewDocument, splitInclusiveVat } from "@/lib/accounting/postings";
 
 const allowedCategories = new Set<string>(expenseCategories);
 const allowedExpenseMethods = new Set<string>(expensePaymentMethods);
@@ -45,8 +50,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ expenses: expenses.map(serializeExpense), total });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load expenses.";
-    return NextResponse.json({ message }, { status: 500 });
+    return apiError(error, "Failed to load expenses.", "expenses");
   }
 }
 
@@ -61,23 +65,18 @@ export async function POST(request: NextRequest) {
 
     const category = clean(body.category);
     if (!allowedCategories.has(category)) throw new Error("Invalid category.");
-    if (!body.amount || Number(body.amount) <= 0) throw new Error("Amount must be greater than 0.");
+    const total = parseAmount(body.amount);
+    const paymentMethod = clean(body.paymentMethod);
+    const { vatRate, vatAmount, amountBeforeVAT } = await splitInclusiveVat(total, body.vatRate);
 
     const seq = await getNextSequence("expense");
     const expenseId = `EXP-${String(seq).padStart(3, "0")}`;
 
-    const paymentMethod = clean(body.paymentMethod);
-    const total = Math.round(Number(body.amount) * 100) / 100;
-    // VAT breakdown: amount is VAT-inclusive when a vatRate is supplied
-    const vatRate = Math.max(0, Number(body.vatRate) || 0);
-    const vatAmount = vatRate > 0 ? Math.round(total * vatRate / (100 + vatRate) * 100) / 100 : 0;
-    const amountBeforeVAT = Math.round((total - vatAmount) * 100) / 100;
-
-    const expense = await Expense.create({
+    const expense = new Expense({
       expenseId,
       category,
       amount: total,
-      expenseDate: body.expenseDate ? new Date(body.expenseDate) : new Date(),
+      expenseDate: parseOptionalDate(body.expenseDate, "Expense date") ?? new Date(),
       payee: clean(body.payee) || undefined,
       paymentMethod: allowedExpenseMethods.has(paymentMethod) ? paymentMethod : undefined,
       description: clean(body.description) || undefined,
@@ -86,8 +85,10 @@ export async function POST(request: NextRequest) {
       expenseAccountCode: clean(body.expenseAccountCode) || undefined,
     });
 
-    // Auto double-entry: Dr Expense (+ Dr Input VAT) / Cr Cash-Bank-Petty
-    const entry = await postSafely(() => postExpensePaid({
+    // Auto double-entry: Dr Expense (+ Dr Input VAT) / Cr Cash-Bank-Petty.
+    // Validated before saving, so a locked period or a non-expense account is
+    // refused instead of producing an expense the ledger never sees.
+    const plan = await planExpensePaid({
       sourceId: expense._id.toString(),
       sourceNumber: expenseId,
       date: expense.expenseDate,
@@ -97,15 +98,31 @@ export async function POST(request: NextRequest) {
       amountBeforeVAT, vatAmount,
       paymentMethod: paymentMethod || "Cash",
       createdBy: authed.name,
-    }));
-    if (entry) {
-      expense.journalEntryId = entry._id as never;
+    });
+    if (plan) await preflightJournalEntry(plan);
+
+    await expense.save();
+    const { entry, postingError } = await postForNewDocument(plan);
+    if (entry || postingError) {
+      if (entry) expense.journalEntryId = entry._id as never;
+      if (postingError) expense.postingError = postingError;
       await expense.save();
     }
 
-    return NextResponse.json({ expense: serializeExpense(expense) }, { status: 201 });
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "created", entity: "Expense",
+      entityId: expense._id.toString(), entityLabel: `${expenseId} · ${category}`,
+      detail: `AED ${total} (VAT ${vatAmount})${postingError ? ` · LEDGER POSTING FAILED: ${postingError}` : ""}`,
+    });
+
+    return NextResponse.json(
+      {
+        expense: serializeExpense(expense),
+        ...(postingError ? { warning: `Expense saved, but the accounting entry failed: ${postingError}` } : {}),
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to record expense.";
-    return NextResponse.json({ message }, { status: 400 });
+    return apiError(error, "Failed to record expense.", "expenses");
   }
 }

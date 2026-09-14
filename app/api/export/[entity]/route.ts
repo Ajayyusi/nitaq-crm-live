@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/api-auth";
 import { IMPORT_EXPORT_PERMISSIONS, hasRole } from "@/lib/permissions";
 import type { AppRole } from "@/lib/permissions";
 import connectDB from "@/lib/db";
+import { logAudit } from "@/lib/audit";
 import Lead from "@/models/Lead";
 import FollowUp from "@/models/FollowUp";
 import Enrollment from "@/models/Enrollment";
@@ -34,8 +35,16 @@ export async function GET(_req: Request, context: RouteContext) {
   try {
     let rows: Record<string, unknown>[] = [];
 
+    // Sales only ever sees their own pipeline in the app (/api/leads filters by
+    // owner). The export used to ignore that and hand any sales login every
+    // salesperson's leads and follow-ups, phones and emails included.
+    const own = authed.role === "sales"
+      ? new RegExp(`^${authed.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+      : null;
+
     if (entity === "leads") {
-      const docs = await Lead.find({}).sort({ createdAt: -1 }).lean();
+      const docs = await Lead.find(own ? { $or: [{ assignedTo: own }, { createdBy: own }] } : {})
+        .sort({ createdAt: -1 }).lean();
       rows = docs.map((d) => ({
         leadId: d.leadId ?? "",
         fullName: d.fullName,
@@ -49,7 +58,7 @@ export async function GET(_req: Request, context: RouteContext) {
         notes: d.notes ?? "",
       }));
     } else if (entity === "followups") {
-      const docs = await FollowUp.find({}).sort({ followUpDate: -1 }).lean();
+      const docs = await FollowUp.find(own ? { assignedTo: own } : {}).sort({ followUpDate: -1 }).lean();
       rows = docs.map((d) => ({
         contactName: d.contactName,
         phone: d.phone,
@@ -160,6 +169,12 @@ export async function GET(_req: Request, context: RouteContext) {
       return NextResponse.json({ message: `Unknown entity: ${entity}` }, { status: 400 });
     }
 
+    // Bulk exports carry student PII (phones, emails, Emirates IDs) and
+    // financials — who took what, and how much, must be on record.
+    await logAudit({
+      userName: authed.name, userRole: authed.role, action: "exported", entity: "Export",
+      entityId: entity, entityLabel: `${entity} export`, detail: `${rows.length} rows`,
+    });
     return NextResponse.json({ rows });
   } catch (err) {
     console.error(`Export error [${entity}]:`, err);

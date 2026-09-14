@@ -109,7 +109,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     // Keep the COA account name in sync
     await ChartOfAccount.updateOne({ code: supplier.supplierCode }, { $set: { name: supplier.name, isActive: supplier.isActive } });
 
-    logAudit({
+    await logAudit({
       userName: authed.name, userRole: authed.role,
       action: "updated", entity: "Supplier",
       entityId: id, entityLabel: `${supplier.supplierCode} ${supplier.name}`,

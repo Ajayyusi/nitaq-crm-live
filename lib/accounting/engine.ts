@@ -47,135 +47,231 @@ export class AccountingError extends Error {
   }
 }
 
-// One-time migration: drop the legacy unique (sourceType, sourceId) index if
-// it exists — uniqueness is enforced in code so reversed entries can be
-// reposted under the same source document.
+// One-time migration: drop the legacy FULLY unique (sourceType, sourceId) index
+// if it exists — it blocked reposting after a reversal. The partial unique
+// index (Posted entries only) that replaced it must be left alone.
 let indexChecked = false;
 async function ensureNonUniqueSourceIndex() {
   if (indexChecked) return;
   indexChecked = true;
   try {
     const indexes = await JournalEntry.collection.indexes();
-    const legacy = indexes.find((i) => i.unique && i.key?.sourceType === 1 && i.key?.sourceId === 1);
+    const legacy = indexes.find(
+      (i) => i.unique && !i.partialFilterExpression && i.key?.sourceType === 1 && i.key?.sourceId === 1
+    );
     if (legacy?.name) await JournalEntry.collection.dropIndex(legacy.name);
   } catch { /* collection may not exist yet — fine */ }
 }
 
+function isDuplicateSourceError(err: unknown): boolean {
+  const e = err as { code?: number; keyPattern?: Record<string, unknown> };
+  return e?.code === 11000 && !!e.keyPattern && "sourceId" in e.keyPattern;
+}
+
+function parseEntryDate(value: Date | string): Date {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) throw new AccountingError("Entry date is not a valid date.");
+  return d;
+}
+
+export interface NormalisedLine {
+  accountCode: string;
+  debit: number;
+  credit: number;
+  description?: string;
+  studentRef?: string;
+  supplierRef?: string;
+  courseRef?: string;
+}
+
 /**
- * Validates and creates a journal entry.
- *
- * Guarantees:
- *  - Total debits === total credits (to the fils)
- *  - Every line hits an ACTIVE POSTING account that exists in the COA
- *  - At most one entry per (sourceType, sourceId) — duplicates are rejected
- *  - Posted entries are immutable (edits blocked at the API layer; reversals only)
+ * The single set of line rules for every entry, whether created, edited as a
+ * draft, or posted: at least two lines, finite non-negative amounts, one side
+ * per line, no empty lines, and debits equal to credits to the fils.
  */
-export async function createJournalEntry(input: CreateJournalEntryInput): Promise<IJournalEntry> {
-  await ensureNonUniqueSourceIndex();
-  const { lines } = input;
-  if (!lines || lines.length < 2) {
+export function validateJournalLines(lines: JournalLineInput[] | undefined): {
+  lines: NormalisedLine[];
+  totalDebit: number;
+  totalCredit: number;
+} {
+  if (!Array.isArray(lines) || lines.length < 2) {
     throw new AccountingError("A journal entry needs at least two lines.");
   }
-
-  // Normalise + validate amounts
   let totalDebit = 0;
   let totalCredit = 0;
+  const out: NormalisedLine[] = [];
   for (const l of lines) {
-    const d = round2(Number(l.debit) || 0);
-    const c = round2(Number(l.credit) || 0);
+    const code = String(l?.accountCode ?? "").trim();
+    if (!code) throw new AccountingError("Every line needs an account.");
+    const rawD = Number(l.debit ?? 0);
+    const rawC = Number(l.credit ?? 0);
+    if (!Number.isFinite(rawD) || !Number.isFinite(rawC)) {
+      throw new AccountingError(`Line for account ${code} has an amount that is not a number.`);
+    }
+    const d = round2(rawD);
+    const c = round2(rawC);
     if (d < 0 || c < 0) throw new AccountingError("Negative amounts are not allowed — use the opposite side.");
-    if (d > 0 && c > 0) throw new AccountingError(`Line for account ${l.accountCode} has both debit and credit.`);
-    if (d === 0 && c === 0) throw new AccountingError(`Line for account ${l.accountCode} has no amount.`);
+    if (d > 0 && c > 0) throw new AccountingError(`Line for account ${code} has both debit and credit.`);
+    if (d === 0 && c === 0) throw new AccountingError(`Line for account ${code} has no amount.`);
     totalDebit = round2(totalDebit + d);
     totalCredit = round2(totalCredit + c);
+    out.push({
+      accountCode: code,
+      debit: d,
+      credit: c,
+      description: typeof l.description === "string" ? l.description.trim() || undefined : undefined,
+      studentRef: l.studentRef || undefined,
+      supplierRef: l.supplierRef || undefined,
+      courseRef: l.courseRef || undefined,
+    });
   }
   if (totalDebit !== totalCredit) {
     throw new AccountingError(
       `Entry is not balanced: debits ${totalDebit.toFixed(2)} ≠ credits ${totalCredit.toFixed(2)}.`
     );
   }
+  return { lines: out, totalDebit, totalCredit };
+}
 
-  // Validate accounts: must exist, be posting accounts, and be active
-  const codes = [...new Set(lines.map((l) => l.accountCode.trim()))];
-  const accounts = await ChartOfAccount.find({ code: { $in: codes } }).lean();
+/** Accounts must exist, be posting (not parent) accounts, and be active. */
+export async function loadPostingAccounts(codes: string[]) {
+  const unique = [...new Set(codes)];
+  const accounts = await ChartOfAccount.find({ code: { $in: unique } }).lean();
   const byCode = new Map(accounts.map((a) => [a.code, a]));
-  for (const code of codes) {
+  for (const code of unique) {
     const acc = byCode.get(code);
     if (!acc) throw new AccountingError(`Account ${code} does not exist in the Chart of Accounts.`);
     if (!acc.isPosting) throw new AccountingError(`Account ${code} (${acc.name}) is a parent account — transactions must post to a posting account.`);
     if (!acc.isActive) throw new AccountingError(`Account ${code} (${acc.name}) is inactive.`);
   }
+  return byCode;
+}
 
-  // Period lock: no posting on or before the books lock date
+/** Period lock: nothing may be posted, or un-posted, on or before the lock date. */
+export async function assertOpenPeriod(date: Date, action = "post into") {
   const settings = await getAccountingSettings();
-  if (settings.lockDate && new Date(input.date) <= settings.lockDate) {
+  if (settings.lockDate && date <= settings.lockDate) {
     throw new AccountingError(
-      `Books are locked up to ${settings.lockDate.toISOString().slice(0, 10)} — cannot post into a locked period.`
+      `Books are locked up to ${settings.lockDate.toISOString().slice(0, 10)} — cannot ${action} a locked period.`
     );
   }
+}
+
+async function assertNoActiveEntryForSource(sourceType: string, sourceId: string, exceptId?: unknown) {
+  const filter: Record<string, unknown> = {
+    sourceType,
+    sourceId,
+    status: { $nin: ["Cancelled", "Reversed"] },
+  };
+  if (exceptId) filter._id = { $ne: exceptId };
+  const dup = await JournalEntry.findOne(filter).lean();
+  if (dup) {
+    throw new AccountingError(`A journal entry (${dup.jvNumber}) already exists for this ${sourceType}.`);
+  }
+}
+
+/**
+ * Run every check createJournalEntry would run, without writing anything.
+ * Lets a CRM route refuse a change BEFORE it touches the document or reverses
+ * an existing entry, instead of discovering half-way that the new entry can't
+ * be posted (locked period, inactive account, unbalanced lines).
+ */
+export async function preflightJournalEntry(input: CreateJournalEntryInput): Promise<void> {
+  const { lines } = validateJournalLines(input.lines);
+  const date = parseEntryDate(input.date);
+  await loadPostingAccounts(lines.map((l) => l.accountCode));
+  await assertOpenPeriod(date);
+}
+
+/**
+ * Validates and creates a journal entry.
+ *
+ * Guarantees:
+ *  - Total debits === total credits (to the fils); amounts are finite
+ *  - Every line hits an ACTIVE POSTING account that exists in the COA
+ *  - At most one active entry per (sourceType, sourceId) — duplicates are
+ *    rejected, and a unique partial index backs this for concurrent requests
+ *  - Posted entries are immutable (edits blocked at the API layer; reversals only)
+ */
+export async function createJournalEntry(input: CreateJournalEntryInput): Promise<IJournalEntry> {
+  await ensureNonUniqueSourceIndex();
+  const { lines, totalDebit, totalCredit } = validateJournalLines(input.lines);
+  const date = parseEntryDate(input.date);
+  const byCode = await loadPostingAccounts(lines.map((l) => l.accountCode));
+  await assertOpenPeriod(date);
 
   // Duplicate-source guard (Reversed/Cancelled entries don't block a repost)
-  if (input.sourceId) {
-    const dup = await JournalEntry.findOne({
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      status: { $nin: ["Cancelled", "Reversed"] },
-    }).lean();
-    if (dup) {
-      throw new AccountingError(
-        `A journal entry (${dup.jvNumber}) already exists for this ${input.sourceType}.`
-      );
-    }
-  }
+  if (input.sourceId) await assertNoActiveEntryForSource(input.sourceType, input.sourceId);
 
   const seq = await getNextSequence("journal-entry");
   const jvNumber = `JV-${String(seq).padStart(6, "0")}`;
   const autoPost = input.autoPost !== false;
 
-  return JournalEntry.create({
-    jvNumber,
-    date: new Date(input.date),
-    description: input.description.trim(),
-    reference: input.reference?.trim() || undefined,
-    sourceType: input.sourceType,
-    sourceId: input.sourceId,
-    sourceNumber: input.sourceNumber,
-    status: autoPost ? "Posted" : "Draft",
-    lines: lines.map((l) => ({
-      accountCode: l.accountCode.trim(),
-      accountName: byCode.get(l.accountCode.trim())!.name,
-      debit: round2(Number(l.debit) || 0),
-      credit: round2(Number(l.credit) || 0),
-      description: l.description?.trim() || undefined,
-      studentRef: l.studentRef || undefined,
-      supplierRef: l.supplierRef || undefined,
-      courseRef: l.courseRef || undefined,
-    })),
-    totalDebit,
-    totalCredit,
-    createdBy: input.createdBy,
-    postedBy: autoPost ? input.createdBy : undefined,
-    postedAt: autoPost ? new Date() : undefined,
-  });
+  try {
+    return await JournalEntry.create({
+      jvNumber,
+      date,
+      description: input.description.trim(),
+      reference: input.reference?.trim() || undefined,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      sourceNumber: input.sourceNumber,
+      status: autoPost ? "Posted" : "Draft",
+      lines: lines.map((l) => ({ ...l, accountName: byCode.get(l.accountCode)!.name })),
+      totalDebit,
+      totalCredit,
+      createdBy: input.createdBy,
+      postedBy: autoPost ? input.createdBy : undefined,
+      postedAt: autoPost ? new Date() : undefined,
+    });
+  } catch (err) {
+    // Lost a race with a concurrent posting for the same source document
+    if (isDuplicateSourceError(err)) {
+      throw new AccountingError(`A journal entry already exists for this ${input.sourceType}.`);
+    }
+    throw err;
+  }
 }
 
-/** Post a Draft entry (re-validates balance + accounts). */
+/**
+ * Post a Draft entry. Re-runs every check createJournalEntry applies — a
+ * draft can be edited (or the books locked) after it was saved, so its lines,
+ * accounts, period and source must all be valid at the moment of posting.
+ * The Draft → Posted switch is atomic, so a double-click posts once.
+ */
 export async function postJournalEntry(id: string, postedBy: string): Promise<IJournalEntry> {
-  const entry = await JournalEntry.findById(id);
+  const entry = await JournalEntry.findById(id).lean();
   if (!entry) throw new AccountingError("Journal entry not found.");
   if (entry.status !== "Draft") throw new AccountingError(`Only Draft entries can be posted (current: ${entry.status}).`);
-  if (entry.totalDebit !== entry.totalCredit) throw new AccountingError("Entry is not balanced.");
 
-  entry.status = "Posted";
-  entry.postedBy = postedBy;
-  entry.postedAt = new Date();
-  await entry.save();
-  return entry;
+  const { totalDebit, totalCredit } = validateJournalLines(entry.lines);
+  await loadPostingAccounts(entry.lines.map((l) => l.accountCode));
+  await assertOpenPeriod(parseEntryDate(entry.date));
+  if (entry.sourceId) await assertNoActiveEntryForSource(entry.sourceType, entry.sourceId, entry._id);
+
+  try {
+    const posted = await JournalEntry.findOneAndUpdate(
+      { _id: entry._id, status: "Draft" },
+      { $set: { status: "Posted", postedBy, postedAt: new Date(), totalDebit, totalCredit } },
+      { new: true }
+    );
+    if (!posted) throw new AccountingError("This entry was already posted or changed — reload and try again.");
+    return posted;
+  } catch (err) {
+    if (isDuplicateSourceError(err)) {
+      throw new AccountingError(`A journal entry already exists for this ${entry.sourceType}.`);
+    }
+    throw err;
+  }
 }
 
 /**
  * Reverse a Posted entry: creates a NEW opposite entry and links both.
  * The original is never mutated beyond the reversal link + status.
+ *
+ * Reports exclude both a reversed original and its reversal, so reversing an
+ * entry removes it from the period it was dated in. That is why an entry
+ * dated inside a locked period cannot be reversed.
  */
 export async function reverseJournalEntry(
   id: string,
@@ -186,37 +282,54 @@ export async function reverseJournalEntry(
   if (!original) throw new AccountingError("Journal entry not found.");
   if (original.status !== "Posted") throw new AccountingError("Only Posted entries can be reversed.");
   if (original.reversedByEntryId) throw new AccountingError("This entry has already been reversed.");
+  await assertOpenPeriod(original.date, "reverse an entry dated in");
 
-  const seq = await getNextSequence("journal-entry");
-  const reversal = await JournalEntry.create({
-    jvNumber: `JV-${String(seq).padStart(6, "0")}`,
-    date: new Date(),
-    description: `Reversal of ${original.jvNumber}${reason ? ` — ${reason}` : ""}`,
-    reference: original.jvNumber,
-    sourceType: "Reversal",
-    sourceNumber: original.jvNumber,
-    status: "Posted",
-    lines: original.lines.map((l) => ({
-      accountCode: l.accountCode,
-      accountName: l.accountName,
-      debit: l.credit,   // flip sides
-      credit: l.debit,
-      description: l.description,
-      studentRef: l.studentRef,
-      supplierRef: l.supplierRef,
-      courseRef: l.courseRef,
-    })),
-    totalDebit: original.totalCredit,
-    totalCredit: original.totalDebit,
-    createdBy: reversedBy,
-    postedBy: reversedBy,
-    postedAt: new Date(),
-    reversesEntryId: original._id,
-  });
+  // Claim the original atomically: of two concurrent reversals only one wins.
+  const claimed = await JournalEntry.findOneAndUpdate(
+    { _id: original._id, status: "Posted", reversedByEntryId: null },
+    { $set: { status: "Reversed" } },
+    { new: true }
+  );
+  if (!claimed) throw new AccountingError("This entry has already been reversed.");
 
-  original.status = "Reversed";
-  original.reversedByEntryId = reversal._id as never;
-  await original.save();
+  let reversal: IJournalEntry;
+  try {
+    const seq = await getNextSequence("journal-entry");
+    reversal = await JournalEntry.create({
+      jvNumber: `JV-${String(seq).padStart(6, "0")}`,
+      date: new Date(),
+      description: `Reversal of ${original.jvNumber}${reason ? ` — ${reason}` : ""}`,
+      reference: original.jvNumber,
+      sourceType: "Reversal",
+      sourceNumber: original.jvNumber,
+      status: "Posted",
+      lines: original.lines.map((l) => ({
+        accountCode: l.accountCode,
+        accountName: l.accountName,
+        debit: l.credit,   // flip sides
+        credit: l.debit,
+        description: l.description,
+        studentRef: l.studentRef,
+        supplierRef: l.supplierRef,
+        courseRef: l.courseRef,
+      })),
+      totalDebit: original.totalCredit,
+      totalCredit: original.totalDebit,
+      createdBy: reversedBy,
+      postedBy: reversedBy,
+      postedAt: new Date(),
+      reversesEntryId: original._id,
+    });
+  } catch (err) {
+    // Release the claim so the entry is not left marked Reversed with no reversal
+    await JournalEntry.updateOne(
+      { _id: original._id, status: "Reversed", reversedByEntryId: null },
+      { $set: { status: "Posted" } }
+    );
+    throw err;
+  }
+
+  await JournalEntry.updateOne({ _id: original._id }, { $set: { reversedByEntryId: reversal._id } });
   return reversal;
 }
 
