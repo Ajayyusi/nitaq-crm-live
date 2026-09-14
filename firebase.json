@@ -1,0 +1,22 @@
+{
+  "apphosting": [
+    {
+      "backendId": "nitaq-crm-staging",
+      "rootDir": ".",
+      "alwaysDeployFromSource": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".next",
+        ".firebase",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "coverage",
+        "tests",
+        "docs",
+        "*.tsbuildinfo",
+        ".env*"
+      ]
+    }
+  ]
+}
